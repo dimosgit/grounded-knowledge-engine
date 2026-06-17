@@ -1,0 +1,123 @@
+# KB MCP Server
+
+Local MCP server for this repository's knowledge base (`/kb`) plus selected Domain local sources.
+
+## What It Does
+
+This server lets MCP-capable AI clients query the local KB with grounded retrieval tools:
+
+- `kb.search`
+- `kb.get_topic`
+- `kb.get_term`
+- `kb.list_modules`
+- `kb.answer_grounded`
+- `kb.upsert_note`
+- `kb.add_open_question`
+- `kb.answer_and_capture`
+- `kb.refresh`
+
+## Run
+
+```bash
+npm run dev:mcp
+```
+
+## Register In Codex
+
+```bash
+/Applications/Codex.app/Contents/Resources/codex mcp add kb-mcp -- npx tsx "$(pwd)/tools/kb-mcp-server/server.ts"
+```
+
+Check:
+
+```bash
+/Applications/Codex.app/Contents/Resources/codex mcp list
+/Applications/Codex.app/Contents/Resources/codex mcp get kb-mcp
+```
+
+## Smoke Test
+
+```bash
+npm run smoke:mcp
+```
+
+## Environment Variables
+
+- `KB_MCP_SCAN_ROOTS`: Comma-separated roots relative to repo root.
+  - Default: `kb,source-docs,project,readme.md`
+- `KB_MCP_CACHE_TTL_MS`: In-memory index cache TTL (ms).
+  - Default: `15000`
+- `KB_MCP_LOG_LEVEL`: `off|error|warn|info|debug`
+  - Default: `error`
+- `KB_MCP_REQUIRE_CAPTURE`: `true|false`
+  - Default: `true`
+- `KB_MCP_ENABLE_WRITES`: `true|false`
+  - Default: `false`
+  - Real writes are blocked unless enabled. `dryRun=true` remains available.
+- `KB_MCP_RESPONSE_FORMAT`: `compact|full`
+  - Default: `compact`
+  - Compact mode omits bulky structured evidence context unless `responseFormat=full` is requested.
+- `KB_MCP_RETRIEVAL_BACKEND`: `bm25|sqlite`
+  - Default: `bm25`
+  - SQLite uses a persistent local FTS5 index at `.cache/kb-retriever.sqlite`.
+- `KB_MCP_SQLITE_PATH`: SQLite index path relative to repo root or absolute.
+  - Default: `.cache/kb-retriever.sqlite`
+- `KB_MCP_WRITE_REFRESH_DEBOUNCE_MS`: debounce window for post-write index refresh (ms)
+  - Default: `75`
+- `KB_MCP_SLO_MS`: default SLO threshold in milliseconds for answer tools.
+  - Default: `3000`
+
+## Notes
+
+- This server is retrieval-first. `kb.answer_grounded` is extractive and citation-based.
+- `kb.answer_grounded` uses a strict evidence gate by default and abstains when coverage/diversity thresholds are not met.
+- `kb.answer_grounded` is policy-gated by default (`KB_MCP_REQUIRE_CAPTURE=true`); direct calls require `allowDirect=true`.
+- `kb.answer_and_capture` couples grounded retrieval with capture policy controls:
+  - in `responseMode=auto`, simple term questions can use a fast term-note path
+  - exact term/topic answers default to `captureStrategy=none` (no write) when the note is already curated
+  - if grounded answer passes/returns evidence -> writes a KB note
+  - if grounding abstains or has no evidence -> appends `kb/open_questions.md`
+- Real writes require `KB_MCP_ENABLE_WRITES=true`. Without it, write tools return an error unless `dryRun=true`.
+- `kb.upsert_note` auto-detects high-similarity duplicates and reuses existing topic/term paths to reduce KB fragmentation.
+- writes are queued and index refresh is debounced for faster burst ingestion.
+- Use `dryRun=true` on write tools (`kb.upsert_note`, `kb.add_open_question`, `kb.answer_and_capture`) for safe preview.
+- `kb.answer_grounded` and `kb.answer_and_capture` include `structuredContent.timings`:
+  - `retrievalMs`, `synthesisMs`, `captureMs`, `totalMs`
+- `kb.answer_grounded` and `kb.answer_and_capture` include `structuredContent.sourceTier`:
+  - `exact-term`, `exact-topic`, `local-book`, `bm25`, `sqlite`, or `no-local-evidence`
+- `kb.answer_grounded` and `kb.answer_and_capture` include `structuredContent.slo` and `structuredContent.warnings`:
+  - `slo`: `thresholdMs`, `totalMs`, `breached`, `overByMs`, `status`
+  - `warnings`: includes SLO breach message when threshold is exceeded
+  - use `sloMs` per call to override the default threshold
+- Retrieval engines:
+  - default: shared chunked BM25 index (`tools/grounding/retriever.ts`) with query expansion and result-cache acceleration.
+  - optional: persistent SQLite FTS5 index (`tools/grounding/sqlite-index.ts`) with document/chunk/term/alias tables.
+- No external network dependencies are required to run it.
+
+## Extra Config
+
+- `KB_MCP_QUERY_CACHE_TTL_MS`: Query-result cache TTL in milliseconds.
+  - Default: `45000`
+- `KB_MCP_QUERY_CACHE_MAX_ENTRIES`: Max cached query entries.
+  - Default: `240`
+
+## Retrieval Evaluation
+
+Run retrieval quality + latency evaluation:
+
+```bash
+npm run eval:retrieval -- --k 5 --runs 3
+npm run eval:retrieval -- --k 5 --runs 3 --backend sqlite
+```
+
+Use a custom case file:
+
+```bash
+npm run eval:retrieval -- --file tools/grounding/eval/qa-set.json --json
+```
+
+Include retrieval traces (top candidate scoring reasons):
+
+```bash
+npm run eval:retrieval -- --k 5 --traces
+```
