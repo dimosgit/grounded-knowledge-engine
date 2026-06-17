@@ -23,6 +23,34 @@
       "forbiddenPathPatterns": []
     },
     {
+      "id": "prompts-user-controlled",
+      "query": "are MCP prompts user controlled and how are they listed and retrieved",
+      "mode": "generic",
+      "expectedPathPatterns": ["demo-kb/topics/mcp-source-prompts.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "sampling-server-requests-completion",
+      "query": "how does a server request an LLM completion from the client with human in the loop",
+      "mode": "generic",
+      "expectedPathPatterns": ["demo-kb/topics/mcp-source-sampling.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "transports-stdio-sse",
+      "query": "what transports does MCP use stdio and HTTP SSE over JSON-RPC",
+      "mode": "generic",
+      "expectedPathPatterns": ["demo-kb/topics/mcp-source-transports.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "roots-client-suggested-uri",
+      "query": "what is an MCP root URI the client suggests the server focus on",
+      "mode": "generic",
+      "expectedPathPatterns": ["demo-kb/topics/mcp-source-roots.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
       "id": "project-board-next-actions",
       "query": "what are the next actions on the router project board",
       "mode": "project",

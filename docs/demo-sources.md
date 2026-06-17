@@ -7,7 +7,7 @@ layer of original orchestration notes authored for this repository.
 
 | Source | URL | Ref | Date pulled | License | What changed |
 |---|---|---|---|---|---|
-| Model Context Protocol docs | https://github.com/modelcontextprotocol/docs | `main` (2026-06-17) | 2026-06-17 | MIT (© 2024–2025 Anthropic, PBC and contributors) | Concepts from the architecture / tools / resources pages were **paraphrased** into short original Markdown notes (`demo-kb/topics/mcp-source-*.md`). No verbatim text was copied; each note records its upstream `source:` path in front matter. |
+| Model Context Protocol docs | https://github.com/modelcontextprotocol/docs | `main` (2026-06-17) | 2026-06-17 | MIT (© 2024–2025 Anthropic, PBC and contributors) | Concepts from the seven `docs/concepts` pages (architecture, tools, resources, prompts, roots, sampling, transports) were **paraphrased** into short original Markdown notes (`demo-kb/topics/mcp-source-*.md`). No verbatim text was copied; each note records its upstream `source:` path in front matter. |
 
 The upstream MIT license notice is preserved verbatim in
 [`demo-kb/NOTICES/modelcontextprotocol-docs-LICENSE.txt`](../demo-kb/NOTICES/modelcontextprotocol-docs-LICENSE.txt).
