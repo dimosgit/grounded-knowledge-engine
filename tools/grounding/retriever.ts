@@ -22,7 +22,10 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const DEFAULT_SCAN_ROOTS = ["demo-kb", "kb", "README.md"];
+// Folders the engine indexes by default. Override with KB_MCP_SCAN_ROOTS or the
+// --scan-roots option to point at your own docs. `demo-kb` is the bundled demo
+// corpus; `kb` holds notes captured back by the agent.
+export const DEFAULT_SCAN_ROOTS = ["demo-kb", "kb"];
 
 const INDEX_VERSION = 2;
 const DEFAULT_INDEX_CACHE_FILE = ".cache/kb-retriever-index.v2.json";
