@@ -23,6 +23,7 @@
       "reason": "MCP wrapper and smoke test; docs paths must be genericized before release."
     },
     {
+      "enabled": false,
       "src": "kb-preview",
       "dest": "apps/cockpit",
       "include": [
@@ -43,6 +44,7 @@
       "reason": "Optional UI viewer; client-coupled code must be removed and scrubbed."
     },
     {
+      "enabled": false,
       "src": "demo-kb",
       "dest": "demo-kb",
       "reason": "Synthetic and license-checked OSS demo content only."
@@ -54,7 +56,7 @@
     "*.env",
     "*-private*.md",
     "kb",
-    "SAP-resources",
+    "source-docs",
     "output",
     ".cache",
     "node_modules",
