@@ -1,0 +1,34 @@
+{
+  "description": "Demo retrieval eval set grounded in demo-kb (MCP source notes + project board). Replaces the private SAP eval set. Extend per knowledge base.",
+  "cases": [
+    {
+      "id": "tools-model-controlled",
+      "query": "are MCP tools model controlled or application controlled",
+      "mode": "generic",
+      "expectedPathPatterns": ["demo-kb/topics/mcp-source-tools.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "resources-application-controlled",
+      "query": "how are MCP resources selected for context",
+      "mode": "generic",
+      "expectedPathPatterns": ["demo-kb/topics/mcp-source-resources.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "mcp-architecture",
+      "query": "what is the MCP client server architecture with hosts and servers",
+      "mode": "generic",
+      "expectedPathPatterns": ["demo-kb/topics/mcp-source-architecture.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "project-board-next-actions",
+      "query": "what are the next actions on the router project board",
+      "mode": "project",
+      "track": "demo",
+      "expectedPathPatterns": ["demo-kb/topics/router-project-board.md"],
+      "forbiddenPathPatterns": []
+    }
+  ]
+}

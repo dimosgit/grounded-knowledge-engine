@@ -219,13 +219,13 @@ function printHelp() {
   console.log(`Local grounding search (repo-local evidence retriever)
 
 Usage:
-  npm run search -- --query "RAP determination IN LOCAL MODE"
+  npm run search -- --query "model controlled tools vs application controlled resources"
 
 Options:
   -q, --query <text>       Query string (required)
   --mode <auto|domain|project|generic>
-  --track <track-key>      Optional track filter (e.g. domain, ai, knowledge-ops)
-  --module <module-key>    Optional module filter (e.g. rap-core)
+  --track <track-key>      Optional track filter (e.g. domain, demo, knowledge-ops)
+  --module <module-key>    Optional module filter (e.g. agent-runtime)
   --limit <n>              Max hits (default: ${DEFAULT_LIMIT})
   --context <n>            Context lines before/after hit (default: ${DEFAULT_CONTEXT}, max: 3)
   --include-archive        Include kb/archive markdown files
@@ -238,9 +238,9 @@ Options:
   --json                   Emit machine-readable JSON
 
 Examples:
-  npm run search -- -q "FOR MODIFY handler class" --mode domain
-  npm run search -- -q "FOR MODIFY handler class" --mode domain --backend sqlite
-  npm run search -- -q "Task 17 FLP intent" --mode project --track domain
+  npm run search -- -q "how are MCP tools invoked" --mode generic
+  npm run search -- -q "how are MCP tools invoked" --mode generic --backend sqlite
+  npm run search -- -q "project board next actions" --mode project --track demo
 `);
 }
 
