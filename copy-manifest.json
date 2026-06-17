@@ -1,0 +1,64 @@
+{
+  "_decisions": {
+    "repo": "grounded-knowledge-engine",
+    "visibility": "private until release gate is green",
+    "license": "MIT",
+    "node": ">=22.5",
+    "demoSourceProject": "TBD - must be license-checked before import",
+    "uiPlacement": "apps/cockpit",
+    "liveDemoHost": "TBD - static frontend host",
+    "skills": "defer to v0.2 unless one generic skill is scrubbed and loop-tested"
+  },
+  "copy": [
+    {
+      "src": "tools/grounding",
+      "dest": "tools/grounding",
+      "exclude": ["eval/qa-set.json"],
+      "reason": "Pure Node retrieval/index engine; private eval set replaced by demo QA before release."
+    },
+    {
+      "src": "tools/kb-mcp-server",
+      "dest": "tools/kb-mcp-server",
+      "include": ["*.ts", "README.md"],
+      "reason": "MCP wrapper and smoke test; docs paths must be genericized before release."
+    },
+    {
+      "src": "kb-preview",
+      "dest": "apps/cockpit",
+      "include": [
+        "src/**",
+        "scripts/**",
+        "index.html",
+        "*.config.*",
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.*.json"
+      ],
+      "exclude": [
+        "content/**",
+        "dist/**",
+        "node_modules/**",
+        "src/components/*DeepDivePage.tsx"
+      ],
+      "reason": "Optional UI viewer; client-coupled code must be removed and scrubbed."
+    },
+    {
+      "src": "demo-kb",
+      "dest": "demo-kb",
+      "reason": "Synthetic and license-checked OSS demo content only."
+    }
+  ],
+  "forbidAlways": [
+    ".git",
+    ".env",
+    "*.env",
+    "*-private*.md",
+    "kb",
+    "SAP-resources",
+    "output",
+    ".cache",
+    "node_modules",
+    "dist",
+    "content"
+  ]
+}
