@@ -1,0 +1,15 @@
+{
+  "name": "grounded-knowledge-engine",
+  "version": "0.0.0-private",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "manifest:dry-run": "node scripts/copy.mjs --dry-run --source ../learning-sap-tutor --dest .",
+    "manifest:copy": "node scripts/copy.mjs --source ../learning-sap-tutor --dest .",
+    "scrub": "bash scripts/scrub-gate.sh"
+  }
+}
+
