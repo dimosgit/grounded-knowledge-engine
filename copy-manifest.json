@@ -23,7 +23,7 @@
       "reason": "MCP wrapper and smoke test; docs paths must be genericized before release."
     },
     {
-      "enabled": false,
+      "enabled": true,
       "src": "kb-preview",
       "dest": "apps/cockpit",
       "include": [
@@ -41,13 +41,13 @@
         "node_modules/**",
         "src/components/*DeepDivePage.tsx"
       ],
-      "reason": "Optional UI viewer; client-coupled code must be removed and scrubbed."
+      "reason": "Optional UI viewer over the engine. Scrubbed: deep-dive page + client modes removed, sourceFolders externalized via KB_PREVIEW_SOURCE_FOLDERS, chrome rebranded to Operator Cockpit, tests re-grounded on the demo corpus. typecheck/test/build green; passes the scrub gate."
     },
     {
-      "enabled": false,
+      "enabled": true,
       "src": "demo-kb",
       "dest": "demo-kb",
-      "reason": "Synthetic and license-checked OSS demo content only."
+      "reason": "Synthetic and license-checked OSS demo content only (paraphrased MCP docs concepts + synthetic project board)."
     }
   ],
   "forbidAlways": [
