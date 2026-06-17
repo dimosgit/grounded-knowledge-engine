@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
     "search": "tsx tools/grounding/local-grounding-search.ts",
+    "eval": "tsx tools/grounding/evaluate-retrieval.ts",
     "smoke:mcp": "tsx tools/kb-mcp-server/smoke-test.ts",
     "scrub": "bash scripts/scrub-gate.sh"
   },

@@ -1060,7 +1060,7 @@ async function tryBuildFastAnswer({
   if (responseMode === "curate") return null;
   if (mode === "project") return null;
 
-  const extractedTerm = extractSimpleSapTerm(question);
+  const extractedTerm = extractSimpleTerm(question);
   if (!extractedTerm) return null;
 
   const retrievalStartedAt = performance.now();
@@ -1312,7 +1312,7 @@ async function findFastTopicDocument(topicQuery: string): Promise<LocalDocument 
   return null;
 }
 
-function extractSimpleSapTerm(question: string): string {
+function extractSimpleTerm(question: string): string {
   const q = singleLine(question);
   if (!q) return "";
 
@@ -1702,7 +1702,7 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
 
   const today = normalizeDateString(options?.updated) || getTodayIsoDate();
   const normalizedTags = normalizeTags(options?.tags);
-  const moduleKey = kind === "topic" ? (normalizeScalar(options?.module) || "rap-core") : "";
+  const moduleKey = kind === "topic" ? (normalizeScalar(options?.module) || "general") : "";
   const inferredTrack = kind === "topic"
     ? await resolveTrackForModule(moduleKey, normalizeScalar(options?.track) || "domain")
     : normalizeScalar(options?.track) || "domain";
@@ -1868,7 +1868,7 @@ function renderTopicNote({
   const normalizedTags = Array.isArray(tags) ? tags.join(", ") : singleLine(tags);
   const frontmatter = [
     "---",
-    `module: ${module || "rap-core"}`,
+    `module: ${module || "general"}`,
     `track: ${track || "domain"}`,
     `status: ${status || "draft"}`,
     `type: ${type || "concept"}`,
@@ -1918,14 +1918,8 @@ function buildCapturedNoteBody({ question, grounded }: { question: string; groun
 
 function inferPrimaryModule(question: unknown, mode: unknown): string {
   const q = normalizeScalar(question).toLowerCase();
-  if (mode === "project" || /\bproject\b|\bcr_so\b|\btask\s*\d+\b|\bflp\b/.test(q)) return "project-cr-so";
-  if (/\bworkflow\b|\bapproval\b|\bppf\b/.test(q)) return "workflow-approvals";
-  if (/\bbtp\b|\bcap\b|\bintegration\b/.test(q)) return "btp-extension";
-  if (/\bsu01\b|\bsu10\b|\bsap gui\b|\btransaction\b/.test(q)) return "system-tooling";
-  if (/\badt\b|\bbas\b|\beclipse\b|\btooling\b/.test(q)) return "dev-tooling";
-  if (/\bs\/4\b|\bs4\b|\bclean core\b|\barchitecture\b/.test(q)) return "platform-governance";
-  if (/\bsd\b|\bmm\b|\bpo\b|\bso\b|\border flow\b/.test(q)) return "order-flow-basics";
-  return "rap-core";
+  if (mode === "project" || /\bproject\b|\btask\s*\d+\b/.test(q)) return "project-tracking";
+  return "general";
 }
 
 function inferNoteTitle(question: unknown, kind: string): string {
@@ -1936,10 +1930,9 @@ function inferNoteTitle(question: unknown, kind: string): string {
 }
 
 function inferDefaultTags(mode: unknown, module: string): string[] {
-  const tags = ["domain", "kb-captured"];
+  const tags = ["kb-captured"];
   if (module) tags.push(module);
   if (mode === "project") tags.push("project");
-  if (/rap/.test(module || "")) tags.push("rap");
   return [...new Set(tags)];
 }
 
