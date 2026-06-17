@@ -7,9 +7,17 @@
     "node": ">=22.5"
   },
   "scripts": {
-    "manifest:dry-run": "node scripts/copy.mjs --dry-run --source ../learning-sap-tutor --dest .",
-    "manifest:copy": "node scripts/copy.mjs --source ../learning-sap-tutor --dest .",
+    "manifest:dry-run": "node scripts/copy.mjs --dry-run --source ../private-source-repo --dest .",
+    "manifest:copy": "node scripts/copy.mjs --source ../private-source-repo --dest .",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
+    "search": "tsx tools/grounding/local-grounding-search.ts",
+    "smoke:mcp": "tsx tools/kb-mcp-server/smoke-test.ts",
     "scrub": "bash scripts/scrub-gate.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3"
   }
 }
-

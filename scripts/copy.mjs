@@ -5,7 +5,7 @@ import process from "node:process";
 
 const args = parseArgs(process.argv.slice(2));
 const dryRun = Boolean(args["dry-run"]);
-const sourceRoot = path.resolve(String(args.source ?? "../learning-sap-tutor"));
+const sourceRoot = path.resolve(String(args.source ?? "../private-source-repo"));
 const destRoot = path.resolve(String(args.dest ?? "."));
 const manifestPath = path.join(destRoot, "copy-manifest.json");
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -14,6 +14,11 @@ const forbidden = manifest.forbidAlways ?? [];
 const planned = [];
 
 for (const entry of manifest.copy ?? []) {
+  if (entry.enabled === false) {
+    planned.push({ action: "skipped", src: entry.src, dest: entry.dest });
+    continue;
+  }
+
   const sourcePath = path.join(sourceRoot, entry.src);
   const destPath = path.join(destRoot, entry.dest);
   const exists = await pathExists(sourcePath);
