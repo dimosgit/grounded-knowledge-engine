@@ -38,18 +38,8 @@ const STOPWORDS = new Set([
 ]);
 
 const QUERY_EXPANSIONS: Record<string, string[]> = {
-  rap: ["restful", "abap", "behavior", "eml", "cds"],
-  eml: ["entity", "manipulation", "language", "rap"],
-  cds: ["core", "data", "services"],
-  btp: ["business", "technology", "platform"],
-  flp: ["fiori", "launchpad", "intent"],
-  so: ["sales", "order"],
-  cr: ["change", "request", "workflow"],
-  s4: ["s4hana", "s/4", "s/4hana"],
-  s4hana: ["s4", "s/4", "s/4hana"],
-  "s/4": ["s4", "s4hana", "s/4hana"],
-  "s/4hana": ["s4", "s4hana", "s/4"],
-  fiori: ["flp", "launchpad"],
+  mcp: ["model", "context", "protocol"],
+  kb: ["knowledge", "base"],
 };
 
 let runtimeCache = {
@@ -783,32 +773,20 @@ function rerankRow({ row, query, mode, tokenWeights, debug }: RerankRowArgs): Ra
   if (mode === "domain") {
     if (row.sourceKind === "reference-source") {
       score += 2.4;
-      if (debug) adjustments.push({ reason: "mode_sap_source_preference", delta: 2.4 });
-    }
-    if (row.sourceKind === "reference-source" && /\b(rap|abap|behavior|determination|validation|eml|cds|local\s+mode)\b/i.test(query)) {
-      score += 720;
-      if (debug) adjustments.push({ reason: "mode_sap_book_priority", delta: 720 });
+      if (debug) adjustments.push({ reason: "mode_domain_source_preference", delta: 2.4 });
     }
     if (row.track === "domain") {
       score += 1.1;
-      if (debug) adjustments.push({ reason: "mode_sap_track_preference", delta: 1.1 });
+      if (debug) adjustments.push({ reason: "mode_domain_track_preference", delta: 1.1 });
     }
     if (row.sourceKind === "project" && !/\bproject\b/i.test(query)) {
       score -= 420;
-      if (debug) adjustments.push({ reason: "mode_sap_project_penalty", delta: -420 });
-    }
-    if (row.module === "knowledge-ops") {
-      score -= 360;
-      if (debug) adjustments.push({ reason: "mode_sap_knowledge_ops_penalty", delta: -360 });
+      if (debug) adjustments.push({ reason: "mode_domain_project_penalty", delta: -420 });
     }
   } else if (mode === "project") {
     if (row.sourceKind === "project") {
       score += 2.8;
       if (debug) adjustments.push({ reason: "mode_project_source_preference", delta: 2.8 });
-    }
-    if (row.module === "project-cr-so") {
-      score += 2.1;
-      if (debug) adjustments.push({ reason: "mode_project_module_preference", delta: 2.1 });
     }
   }
 
@@ -1090,10 +1068,6 @@ function normalizeForTokenization(text: string): string {
     .toLowerCase()
     .replace(/\bbrown[\s-]+field\b/g, " brownfield ")
     .replace(/\bgreen[\s-]+field\b/g, " greenfield ")
-    .replace(/\bblue[\s-]+field\b/g, " bluefield ")
-    .replace(/s\s*\/\s*4\s*h?ana/g, " s4hana ")
-    .replace(/s\s*\/\s*4/g, " s4 ")
-    .replace(/\bmy\s*inbox\b/g, " myinbox ")
     .replace(/[’']/g, "")
     .replace(/[\u2013\u2014]/g, "-");
 }
@@ -1171,8 +1145,7 @@ function inferTrack(relPath: string, frontmatter: Frontmatter): string {
 function inferMode(query: string, explicitMode: string): SearchMode {
   if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic") return explicitMode;
   const q = query.toLowerCase();
-  if (/\bproject\b|\btask\s*\d+\b|\bcr_so\b|\bflp\b/.test(q)) return "project";
-  if (/\brap\b|\babap\b|\bs\/4\b|\bs4\b|\bbtp\b|\badt\b|\beml\b|\bcds\b|\bppf\b/.test(q)) return "domain";
+  if (/\bproject\b|\btask\s*\d+\b/.test(q)) return "project";
   return "generic";
 }
 

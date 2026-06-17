@@ -42,19 +42,12 @@ const STOPWORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "if", "in", "into", "is", "it", "its", "of", "on", "or", "that", "the", "their", "then", "there", "these", "this", "to", "was", "were", "what", "when", "where", "which", "who", "why", "with", "you", "your", "after", "before", "during", "about", "can", "could", "should", "would", "do", "does", "did", "done", "than", "over", "under", "through", "up", "down", "across", "within", "without", "using", "use", "used", "via", "only", "also", "more", "most", "less", "least", "very", "much", "many", "few", "some", "any",
 ]);
 
+// Optional query-expansion dictionary: maps an acronym/term to related words so a
+// query can match documents that phrase the same concept differently. Extend this
+// per knowledge base. The defaults below are aligned with the demo KB (MCP docs).
 const QUERY_EXPANSIONS: Record<string, string[]> = {
-  rap: ["restful", "abap", "behavior", "eml", "cds"],
-  eml: ["entity", "manipulation", "language", "rap"],
-  cds: ["core", "data", "services"],
-  btp: ["business", "technology", "platform"],
-  flp: ["fiori", "launchpad", "intent"],
-  so: ["sales", "order"],
-  cr: ["change", "request", "workflow"],
-  s4: ["s4hana", "s/4", "s/4hana"],
-  s4hana: ["s4", "s/4", "s/4hana"],
-  "s/4": ["s4", "s4hana", "s/4hana"],
-  "s/4hana": ["s4", "s4hana", "s/4"],
-  fiori: ["flp", "launchpad"],
+  mcp: ["model", "context", "protocol"],
+  kb: ["knowledge", "base"],
 };
 
 let runtimeCache = {
@@ -731,20 +724,16 @@ function rerankCandidate({ chunk, baseScore, query, mode, matchedTokenCount, tok
   if (mode === "domain") {
     if (chunk.sourceKind === "reference-source") {
       score += 2.4;
-      if (debug) adjustments.push({ reason: "mode_sap_source_preference", delta: 2.4 });
+      if (debug) adjustments.push({ reason: "mode_domain_source_preference", delta: 2.4 });
     }
     if (chunk.track === "domain") {
       score += 1.1;
-      if (debug) adjustments.push({ reason: "mode_sap_track_preference", delta: 1.1 });
+      if (debug) adjustments.push({ reason: "mode_domain_track_preference", delta: 1.1 });
     }
   } else if (mode === "project") {
     if (chunk.sourceKind === "project") {
       score += 2.8;
       if (debug) adjustments.push({ reason: "mode_project_source_preference", delta: 2.8 });
-    }
-    if (chunk.module === "project-cr-so") {
-      score += 2.1;
-      if (debug) adjustments.push({ reason: "mode_project_module_preference", delta: 2.1 });
     }
   }
 
@@ -1007,10 +996,6 @@ function normalizeForTokenization(text: string): string {
     .toLowerCase()
     .replace(/\bbrown[\s-]+field\b/g, " brownfield ")
     .replace(/\bgreen[\s-]+field\b/g, " greenfield ")
-    .replace(/\bblue[\s-]+field\b/g, " bluefield ")
-    .replace(/s\s*\/\s*4\s*h?ana/g, " s4hana ")
-    .replace(/s\s*\/\s*4/g, " s4 ")
-    .replace(/\bmy\s*inbox\b/g, " myinbox ")
     .replace(/[’']/g, "")
     .replace(/[\u2013\u2014]/g, "-");
 }
@@ -1183,8 +1168,7 @@ function inferTrack(relPath: string, frontmatter: Frontmatter): string {
 function inferMode(query: string, explicitMode: string): SearchMode {
   if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic") return explicitMode;
   const q = query.toLowerCase();
-  if (/\bproject\b|\btask\s*\d+\b|\bcr_so\b|\bflp\b/.test(q)) return "project";
-  if (/\brap\b|\babap\b|\bs\/4\b|\bs4\b|\bbtp\b|\badt\b|\beml\b|\bcds\b|\bppf\b/.test(q)) return "domain";
+  if (/\bproject\b|\btask\s*\d+\b/.test(q)) return "project";
   return "generic";
 }
 
