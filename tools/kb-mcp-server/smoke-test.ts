@@ -59,20 +59,16 @@ child.on("exit", (code) => {
 });
 
 function parseFrames() {
+  // Newline-delimited JSON: one message per line, matching the MCP stdio transport.
   while (true) {
-    const headerEnd = stdoutBuffer.indexOf("\r\n\r\n");
-    if (headerEnd === -1) return;
-    const header = stdoutBuffer.slice(0, headerEnd).toString("utf8");
-    const match = header.match(/content-length:\s*(\d+)/i);
-    if (!match) throw new Error("Missing Content-Length in server response");
+    const newlineIdx = stdoutBuffer.indexOf("\n");
+    if (newlineIdx === -1) return;
+    const lineBuf = stdoutBuffer.slice(0, newlineIdx);
+    stdoutBuffer = stdoutBuffer.slice(newlineIdx + 1);
+    const line = lineBuf.toString("utf8").trim();
+    if (line.length === 0) continue;
 
-    const contentLength = Number.parseInt(match[1], 10);
-    const frameEnd = headerEnd + 4 + contentLength;
-    if (stdoutBuffer.length < frameEnd) return;
-
-    const body = stdoutBuffer.slice(headerEnd + 4, frameEnd).toString("utf8");
-    stdoutBuffer = stdoutBuffer.slice(frameEnd);
-    const message = JSON.parse(body) as JsonRpcResponse;
+    const message = JSON.parse(line) as JsonRpcResponse;
     if (Object.prototype.hasOwnProperty.call(message, "id")) {
       const request = pending.get(message.id);
       if (!request) continue;
@@ -88,8 +84,7 @@ function parseFrames() {
 
 function sendFrame(payload: JsonRpcRequestPayload): void {
   const body = JSON.stringify(payload);
-  const header = `Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n`;
-  child.stdin.write(header + body);
+  child.stdin.write(body + "\n");
 }
 
 function request(method: string, params: Record<string, unknown>): Promise<any> {

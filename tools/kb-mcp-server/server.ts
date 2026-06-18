@@ -394,26 +394,52 @@ async function main() {
 
   async function parseMessages() {
     while (true) {
-      const headerEnd = buffer.indexOf("\r\n\r\n");
-      if (headerEnd === -1) return;
-      const headerRaw = buffer.slice(0, headerEnd).toString("utf8");
-      const lengthMatch = headerRaw.match(/content-length:\s*(\d+)/i);
-      if (!lengthMatch) {
-        sendError(null, -32700, "Missing Content-Length header");
-        buffer = Buffer.alloc(0);
-        return;
+      // Detect framing from the buffer prefix. The MCP stdio transport uses
+      // newline-delimited JSON; we also accept legacy LSP-style Content-Length
+      // frames so the server keeps working with either client.
+      const prefix = buffer.slice(0, 16).toString("utf8");
+      const looksLikeHeader = /^\s*content-length:/i.test(prefix);
+
+      if (looksLikeHeader) {
+        const headerEnd = buffer.indexOf("\r\n\r\n");
+        if (headerEnd === -1) return;
+        const headerRaw = buffer.slice(0, headerEnd).toString("utf8");
+        const lengthMatch = headerRaw.match(/content-length:\s*(\d+)/i);
+        if (!lengthMatch) {
+          sendError(null, -32700, "Missing Content-Length header");
+          buffer = Buffer.alloc(0);
+          return;
+        }
+
+        const contentLength = Number.parseInt(lengthMatch[1], 10);
+        const frameEnd = headerEnd + 4 + contentLength;
+        if (buffer.length < frameEnd) return;
+
+        const payloadRaw = buffer.slice(headerEnd + 4, frameEnd).toString("utf8");
+        buffer = buffer.slice(frameEnd);
+
+        let message;
+        try {
+          message = JSON.parse(payloadRaw);
+        } catch (error) {
+          sendError(null, -32700, `Invalid JSON payload: ${safeErrorMessage(error)}`);
+          continue;
+        }
+        void dispatchMessage(message);
+        continue;
       }
 
-      const contentLength = Number.parseInt(lengthMatch[1], 10);
-      const frameEnd = headerEnd + 4 + contentLength;
-      if (buffer.length < frameEnd) return;
-
-      const payloadRaw = buffer.slice(headerEnd + 4, frameEnd).toString("utf8");
-      buffer = buffer.slice(frameEnd);
+      // Newline-delimited JSON: each message is a single line terminated by "\n".
+      const newlineIdx = buffer.indexOf("\n");
+      if (newlineIdx === -1) return;
+      const lineBuf = buffer.slice(0, newlineIdx);
+      buffer = buffer.slice(newlineIdx + 1);
+      const line = lineBuf.toString("utf8").trim();
+      if (line.length === 0) continue;
 
       let message;
       try {
-        message = JSON.parse(payloadRaw);
+        message = JSON.parse(line);
       } catch (error) {
         sendError(null, -32700, `Invalid JSON payload: ${safeErrorMessage(error)}`);
         continue;
@@ -2546,10 +2572,10 @@ function sendError(id: JsonRpcId, code: number, message: string): void {
 }
 
 function sendMessage(payload: JsonObject): void {
+  // MCP stdio transport uses newline-delimited JSON. JSON.stringify escapes any
+  // embedded newlines, so the serialized message is always a single line.
   const body = JSON.stringify(payload);
-  const header = `Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n`;
-  process.stdout.write(header);
-  process.stdout.write(body);
+  process.stdout.write(body + "\n");
 }
 
 main().catch((error) => {
