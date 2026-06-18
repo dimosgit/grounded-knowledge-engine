@@ -9,8 +9,9 @@ Think of it as a persistent, multi-project, agent-native NotebookLM: you keep a
 folder of docs, an agent grounds its answers in them and writes useful new notes
 back, and every agent (CLI, or any MCP client) queries the same knowledge base.
 
-> **Status:** engine + MCP slice is the focus and runs end-to-end on the demo KB.
-> The optional cockpit UI and the hosted demo are planned, not yet in this repo.
+> **Status:** the engine + MCP slice is the focus and runs end-to-end on the demo KB.
+> The optional cockpit UI now lives in [`apps/cockpit`](apps/cockpit) (typechecked,
+> tested, and built in CI); only the hosted live demo is still planned.
 
 ## The loop (the part that matters)
 
