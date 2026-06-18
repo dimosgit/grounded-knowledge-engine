@@ -10,18 +10,18 @@ cd "$ROOT"
 
 PATTERN='vorwerk|mews|art ?nation|uzunov|dimo|1\.5m|€1|confidential|client name'
 
-# 1) Content scan. Use grep (always present) so the gate works under npm's
-#    restricted PATH, where the ripgrep shell-function wrapper is unavailable.
-#    grep exit codes: 0 = matches found (FAIL), 1 = no matches (clean), >1 = error.
+# 1) Content scan over SHIPPABLE files only. Drive the file list from git
+#    (`git grep` searches tracked files), so gitignored, machine-local artifacts
+#    — `.mcp.json`, `.claude/`, `dist/`, `content/`, the private KB — are never
+#    scanned: they don't ship, and scanning them produced false failures (e.g. the
+#    absolute `/Users/<name>/...` path inside a locally generated `.mcp.json`).
+#    git grep keeps grep's exit codes: 0 = matches (FAIL), 1 = clean, >1 = error.
 set +e
-HITS="$(grep -rEi --binary-files=without-match \
-  --exclude-dir=node_modules --exclude-dir=.git \
-  --exclude=package-lock.json --exclude=scrub-gate.sh \
-  "$PATTERN" . )"
+HITS="$(git grep --no-color -EinI "$PATTERN" -- . ':!package-lock.json' ':!scripts/scrub-gate.sh')"
 STATUS=$?
 set -e
 if [ "$STATUS" -gt 1 ]; then
-  echo "SCRUB ERROR: content scanner failed to run (grep status $STATUS)"
+  echo "SCRUB ERROR: content scanner failed to run (git grep status $STATUS)"
   exit 2
 fi
 if [ -n "$HITS" ]; then
