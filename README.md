@@ -54,6 +54,33 @@ npm run eval -- --refresh
 Every claim above is enforced in CI (`.github/workflows/ci.yml`): `typecheck`,
 `build`, `eval`, `smoke:mcp`, and a sanitization gate (`scrub`).
 
+## Use with Claude Code
+
+To wire the `kb` MCP server into Claude Code on any machine, run one command from the
+repo root:
+
+```bash
+npm run setup:claude
+```
+
+It is idempotent and:
+
+1. Installs dependencies if needed (so `tsx` is available).
+2. Writes `.mcp.json` with this machine's **absolute** `node` + `tsx` paths. Claude Code
+   spawns MCP servers with a minimal `PATH`, so a bare `npx`/`node` command cannot be
+   resolved — absolute paths are the reliable fix.
+3. Approves the server in `.claude/settings.local.json` so it loads without a prompt.
+4. Syncs any `skills/*` into `.claude/skills/*` so Claude Code discovers them.
+5. Adds the generated, machine-specific files to `.gitignore`.
+6. Runs `smoke:mcp` to confirm the stdio handshake works.
+
+Then **fully quit Claude Code (Cmd+Q) and reopen** it from this folder; the `mcp__kb__*`
+tools load automatically. Flags: `--no-writes` (read-only KB) and `--skip-smoke`.
+
+> The server speaks newline-delimited JSON over stdio (the MCP transport standard). If
+> you fork it, keep `sendMessage`/`parseMessages` newline-framed — LSP-style
+> `Content-Length` framing makes Claude Code hang at "connecting".
+
 ## Layers
 
 | Layer | Role | Portability |
