@@ -8,7 +8,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-PATTERN='vorwerk|mews|art ?nation|uzunov|dimo|1\.5m|€1|confidential|client name'
+PATTERN='vorwerk|mews|art ?nation|uzunov|dimo|1\.5m|€1|confidential|client name|private-source-repo'
 
 # 1) Content scan over SHIPPABLE files only. Drive the file list from git
 #    (`git grep` searches tracked files), so gitignored, machine-local artifacts
