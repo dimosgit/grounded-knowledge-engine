@@ -90,6 +90,8 @@ tools load automatically. Flags: `--no-writes` (read-only KB) and `--skip-smoke`
 | **MCP server** (`tools/kb-mcp-server`) | The same capability exposed to any agent over a standard protocol. | Any MCP client |
 | **Skill** | Policy/playbook (local-first routing, capture discipline). | Deferred to a later release |
 
+See [`docs/architecture.md`](docs/architecture.md) for the layered diagram and design choices.
+
 ## Ingestion scope
 
 - **Supported now (v0.1):** Markdown and plain pre-extracted text.
