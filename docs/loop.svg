@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">
+  <rect x="2" y="2" width="1196" height="336" rx="14" fill="#0d1117" stroke="#30363d" stroke-width="2" stroke-dasharray="8 6"/>
+  <!-- title bar -->
+  <circle cx="34" cy="36" r="6" fill="#ff5f56"/>
+  <circle cx="56" cy="36" r="6" fill="#ffbd2e"/>
+  <circle cx="78" cy="36" r="6" fill="#27c93f"/>
+  <text x="110" y="41" fill="#8b949e" font-size="16">Claude Code — grounded knowledge engine</text>
+
+  <text x="40" y="110" fill="#c9d1d9" font-size="26" font-weight="bold">▶  Loop recording goes here</text>
+  <text x="40" y="150" fill="#7d8590" font-size="18">Placeholder — replace with the real asciinema cast (see runbook).</text>
+
+  <!-- the four beats -->
+  <g font-size="17">
+    <text x="40"  y="220" fill="#58a6ff">1 · ground</text>
+    <text x="200" y="220" fill="#3fb950">2 · decide</text>
+    <text x="360" y="220" fill="#d29922">3 · capture</text>
+    <text x="540" y="220" fill="#a371f7">4 · recall  (new chat)</text>
+  </g>
+  <line x1="40" y1="245" x2="1160" y2="245" stroke="#21262d" stroke-width="1"/>
+
+  <text x="40" y="290" fill="#6e7681" font-size="15">$ asciinema rec loop.cast   →   npx svg-term-cli --cast loop.cast --out docs/loop.svg --window</text>
+</svg>
