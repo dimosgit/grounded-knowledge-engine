@@ -15,9 +15,8 @@ back, and every agent (CLI, or any MCP client) queries the same knowledge base.
 
 ## The loop (the part that matters)
 
-<!-- HERO: replace docs/loop.svg with the real recording, then commit. No README edit needed.
-     Steps: kb runbook "GKE README Loop Recording Runbook" (asciinema rec → svg-term --out docs/loop.svg). -->
-![GKE loop: ground → decide → capture → recall](docs/loop.svg)
+<!-- Hero: static terminal render of the real loop (regenerate via scripts/record-loop.sh). -->
+![GKE loop: grounded answer with citations, then the answer → capture → re-answer proof](docs/loop.svg)
 
 The engine exposes one capability — *grounded retrieve + capture* — and proves the
 full **ingest → ground → answer → capture → re-answer** loop:
