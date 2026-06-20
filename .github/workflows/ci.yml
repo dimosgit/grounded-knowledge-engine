@@ -41,6 +41,15 @@ jobs:
       - name: MCP smoke test (grounding loop)
         run: npm run smoke:mcp
 
+      - name: Loop integration test (ground -> capture -> re-ground -> cite)
+        run: npm run test:loop
+
+      - name: Ingestion unit tests
+        run: npm run test:ingest:unit
+
+      - name: Ingestion integration test (PDF/DOCX/XLSX -> grounded & cited)
+        run: npm run test:ingest
+
       - name: Sanitization gate (strings + filenames + gitleaks)
         run: npm run scrub
 
