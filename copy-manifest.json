@@ -20,7 +20,14 @@
       "src": "tools/kb-mcp-server",
       "dest": "tools/kb-mcp-server",
       "include": ["*.ts", "README.md"],
-      "reason": "MCP wrapper and smoke test; docs paths must be genericized before release."
+      "reason": "MCP wrapper, smoke test, shared mcp-client, and loop integration test; docs paths must be genericized before release."
+    },
+    {
+      "enabled": true,
+      "src": "tools/ingest",
+      "dest": "tools/ingest",
+      "include": ["**/*.ts", "README.md", "fixtures/sample.*"],
+      "reason": "Local document ingestion CLI (PDF/DOCX/XLSX/Markdown/text -> KB notes). Synthetic fixtures only; default module genericized to 'general' and grounding mode to 'generic'."
     },
     {
       "enabled": true,
