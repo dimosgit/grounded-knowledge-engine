@@ -1,14 +1,16 @@
 # Capture recipe — ingesting a document via chat
 
 Use this when you want to feed a document (notes, spec, PDF, spreadsheet) into
-the Grounded Knowledge Engine through a Claude or Codex chat with the `kb` MCP
-server connected. The agent extracts the key facts and captures them as a KB
-note via `kb.upsert_note`; every later answer is then grounded in them.
+the Grounded Knowledge Engine through Claude Code, Codex, Gemini CLI, or another
+MCP-capable agent with the `kb` server connected. The agent extracts the key
+facts and captures them as a KB note via `kb.upsert_note`; every later answer is
+then grounded in them.
 
 > Real captures require the MCP server to run with writes enabled.
-> `npm run setup:claude` configures this by default (it sets
-> `KB_MCP_ENABLE_WRITES=true` in `.mcp.json`); use `--no-writes` for a read-only
-> server, where captures fall back to a safe dry-run preview.
+> `npm run setup:mcp` configures this by default for Claude Code, Codex, and
+> Gemini CLI (it sets `KB_MCP_ENABLE_WRITES=true` in each client adapter); use
+> `--no-writes` for a read-only server, where captures fall back to a safe
+> dry-run preview.
 
 ## Prompt template
 
