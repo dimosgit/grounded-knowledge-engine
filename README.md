@@ -60,28 +60,31 @@ Every claim above is enforced in CI (`.github/workflows/ci.yml`): `typecheck`,
 (`test:ingest:unit`, `test:ingest`), the cockpit tests, and a sanitization gate
 (`scrub`).
 
-## Use with Claude Code
+## Connect Claude Code, Codex, or Gemini CLI
 
-To wire the `kb` MCP server into Claude Code on any machine, run one command from the
-repo root:
+There is one provider-neutral `kb` MCP server. To register that same local server
+with Claude Code, Codex, and Gemini CLI, run:
 
 ```bash
-npm run setup:claude
+npm run setup:mcp
 ```
 
 It is idempotent and:
 
 1. Installs dependencies if needed (so `tsx` is available).
-2. Writes `.mcp.json` with this machine's **absolute** `node` + `tsx` paths. Claude Code
-   spawns MCP servers with a minimal `PATH`, so a bare `npx`/`node` command cannot be
-   resolved — absolute paths are the reliable fix.
-3. Approves the server in `.claude/settings.local.json` so it loads without a prompt.
-4. Syncs any `skills/*` into `.claude/skills/*` so Claude Code discovers them.
-5. Adds the generated, machine-specific files to `.gitignore`.
-6. Runs `smoke:mcp` to confirm the stdio handshake works.
+2. Uses absolute `node`, `tsx`, and server paths so GUI clients do not depend on shell
+   `PATH` resolution.
+3. Writes each client's project-local adapter:
+   - Claude Code: `.mcp.json` plus local approval.
+   - Codex: `.codex/config.toml`.
+   - Gemini CLI: `.gemini/settings.json`.
+4. Points every adapter at the same `tools/kb-mcp-server/server.ts`.
+5. Runs `smoke:mcp` once to confirm the shared stdio server works.
 
-Then **fully quit Claude Code (Cmd+Q) and reopen** it from this folder; the `mcp__kb__*`
-tools load automatically. Flags: `--no-writes` (read-only KB) and `--skip-smoke`.
+Restart the client from this repository after setup. To configure only one client:
+`--client claude`, `--client codex`, or `--client gemini`. Other flags:
+`--no-writes` (read-only KB) and `--skip-smoke`. The old `npm run setup:claude`
+command remains as a Claude-only compatibility alias.
 
 > The server speaks newline-delimited JSON over stdio (the MCP transport standard). If
 > you fork it, keep `sendMessage`/`parseMessages` newline-framed — LSP-style
@@ -119,9 +122,9 @@ Secrets/API keys are scrubbed by default; scanned image-only PDFs are detected
 and skipped (OCR is out of scope). See
 [`tools/ingest/README.md`](tools/ingest/README.md) for the module-level guide.
 
-**Via a chat** (Claude / Codex desktop with the `kb` MCP server connected): attach
-a document and ask the agent to capture it — see the copy-paste prompt in
-[`docs/ingest-recipe.md`](docs/ingest-recipe.md).
+**Via an agent** (Claude Code, Codex, Gemini CLI, or another MCP client with the
+`kb` server connected): attach a document and ask the agent to capture it — see
+the copy-paste prompt in [`docs/ingest-recipe.md`](docs/ingest-recipe.md).
 
 Ingestion is verified end to end (`npm run test:ingest`): each format's content
 is extracted, captured, and proven retrievable and cited.
