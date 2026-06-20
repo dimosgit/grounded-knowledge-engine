@@ -22,18 +22,14 @@ This server lets MCP-capable AI clients query the local KB with grounded retriev
 npm run dev:mcp
 ```
 
-## Register In Codex
+## Register With Agent Clients
 
 ```bash
-/Applications/Codex.app/Contents/Resources/codex mcp add kb-mcp -- npx tsx "$(pwd)/tools/kb-mcp-server/server.ts"
+npm run setup:mcp
 ```
 
-Check:
-
-```bash
-/Applications/Codex.app/Contents/Resources/codex mcp list
-/Applications/Codex.app/Contents/Resources/codex mcp get kb-mcp
-```
+This writes project-local adapters for Claude Code, Codex, and Gemini CLI. All
+three launch this same server; no provider-specific MCP implementation exists.
 
 ## Smoke Test
 
