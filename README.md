@@ -56,7 +56,9 @@ npm run eval -- --refresh
 ```
 
 Every claim above is enforced in CI (`.github/workflows/ci.yml`): `typecheck`,
-`build`, `eval`, `smoke:mcp`, and a sanitization gate (`scrub`).
+`build`, `eval`, `smoke:mcp`, `test:loop`, the ingestion tests
+(`test:ingest:unit`, `test:ingest`), the cockpit tests, and a sanitization gate
+(`scrub`).
 
 ## Use with Claude Code
 
@@ -95,11 +97,34 @@ tools load automatically. Flags: `--no-writes` (read-only KB) and `--skip-smoke`
 
 See [`docs/architecture.md`](docs/architecture.md) for the layered diagram and design choices.
 
-## Ingestion scope
+## Ingesting documents
 
-- **Supported now (v0.1):** Markdown and plain pre-extracted text.
-- **Planned adapters:** PDF and Word ingestion (an extraction step that emits
-  Markdown/text the engine already handles).
+The most valuable workflow is **document-first**: feed real documents in and let
+them become durable, grounded context. Whatever the path, ingestion ends the
+same way — content becomes Markdown notes the engine indexes, so grounding and
+the cockpit graph pick it up unchanged. Full design:
+[`docs/document-ingestion-plan.md`](docs/document-ingestion-plan.md).
+
+**Via the CLI** (PDF / DOCX / XLSX / Markdown / text — fully local, no external API):
+
+```bash
+npm run ingest -- ./inbox                 # capture every supported doc in ./inbox
+npm run ingest -- ./inbox --dry-run       # preview notes without writing
+npm run ingest -- ./inbox --module general --no-scrub
+```
+
+Each document becomes a topic note with provenance and a deterministic,
+source-derived path (distinct files never collide; re-ingesting is idempotent).
+Secrets/API keys are scrubbed by default; scanned image-only PDFs are detected
+and skipped (OCR is out of scope). See
+[`tools/ingest/README.md`](tools/ingest/README.md) for the module-level guide.
+
+**Via a chat** (Claude / Codex desktop with the `kb` MCP server connected): attach
+a document and ask the agent to capture it — see the copy-paste prompt in
+[`docs/ingest-recipe.md`](docs/ingest-recipe.md).
+
+Ingestion is verified end to end (`npm run test:ingest`): each format's content
+is extracted, captured, and proven retrievable and cited.
 
 ## What this is / is not
 

@@ -13,10 +13,24 @@
     "search": "tsx tools/grounding/local-grounding-search.ts",
     "eval": "tsx tools/grounding/evaluate-retrieval.ts",
     "smoke:mcp": "tsx tools/kb-mcp-server/smoke-test.ts",
+    "test:loop": "tsx tools/kb-mcp-server/loop-integration-test.ts",
+    "test:ingest:unit": "tsx tools/ingest/unit-test.ts",
+    "test:ingest": "tsx tools/ingest/ingest-integration-test.ts",
+    "test:gke": "npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run eval",
+    "ingest": "tsx tools/ingest/ingest.ts",
+    "ingest:fixtures": "tsx tools/ingest/fixtures/make-fixtures.ts",
     "scrub": "bash scripts/scrub-gate.sh"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "mammoth": "^1.12.0",
+    "unpdf": "^1.6.2"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
+    "@types/pdfkit": "^0.17.6",
+    "docx": "^9.7.1",
+    "pdfkit": "^0.19.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
