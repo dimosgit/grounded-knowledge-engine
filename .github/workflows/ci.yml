@@ -38,6 +38,9 @@ jobs:
       - name: Retrieval eval
         run: npm run eval -- --refresh
 
+      - name: Configure shared MCP server adapters
+        run: npm run setup:mcp -- --skip-smoke
+
       - name: MCP smoke test (grounding loop)
         run: npm run smoke:mcp
 

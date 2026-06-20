@@ -9,7 +9,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "tsc -p tsconfig.json",
+    "setup:mcp": "node scripts/configure-mcp.mjs",
     "setup:claude": "node scripts/configure-claude.mjs",
+    "dev:mcp": "tsx tools/kb-mcp-server/server.ts",
     "search": "tsx tools/grounding/local-grounding-search.ts",
     "eval": "tsx tools/grounding/evaluate-retrieval.ts",
     "smoke:mcp": "tsx tools/kb-mcp-server/smoke-test.ts",
