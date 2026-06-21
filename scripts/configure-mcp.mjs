@@ -3,6 +3,7 @@
 //
 //   node scripts/configure-mcp.mjs
 //   node scripts/configure-mcp.mjs --client codex
+//   node scripts/configure-mcp.mjs --profile full
 //   node scripts/configure-mcp.mjs --no-writes
 //   node scripts/configure-mcp.mjs --skip-smoke
 //
@@ -31,6 +32,7 @@ const cliArgs = process.argv.slice(2);
 const enableWrites = !cliArgs.includes("--no-writes");
 const skipSmoke = cliArgs.includes("--skip-smoke");
 const requestedClient = readOption(cliArgs, "--client") || "all";
+const requestedProfile = readOption(cliArgs, "--profile") || "core";
 
 if (!SUPPORTED_CLIENTS.has(requestedClient)) {
   console.error(`\n✗ Unsupported client "${requestedClient}". Use claude, codex, gemini, or all.`);
@@ -44,7 +46,14 @@ const isWindows = process.platform === "win32";
 const nodeBin = process.execPath;
 const tsxBin = join(repoRoot, "node_modules", ".bin", isWindows ? "tsx.cmd" : "tsx");
 const serverEntry = join(repoRoot, SERVER_ENTRY_REL);
-const serverEnv = enableWrites ? { KB_MCP_ENABLE_WRITES: "true" } : {};
+if (!new Set(["core", "full"]).has(requestedProfile)) {
+  console.error(`\n✗ Unsupported profile "${requestedProfile}". Use core or full.`);
+  process.exit(1);
+}
+const serverEnv = {
+  KB_MCP_PROFILE: requestedProfile,
+  ...(enableWrites ? { KB_MCP_ENABLE_WRITES: "true" } : {}),
+};
 
 function readOption(args, name) {
   const equalsArg = args.find((arg) => arg.startsWith(`${name}=`));
@@ -140,9 +149,12 @@ function configureCodex() {
   step("Configuring Codex (.codex/config.toml)…");
   const configPath = join(repoRoot, ".codex", "config.toml");
   const current = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
-  const envBlock = enableWrites
-    ? `\n[mcp_servers.${SERVER_NAME}.env]\nKB_MCP_ENABLE_WRITES = "true"\n`
-    : "";
+  const envLines = [
+    `[mcp_servers.${SERVER_NAME}.env]`,
+    `KB_MCP_PROFILE = ${quoteToml(requestedProfile)}`,
+  ];
+  if (enableWrites) envLines.push(`KB_MCP_ENABLE_WRITES = "true"`);
+  const envBlock = `\n${envLines.join("\n")}\n`;
   const block = [
     MANAGED_TOML_START,
     `[mcp_servers.${SERVER_NAME}]`,
@@ -228,5 +240,6 @@ console.log(`
    ${serverEntry}
 
    Writes: ${enableWrites ? "enabled" : "disabled (dryRun remains available)"}
+   Profile: ${requestedProfile}
    Restart the configured client(s) from this repository to load the tools.
 `);

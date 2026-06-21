@@ -15,10 +15,11 @@
     "search": "tsx tools/grounding/local-grounding-search.ts",
     "eval": "tsx tools/grounding/evaluate-retrieval.ts",
     "smoke:mcp": "tsx tools/kb-mcp-server/smoke-test.ts",
+    "test:mcp:catalog": "tsx tools/kb-mcp-server/schema-budget-test.ts",
     "test:loop": "tsx tools/kb-mcp-server/loop-integration-test.ts",
     "test:ingest:unit": "tsx tools/ingest/unit-test.ts",
     "test:ingest": "tsx tools/ingest/ingest-integration-test.ts",
-    "test:gke": "npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run eval",
+    "test:gke": "npm run test:mcp:catalog && npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run eval",
     "ingest": "tsx tools/ingest/ingest.ts",
     "ingest:fixtures": "tsx tools/ingest/fixtures/make-fixtures.ts",
     "scrub": "bash scripts/scrub-gate.sh"
