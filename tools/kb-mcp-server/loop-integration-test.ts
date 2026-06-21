@@ -65,6 +65,7 @@ async function main(): Promise<void> {
       KB_MCP_REPO_ROOT: repoRoot,
       KB_MCP_SCAN_ROOTS: "kb",
       KB_MCP_ENABLE_WRITES: "true",
+      KB_MCP_PROFILE: "full",
       KB_MCP_REQUIRE_CAPTURE: "false",
       KB_MCP_LOG_LEVEL: "error",
     });
