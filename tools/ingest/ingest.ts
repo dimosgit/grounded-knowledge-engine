@@ -133,7 +133,8 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
   }
 
   const { child, client } = spawnKbServer({
-    KB_MCP_ENABLE_WRITES: options.dryRun ? "false" : "true",
+    KB_MCP_ENABLE_WRITES: "true",
+    KB_MCP_PROFILE: "full",
     KB_MCP_LOG_LEVEL: "error",
   });
 

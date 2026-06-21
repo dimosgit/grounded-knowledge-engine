@@ -44,6 +44,9 @@ jobs:
       - name: MCP smoke test (grounding loop)
         run: npm run smoke:mcp
 
+      - name: MCP catalog contract (profiles, schemas, annotations, budget)
+        run: npm run test:mcp:catalog
+
       - name: Loop integration test (ground -> capture -> re-ground -> cite)
         run: npm run test:loop
 

@@ -83,6 +83,7 @@ async function main(): Promise<void> {
     const { child, client } = spawnKbServer({
       KB_MCP_REPO_ROOT: repoRoot,
       KB_MCP_SCAN_ROOTS: "kb",
+      KB_MCP_PROFILE: "full",
       KB_MCP_LOG_LEVEL: "error",
     });
     serverChild = child;

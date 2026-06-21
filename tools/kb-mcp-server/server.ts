@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
 import { DEFAULT_SCAN_ROOTS as RETRIEVER_DEFAULT_SCAN_ROOTS, getKbRetriever } from "../grounding/retriever.js";
 import type {
   CandidateFile,
@@ -69,6 +70,7 @@ const DEFAULT_CACHE_TTL_MS = parsePositiveInt(process.env.KB_MCP_CACHE_TTL_MS, 1
 const DEFAULT_SLO_MS = parsePositiveInt(process.env.KB_MCP_SLO_MS, 3000, 50, 120 * 1000);
 const DEFAULT_REQUIRE_CAPTURE = parseBooleanEnv(process.env.KB_MCP_REQUIRE_CAPTURE, true);
 const DEFAULT_ENABLE_WRITES = parseBooleanEnv(process.env.KB_MCP_ENABLE_WRITES, false);
+const DEFAULT_MCP_PROFILE = normalizeMcpProfile(process.env.KB_MCP_PROFILE);
 const DEFAULT_RETRIEVAL_BACKEND = normalizeRetrievalBackend(process.env.KB_MCP_RETRIEVAL_BACKEND || "bm25");
 const DEFAULT_RESPONSE_FORMAT = normalizeResponseFormatValue(process.env.KB_MCP_RESPONSE_FORMAT || "compact");
 const WRITE_REFRESH_DEBOUNCE_MS = parsePositiveInt(
@@ -138,7 +140,7 @@ async function getSqliteRetriever(forceRefresh = false): Promise<KbRetriever> {
   });
 }
 
-const tools = [
+const legacyTools = [
   {
     name: "kb.search",
     description: "Search the local KB and Domain markdown/text sources for grounded evidence.",
@@ -365,8 +367,19 @@ const tools = [
   },
 ];
 
+const tools = buildToolCatalog({
+  profile: DEFAULT_MCP_PROFILE,
+  writesEnabled: DEFAULT_ENABLE_WRITES,
+  defaultLimit: DEFAULT_LIMIT,
+  maxLimit: MAX_LIMIT,
+  maxContext: MAX_CONTEXT,
+  defaultSloMs: DEFAULT_SLO_MS,
+});
+const advertisedToolNames = new Set(tools.map((tool) => tool.name));
+
 const toolHandlers: Record<string, ToolHandler> = {
   "kb.search": handleKbSearch,
+  "kb.get_record": handleKbGetRecord,
   "kb.get_topic": handleKbGetTopic,
   "kb.get_term": handleKbGetTerm,
   "kb.list_modules": handleKbListModules,
@@ -486,10 +499,10 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
     case "initialize":
       return {
         protocolVersion: normalizeProtocolVersion(params?.protocolVersion),
-        capabilities: { tools: {} },
+        capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
         instructions:
-          "KB MCP server for local markdown knowledge retrieval and guarded KB capture. Use kb.answer_and_capture for Q&A (responseMode=auto enables exact term/topic answers). Use kb.search + kb.get_topic/kb.get_term for deep reads. Direct kb.answer_grounded is policy-gated unless allowDirect=true. Writes are disabled unless KB_MCP_ENABLE_WRITES=true; dryRun remains available.",
+          `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). Use kb.search for evidence, kb.get_record for direct reads, and kb.answer_and_capture for grounded Q&A. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled; automatic capture is skipped"}.`,
       };
     case "ping":
       return {};
@@ -498,9 +511,33 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
     case "tools/call":
       return await handleToolCall(params);
     case "resources/list":
-      return { resources: [] };
+      return {
+        resources: [
+          {
+            uri: "gke://workspace/info",
+            name: "workspace-info",
+            title: "GKE Workspace Information",
+            description: "Active repository root and indexed logical scan roots.",
+            mimeType: "application/json",
+            annotations: { audience: ["user", "assistant"], priority: 0.9 },
+          },
+        ],
+      };
     case "resources/templates/list":
-      return { resourceTemplates: [] };
+      return {
+        resourceTemplates: [
+          {
+            uriTemplate: "gke://record/{path}",
+            name: "knowledge-record",
+            title: "GKE Knowledge Record",
+            description: "Read an indexed Markdown record by URL-encoded workspace-relative path.",
+            mimeType: "text/markdown",
+            annotations: { audience: ["user", "assistant"], priority: 0.7 },
+          },
+        ],
+      };
+    case "resources/read":
+      return await handleResourceRead(params);
     case "prompts/list":
       return { prompts: [] };
     default:
@@ -512,7 +549,7 @@ async function handleToolCall(params: JsonObject): Promise<any> {
   const toolName = typeof params?.name === "string" ? params.name : "";
   const args = params?.arguments && typeof params.arguments === "object" ? params.arguments : {};
   const handler = toolHandlers[toolName];
-  if (!handler) {
+  if (!handler || !advertisedToolNames.has(toolName)) {
     return jsonRpcToolError(`Unknown tool '${toolName}'.`);
   }
 
@@ -569,60 +606,120 @@ async function handleKbSearch(args: JsonObject): Promise<ToolPayload> {
   };
 }
 
-async function handleKbGetTopic(args: JsonObject): Promise<ToolPayload> {
-  const topicQuery = normalizeScalar(args?.topic);
-  if (!topicQuery) throw new Error("Missing required argument: topic");
-
-  const maxChars = parsePositiveInt(args?.maxChars, 8000, 500, 50000);
+async function handleKbGetRecord(args: JsonObject): Promise<ToolPayload> {
+  const query = normalizeScalar(args?.query);
+  if (!query) throw new Error("Missing required argument: query");
+  const kind = normalizeScalar(args?.kind).toLowerCase() || "any";
+  const maxChars = parsePositiveInt(args?.maxChars, 8000, 300, 50000);
   const docs = await getDocuments(false);
-  const topicDocs = docs.filter((doc) => doc.relPath.startsWith("kb/topics/") && doc.relPath.endsWith(".md"));
-  const match = rankAndPickDocument(topicDocs, topicQuery);
-  if (!match) throw new Error(`No topic matched '${topicQuery}'`);
+  const eligible = filterDocumentsByKind(docs, kind);
+  const match = rankAndPickDocument(eligible, query);
+  if (!match) throw new Error(`No ${kind === "any" ? "record" : kind} matched '${query}'`);
 
   const payload = buildDocumentPayload(match, maxChars);
-  const lines: string[] = [];
-  lines.push(`# kb.get_topic`);
-  lines.push(`Query: ${topicQuery}`);
-  lines.push(`Match: ${payload.path}`);
-  if (payload.title) lines.push(`Title: ${payload.title}`);
-  lines.push("");
-  lines.push(payload.bodyPreview);
-
   return {
-    contentText: lines.join("\n"),
-    structured: {
-      query: topicQuery,
-      match: payload,
-    },
+    contentText: [
+      "# kb.get_record",
+      `Query: ${query}`,
+      `Kind: ${kind}`,
+      `Match: ${payload.path}`,
+      payload.title ? `Title: ${payload.title}` : "",
+      "",
+      payload.bodyPreview,
+    ].filter((line) => line !== "").join("\n"),
+    structured: { query, kind, match: payload },
   };
 }
 
-async function handleKbGetTerm(args: JsonObject): Promise<ToolPayload> {
-  const termQuery = normalizeScalar(args?.term);
-  if (!termQuery) throw new Error("Missing required argument: term");
-
-  const maxChars = parsePositiveInt(args?.maxChars, 5000, 300, 30000);
-  const docs = await getDocuments(false);
-  const termDocs = docs.filter((doc) => doc.relPath.startsWith("kb/terms/") && doc.relPath.endsWith(".md"));
-  const match = rankAndPickDocument(termDocs, termQuery);
-  if (!match) throw new Error(`No term matched '${termQuery}'`);
-
-  const payload = buildDocumentPayload(match, maxChars);
-  const lines: string[] = [];
-  lines.push(`# kb.get_term`);
-  lines.push(`Query: ${termQuery}`);
-  lines.push(`Match: ${payload.path}`);
-  if (payload.title) lines.push(`Title: ${payload.title}`);
-  lines.push("");
-  lines.push(payload.bodyPreview);
-
+async function handleCompatibilityRecordRead(
+  kind: "topic" | "term",
+  rawQuery: unknown,
+  rawMaxChars: unknown,
+  toolName: string,
+): Promise<ToolPayload> {
+  const query = normalizeScalar(rawQuery);
+  if (!query) throw new Error(`Missing required argument: ${kind}`);
+  const maxChars = parsePositiveInt(rawMaxChars, kind === "topic" ? 8000 : 5000, kind === "topic" ? 500 : 300, kind === "topic" ? 50000 : 30000);
+  const result = await handleKbGetRecord({ query, kind, maxChars });
   return {
-    contentText: lines.join("\n"),
-    structured: {
-      query: termQuery,
-      match: payload,
-    },
+    contentText: result.contentText.replace("# kb.get_record", `# ${toolName}`),
+    structured: result.structured,
   };
+}
+
+function filterDocumentsByKind(docs: LocalDocument[], kind: string): LocalDocument[] {
+  if (kind === "any") return docs;
+  const pathSegments: Record<string, string> = {
+    topic: "/topics/",
+    term: "/terms/",
+    module: "/modules/",
+    project: "/projects/",
+    decision: "/decisions/",
+    source: "/sources/",
+  };
+  const segment = pathSegments[kind];
+  if (!segment) throw new Error(`Unsupported record kind '${kind}'.`);
+  return docs.filter((doc) => `/${doc.relPath}`.includes(segment) && doc.relPath.endsWith(".md"));
+}
+
+async function handleResourceRead(params: JsonObject): Promise<any> {
+  const uri = normalizeScalar(params?.uri);
+  if (!uri) throw createJsonRpcError(-32602, "Missing resource URI.");
+
+  if (uri === "gke://workspace/info") {
+    const value = {
+      workspaceId: normalizeScalar(process.env.KB_MCP_WORKSPACE_ID) || "default",
+      profile: DEFAULT_MCP_PROFILE,
+      writesEnabled: DEFAULT_ENABLE_WRITES,
+      scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+    };
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: "application/json",
+          text: JSON.stringify(value, null, 2),
+        },
+      ],
+    };
+  }
+
+  const prefix = "gke://record/";
+  if (!uri.startsWith(prefix)) {
+    throw createJsonRpcError(-32602, `Unsupported resource URI: ${uri}`);
+  }
+
+  let relPath: string;
+  try {
+    relPath = sanitizeRelativePath(decodeURIComponent(uri.slice(prefix.length)));
+  } catch (error) {
+    throw createJsonRpcError(-32602, `Invalid record URI: ${safeErrorMessage(error)}`);
+  }
+  const docs = await getDocuments(false);
+  const doc = docs.find((item) => item.relPath === relPath);
+  if (!doc) throw createJsonRpcError(-32602, `Indexed record not found: ${relPath}`);
+  const raw = await fs.readFile(doc.absPath, "utf8");
+  return {
+    contents: [
+      {
+        uri: `gke://record/${encodeURIComponent(doc.relPath)}`,
+        mimeType: doc.relPath.endsWith(".md") ? "text/markdown" : "text/plain",
+        text: raw,
+        annotations: {
+          audience: ["user", "assistant"],
+          priority: 0.7,
+        },
+      },
+    ],
+  };
+}
+
+async function handleKbGetTopic(args: JsonObject): Promise<ToolPayload> {
+  return handleCompatibilityRecordRead("topic", args?.topic, args?.maxChars, "kb.get_topic");
+}
+
+async function handleKbGetTerm(args: JsonObject): Promise<ToolPayload> {
+  return handleCompatibilityRecordRead("term", args?.term, args?.maxChars, "kb.get_term");
 }
 
 async function handleKbListModules() {
@@ -766,7 +863,9 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
   let strategy = captureStrategyRaw;
   const fastPathSkipEligible = Boolean(answer?.fastPath?.used && answer?.fastPath?.alreadyCaptured);
   if (captureStrategyRaw === "auto") {
-    if (fastPathSkipEligible) {
+    if (!DEFAULT_ENABLE_WRITES) {
+      strategy = "none";
+    } else if (fastPathSkipEligible) {
       strategy = "none";
     } else {
       strategy = answer.abstained ? "open_question" : "note";
@@ -827,7 +926,9 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
       path: "(none)",
       reason: fastPathSkipEligible
         ? "Existing curated term note was reused via fast path."
-        : "Capture disabled by caller (captureStrategy=none).",
+        : !DEFAULT_ENABLE_WRITES && captureStrategyRaw === "auto"
+          ? "Automatic capture skipped because writes are disabled."
+          : "Capture disabled by caller (captureStrategy=none).",
     };
     captureMs = 0;
   } else {

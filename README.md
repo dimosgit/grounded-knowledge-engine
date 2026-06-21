@@ -69,6 +69,14 @@ with Claude Code, Codex, and Gemini CLI, run:
 npm run setup:mcp
 ```
 
+Generated clients use the intentionally small `core` profile:
+`kb.search`, `kb.get_record`, and `kb.answer_and_capture`. Advanced
+administration and compatibility aliases are available with:
+
+```bash
+npm run setup:mcp -- --profile full
+```
+
 It is idempotent and:
 
 1. Installs dependencies if needed (so `tsx` is available).
@@ -81,9 +89,14 @@ It is idempotent and:
 4. Points every adapter at the same `tools/kb-mcp-server/server.ts`.
 5. Runs `smoke:mcp` once to confirm the shared stdio server works.
 
+The MCP catalog is schema-budgeted in CI. Every advertised tool has a formal
+output schema and safety annotations, while indexed records are also
+addressable through `gke://` resources. MCP therefore stays a thin
+interoperability layer over the deterministic CLI/core.
+
 Restart the client from this repository after setup. To configure only one client:
 `--client claude`, `--client codex`, or `--client gemini`. Other flags:
-`--no-writes` (read-only KB) and `--skip-smoke`. The old `npm run setup:claude`
+`--profile core|full`, `--no-writes` (read-only KB), and `--skip-smoke`. The old `npm run setup:claude`
 command remains as a Claude-only compatibility alias.
 
 > The server speaks newline-delimited JSON over stdio (the MCP transport standard). If
