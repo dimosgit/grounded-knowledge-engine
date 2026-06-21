@@ -4,7 +4,7 @@
 `Workspace Vaults and Leakage Guard — Hard Boundaries Between Client and Personal Context`
 
 ## 2. Objective
-Make GKE safe for a consultant who works across confidential clients and personal projects on the same machine. Introduce explicit workspace profiles, process-level isolation, read/write policy, sensitivity labels, and an audit trail so an agent cannot accidentally retrieve or capture information into the wrong workspace. The product should make the active trust boundary visible at all times.
+Make GKE safe for a consultant who works across sensitive client and personal projects on the same machine. Introduce explicit workspace profiles, process-level isolation, read/write policy, sensitivity labels, and an audit trail so an agent cannot accidentally retrieve or capture information into the wrong workspace. The product should make the active trust boundary visible at all times.
 
 ## 3. Context
 - Product area: `Runtime configuration, retrieval roots, MCP setup, write policy, and Cockpit shell`
@@ -25,7 +25,7 @@ Make GKE safe for a consultant who works across confidential clients and persona
   1. Enterprise multi-tenant SaaS hosting.
   2. Cloud key management in the first local release.
   3. Fine-grained per-document ACLs inherited from SharePoint or another external system.
-  4. Automatic classification of all confidential information.
+  4. Automatic classification of all sensitive information.
   5. A global cross-workspace search mode.
 
 ## 5. Requirements
@@ -36,7 +36,7 @@ Make GKE safe for a consultant who works across confidential clients and persona
    - `scanRoots`
    - `writeRoots`
    - `readOnly`
-   - `sensitivity` (`personal`, `internal`, `confidential`, `restricted`)
+   - `sensitivity` (`personal`, `internal`, `sensitive`, `restricted`)
    - `auditLogPath`
 2. Add a setup command such as:
    - `npm run setup:mcp -- --workspace personal`
@@ -57,10 +57,10 @@ Make GKE safe for a consultant who works across confidential clients and persona
 10. Add an audit event for each tool invocation containing timestamp, workspace ID, tool, operation type, allowed/blocked result, target paths, and a privacy-safe query fingerprint.
 11. Do not log full document contents, secrets, or complete user questions by default.
 12. Add a Cockpit workspace banner showing the workspace label, sensitivity, and read/write state.
-13. Use strong visual differentiation for `confidential` and `restricted` workspaces.
-14. Add a confirmation step before exporting or copying a handoff from a confidential workspace.
+13. Use strong visual differentiation for `sensitive` and `restricted` workspaces.
+14. Add a confirmation step before exporting or copying a handoff from a sensitive workspace.
 15. Add `npm run workspace:doctor -- <id>` to validate roots, symlinks, overlapping workspaces, permissions, and MCP configuration.
-16. Refuse startup when two confidential workspaces have overlapping writable roots.
+16. Refuse startup when two sensitive workspaces have overlapping writable roots.
 17. Document a recommended model: one process and one agent connection per workspace.
 
 ## 6. Technical Constraints
