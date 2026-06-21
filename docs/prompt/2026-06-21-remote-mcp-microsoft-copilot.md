@@ -9,7 +9,7 @@ Expose GKE’s existing provider-neutral tools through a secure Streamable HTTP 
 ## 3. Context
 - Product area: `MCP transport, deployment, authentication, setup adapters, and enterprise integration`
 - Current behavior: `GKE runs as a local newline-delimited JSON stdio MCP server and configures Claude Code, Codex, and Gemini CLI. GitHub Copilot clients can support local MCP servers, but GKE has no generated adapter for them. Microsoft Copilot Studio and Microsoft 365 Copilot MCP integrations require a remotely reachable Streamable HTTP server URL, which the current stdio-only process does not provide.`
-- Problem to solve: `A consultant who works inside Microsoft 365 or GitHub Copilot cannot consistently access the same GKE memory from those surfaces. A naive public tunnel would weaken the product’s local-first and confidentiality guarantees.`
+- Problem to solve: `A consultant who works inside Microsoft 365 or GitHub Copilot cannot consistently access the same GKE memory from those surfaces. A naive public tunnel would weaken the product’s local-first and data-protection guarantees.`
 - Normative data contract: [`docs/workspace-data-architecture.md`](../workspace-data-architecture.md)
 
 ## 4. Scope
@@ -78,7 +78,7 @@ Expose GKE’s existing provider-neutral tools through a secure Streamable HTTP 
 9. Preserve local-first positioning by documenting two deployment modes:
    - Private self-hosted gateway reachable through an organization-controlled network/tunnel
    - Opt-in hosted workspace containing deliberately synchronized data
-10. Do not recommend temporary public tunnels for confidential production use.
+10. Do not recommend temporary public tunnels for sensitive production use.
 11. Remote write tools must be separately allowlisted; authentication alone is not sufficient authorization.
 12. Keep all existing sanitization, citation, strict-grounding, SLO, and write-gate behavior.
 

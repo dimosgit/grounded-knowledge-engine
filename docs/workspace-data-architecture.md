@@ -131,7 +131,7 @@ client-alpha/
 
 The current public repository may continue to co-locate `demo-kb/` and `kb/`
 for its runnable demonstration. That compatibility layout is not the
-recommended structure for confidential multi-client use.
+recommended structure for sensitive multi-client use.
 
 ## Workspace boundary
 
@@ -142,7 +142,7 @@ A workspace represents one trust domain, such as:
 - One employer or internal organization.
 - One deliberately shared public/demo corpus.
 
-Do not represent separate confidential clients as:
+Do not represent separate sensitive client workspaces as:
 
 ```text
 kb/client-alpha/
@@ -217,7 +217,7 @@ Rules:
 3. IDs are unique within their workspace and record type.
 4. A path may be derived from an ID, but code reads the stored ID as authority.
 5. Cross-record links use IDs plus workspace-relative paths when useful.
-6. IDs never encode confidential client names when the record may be exported.
+6. IDs never encode sensitive organization names when the record may be exported.
 
 ## Shared frontmatter contract
 
@@ -232,7 +232,7 @@ workspace_id: personal
 project_id: ai-tutor
 title: AI Tutor Pilot
 status: active
-owner: dimo
+owner: workspace-owner
 updated: 2026-06-21
 tags: ai, education, pilot
 ---
@@ -269,7 +269,7 @@ workspace_id: personal
 project_id: ai-tutor
 title: AI Tutor Pilot
 status: active
-owner: dimo
+owner: workspace-owner
 started_at: 2026-05-10
 updated: 2026-06-21
 review_after: 2026-07-05
@@ -331,7 +331,7 @@ workspace_id: personal
 project_id: ai-tutor
 checkpoint_id: cp-20260621-pilot-script
 created_at: 2026-06-21
-author: dimo
+author: workspace-owner
 ---
 ```
 
@@ -380,7 +380,7 @@ decision_id: pilot-location
 project_id: ai-tutor
 title: Select the First Pilot Location
 status: active
-owner: dimo
+owner: workspace-owner
 decided_at: 2026-05-30
 evidence_checked_at: 2026-05-30
 review_after: 2026-06-20
@@ -565,7 +565,7 @@ Rules:
   "scanRoots": ["kb"],
   "writeRoots": ["kb/projects", "kb/decisions", "kb/topics", "kb/terms", "kb/sources"],
   "readOnly": true,
-  "sensitivity": "confidential",
+  "sensitivity": "sensitive",
   "auditLogPath": ".gke/audit/events.jsonl"
 }
 ```
