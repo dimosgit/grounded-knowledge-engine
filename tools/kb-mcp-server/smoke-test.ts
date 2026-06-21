@@ -33,6 +33,7 @@ const child = spawn(process.execPath, serverArgs, {
   env: {
     ...process.env,
     KB_MCP_ENABLE_WRITES: "true",
+    KB_MCP_PROFILE: "full",
   },
   stdio: ["pipe", "pipe", "pipe"],
 });
@@ -136,6 +137,7 @@ try {
   const listed = await request("tools/list", {});
   const names = new Set((listed.tools || []).map((tool: ListedTool) => tool.name));
   assert.ok(names.has("kb.search"));
+  assert.ok(names.has("kb.get_record"));
   assert.ok(names.has("kb.get_topic"));
   assert.ok(names.has("kb.get_term"));
   assert.ok(names.has("kb.list_modules"));
@@ -145,10 +147,13 @@ try {
   assert.ok(names.has("kb.answer_and_capture"));
 
   const resources = await request("resources/list", {});
-  assert.ok(Array.isArray(resources.resources));
+  assert.ok(resources.resources.some((resource: any) => resource.uri === "gke://workspace/info"));
 
   const resourceTemplates = await request("resources/templates/list", {});
-  assert.ok(Array.isArray(resourceTemplates.resourceTemplates));
+  assert.ok(resourceTemplates.resourceTemplates.some((resource: any) => resource.uriTemplate === "gke://record/{path}"));
+
+  const workspaceResource = await request("resources/read", { uri: "gke://workspace/info" });
+  assert.equal(workspaceResource.contents?.[0]?.mimeType, "application/json");
 
   const prompts = await request("prompts/list", {});
   assert.ok(Array.isArray(prompts.prompts));
@@ -161,6 +166,17 @@ try {
   assert.ok(searched.structuredContent?.query);
   assert.ok(Array.isArray(searched.structuredContent?.hits));
   assert.ok(searched.structuredContent.hits.length > 0);
+
+  const record = await request("tools/call", {
+    name: "kb.get_record",
+    arguments: { query: "mcp-source-tools", kind: "topic" },
+  });
+  assert.equal(record.isError, undefined);
+  assert.ok(record.structuredContent?.match?.path);
+  const recordUri = `gke://record/${encodeURIComponent(record.structuredContent.match.path)}`;
+  const recordResource = await request("resources/read", { uri: recordUri });
+  assert.equal(recordResource.contents?.[0]?.mimeType, "text/markdown");
+  assert.match(recordResource.contents?.[0]?.text || "", /MCP/i);
 
   const groundedBlocked = await request("tools/call", {
     name: "kb.answer_grounded",

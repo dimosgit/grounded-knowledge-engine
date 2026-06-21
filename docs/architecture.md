@@ -3,6 +3,11 @@
 One capability — *grounded retrieve + capture* — exposed two ways (CLI and MCP) over a
 single retrieval index derived from your Markdown.
 
+The current engine architecture is documented here. The normative target data
+model for the planned consultant features—workspaces, projects, checkpoints,
+decisions, sources, runtime policy, and migration—is defined in
+[`workspace-data-architecture.md`](workspace-data-architecture.md).
+
 ## The loop
 
 ```mermaid
