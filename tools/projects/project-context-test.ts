@@ -39,7 +39,8 @@ Deploy the pilot safely.
 Validate the deployment checklist.
 
 ## Last meaningful change
-The API contract was approved.
+The API contract was approved and the implementation
+now uses the shared parser.
 
 ## Active decisions
 - Use the regional pilot.
@@ -102,6 +103,10 @@ Beta-only secret marker.
   const alpha = await resumeProject({ projectId: "client-alpha" }, root, ["kb"]);
   assert.equal(alpha.structured.title, "Client Alpha Rollout");
   assert.equal(alpha.structured.currentFocus, "Validate the deployment checklist.");
+  assert.equal(
+    alpha.structured.recentChanges,
+    "The API contract was approved and the implementation now uses the shared parser.",
+  );
   assert.deepEqual(alpha.structured.nextThreeActions, [
     "Finish the checklist.",
     "Run the dry run.",

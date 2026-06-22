@@ -15,7 +15,9 @@ this app is an optional way to browse the same notes the engine grounds against.
 - Renders Markdown with GFM tables, Mermaid diagrams, internal links, relative assets, and unresolved-asset fallbacks.
 - Shows digest quick-recall panels.
 - Builds a project board from Markdown project sections, with drag-to-lane moves persisted back to frontmatter in dev.
-- Builds project detail pages with linked context.
+- Builds structured project detail pages from the shared engine parser, including
+  current focus, recent changes, decisions, blockers/questions, next actions,
+  linked context, and a copyable technical handoff.
 - Builds a major-context graph across tracks, modules, and projects.
 
 ## Routes
@@ -108,7 +110,8 @@ Markdown source files (demo-kb/, kb/)
 - `src/views/HubView.tsx`: dashboard/home screen — active project, current module, open questions, tracks, recent docs.
 - `src/views/LibraryView.tsx`: Knowledge Base reader — filters, side list, Markdown article, digest quick view, print/PDF mode.
 - `src/views/ProjectBoardView.tsx`: project board columns.
-- `src/views/ProjectDetailView.tsx`: project status, focus, actions, blockers, linked docs.
+- `src/views/ProjectDetailView.tsx`: project status, focus, changes, decisions,
+  blockers/questions, actions, linked docs, and handoff copying.
 - `src/views/ContextGraphView.tsx`: major-context graph with focus selection, zoom, fit/reset, node movement, and collapsible context links.
 
 ### Components
@@ -126,7 +129,8 @@ The domain layer is pure data transformation where possible.
 - `src/domain/catalog.ts`: builds indexed doc objects from raw Markdown, applies indexing exclusions, computes initial fallback document.
 - `src/domain/docs.ts`: frontmatter parsing; title/excerpt/type/track/tag derivation; labels and ordering; breadcrumbs; Markdown section helpers; digest quick-view extraction; internal doc and asset path resolution.
 - `src/domain/library.ts`: tracks and item counts; tag counts; visible filters; filtered/grouped docs; curation stats; recent docs.
-- `src/domain/projects.ts`: project detection; status bucketing; board columns; project-linked docs; open-question list items.
+- `src/domain/projects.ts`: adapts the shared project parser into Cockpit project
+  summaries, status buckets, board columns, linked documents, and handoffs.
 - `src/domain/graph.ts`: relationship scoring; major-node focus options; overview/focused graph construction; context graph for project detail pages.
 - `src/domain/hub.ts`: dashboard summaries.
 
@@ -155,11 +159,19 @@ The `track` is taken from frontmatter `track:` (slugified); the demo corpus uses
 
 ### Project Detection
 
-A doc becomes a project if either:
-- frontmatter has `type: project`
-- the content has one of the project sections: `## Current status`, `## Current focus`, `## Next 3 actions`, `## Blockers`
+Canonical projects use:
 
-Project ids prefer `frontmatter.module`; otherwise they use a slug from the title/path.
+- `record_type: project`
+- an explicit `project_id`
+- `kb/projects/<project-id>/project.md` (or its `demo-kb` equivalent)
+
+Project-linked sources can declare the same `project_id`, live under an
+explicit `source_roots` folder, or be linked from the project record.
+
+The Cockpit imports the browser-safe parser from `tools/projects`, so its
+project facts and handoff format match `kb.resume_project`. Legacy notes using
+`type: project`, `module`, `## Current status`, or `## Next 3 actions` remain
+readable for compatibility.
 
 ### Project Board Status
 
@@ -193,7 +205,8 @@ npm run test
 
 Coverage includes app flow and route behavior, search normalization, internal
 Markdown link navigation, asset path rendering, Markdown article rendering,
-lifecycle-frontmatter write-back, and graph controls.
+lifecycle-frontmatter write-back, shared canonical/legacy Project Context,
+restricted-browser clipboard fallback, and graph controls.
 
 ## Extending The App
 

@@ -180,7 +180,7 @@ function printHelp() {
   console.log(`Evaluate local retrieval quality and latency against a QA set.
 
 Usage:
-  npm run eval:retrieval -- [options]
+  npm run eval -- [options]
 
 Options:
   -f, --file <path>        QA set JSON file (default: tools/grounding/eval/qa-set.json)

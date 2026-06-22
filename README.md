@@ -1,160 +1,274 @@
 # Grounded Knowledge Engine
 
-**An engine that grounds an AI agent's answers in your own Markdown and captures
-what you learn back into the knowledge base — so the next answer is faster,
-grounded, and consistent across whichever agent you use.** Stack: **Node ·
-TypeScript · MCP**. Live demo: _coming soon_.
+**Local-first, provider-neutral project memory for AI agents.**
 
-Think of it as a persistent, multi-project, agent-native NotebookLM: you keep a
-folder of docs, an agent grounds its answers in them and writes useful new notes
-back, and every agent (CLI, or any MCP client) queries the same knowledge base.
+Grounded Knowledge Engine (GKE) turns Markdown and real documents into a
+searchable knowledge base, answers from that evidence with citations, captures
+useful learning back into plain files, and resumes structured project context
+across Claude Code, Codex, Gemini CLI, and other MCP clients.
 
-> **Status:** the engine + MCP slice is the focus and runs end-to-end on the demo KB.
-> The optional cockpit UI now lives in [`apps/cockpit`](apps/cockpit) (typechecked,
-> tested, and built in CI); only the hosted live demo is still planned.
+Your files remain the source of truth. The retrieval index is disposable, the
+MCP server runs locally, and the optional Operator Cockpit previews the same
+project state that agents consume.
 
-## The loop (the part that matters)
+> **Status:** grounded retrieval, capture, document ingestion, the provider-neutral
+> MCP server, Project Context, and the local React Cockpit are implemented and
+> tested. GKE is not a hosted SaaS and does not require deployment.
 
-<!-- Hero: static terminal render of the real loop (regenerate via scripts/record-loop.sh). -->
-![GKE loop: grounded answer with citations, then the answer → capture → re-answer proof](docs/loop.svg)
+## What is implemented
 
-The engine exposes one capability — *grounded retrieve + capture* — and proves the
-full **ingest → ground → answer → capture → re-answer** loop:
+| Capability | Current behavior |
+|---|---|
+| **Grounded retrieval** | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations. |
+| **Durable capture** | Useful answers become Markdown notes; unresolved questions can be recorded instead of guessed. |
+| **Document ingestion** | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed. |
+| **Project resume** | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations. |
+| **One MCP server** | Claude Code, Codex, and Gemini CLI use the same local `kb` server and knowledge base. |
+| **Operator Cockpit** | A local React preview provides the knowledge library, project board, structured project detail, handoff copying, and context graph. |
+| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets. |
+
+## The compounding loop
+
+<!-- Static render of real commands; regenerate via scripts/record-loop.sh. -->
+![GKE loop: cited retrieval, capture and reuse, then structured project resume and handoff](docs/loop.svg)
 
 ```mermaid
 flowchart LR
-    A[Your Markdown docs] -->|index| B[(Retrieval index<br/>BM25 / SQLite)]
-    Q[Question] --> G[Ground]
-    B --> G
-    G -->|answer + citations| ANS[Grounded answer]
-    ANS -->|capture useful knowledge| C[New note]
-    C -->|written back| A
+    F[Markdown · PDF · DOCX · XLSX] -->|ingest| K[Markdown source of truth]
+    K -->|derive| I[(BM25 · SQLite)]
+    A[Claude · Codex · Gemini] --> M[Local MCP server]
+    M -->|search / answer / capture| I
+    M -->|write useful learning| K
+    P[Canonical project record] --> R[kb.resume_project]
+    M --> R
+    R --> C[Project capsule + cited handoff]
+    K --> O[Operator Cockpit]
+    C --> O
 ```
 
-1. **Index** your docs (no error, demo corpus or your own).
-2. **Answer** a question with citations *into* those docs.
-3. **Capture** a new note from that interaction.
-4. **Re-answer** a second question *from the captured note* — proving retain & reuse.
-5. The same capability is exposed over **MCP** to any agent (smoke-tested).
+The repository proves both loops end to end:
 
-## Run locally
+1. Ingest or index local content.
+2. Answer from retrieved evidence with citations.
+3. Capture useful learning back into Markdown.
+4. Re-answer from the captured note in a fresh query.
+5. Resume an explicitly identified project without mixing similarly named
+   context from another project.
+6. Render the same project facts in the local Cockpit and copy a technical
+   handoff.
 
-Requires **Node ≥ 22.5** (for the built-in `node:sqlite`; Node 24 recommended).
+![Current GKE architecture: local ingestion and Markdown source of truth feeding shared retrieval, MCP Project Context, and the Operator Cockpit](docs/architecture.svg)
+
+## Quick start
+
+Requires **Node ≥ 22.5** for the built-in `node:sqlite`; Node 24 is recommended.
 
 ```bash
 npm install
 
-# 2 + 3: grounded answer with citations (BM25 backend)
+# Search the demo knowledge base
 npm run search -- --query "are MCP tools model controlled or application controlled" \
   --mode generic --limit 5 --context 1 --refresh
 
-# 1–4: the full grounding loop over MCP (answer → capture → re-answer)
+# Prove MCP discovery, resources, grounding, capture, reuse, and project resume
 npm run smoke:mcp
 
-# retrieval quality against the demo eval set
-npm run eval -- --refresh
+# Run the complete engine suite
+npm run test:gke
 ```
 
-Every claim above is enforced in CI (`.github/workflows/ci.yml`): `typecheck`,
-`build`, `eval`, `smoke:mcp`, `test:loop`, the ingestion tests
-(`test:ingest:unit`, `test:ingest`), the cockpit tests, and a sanitization gate
-(`scrub`).
+The demo corpus lives in [`demo-kb`](demo-kb). The canonical Project Context
+example is [`demo-kb/projects/router-rollout/project.md`](demo-kb/projects/router-rollout/project.md),
+with explicitly linked evidence under
+[`demo-kb/sources/router-rollout`](demo-kb/sources/router-rollout).
 
 ## Connect Claude Code, Codex, or Gemini CLI
 
-There is one provider-neutral `kb` MCP server. To register that same local server
-with Claude Code, Codex, and Gemini CLI, run:
+Register the same local `kb` MCP server with all three clients:
 
 ```bash
 npm run setup:mcp
 ```
 
-Generated clients use the intentionally small `core` profile:
-`kb.search`, `kb.get_record`, and `kb.answer_and_capture`. Advanced
-administration and compatibility aliases are available with:
+The generated adapters use absolute executable and server paths and point to
+[`tools/kb-mcp-server/server.ts`](tools/kb-mcp-server/server.ts):
+
+- Claude Code: `.mcp.json` plus local approval.
+- Codex: `.codex/config.toml`.
+- Gemini CLI: `.gemini/settings.json`.
+
+Configure one client or change the catalog policy:
 
 ```bash
+npm run setup:mcp -- --client codex
 npm run setup:mcp -- --profile full
+npm run setup:mcp -- --no-writes
+npm run setup:mcp -- --skip-smoke
 ```
 
-It is idempotent and:
+The command is idempotent. Generated machine-specific configuration is ignored
+by Git. Restart the configured client from this repository after setup.
 
-1. Installs dependencies if needed (so `tsx` is available).
-2. Uses absolute `node`, `tsx`, and server paths so GUI clients do not depend on shell
-   `PATH` resolution.
-3. Writes each client's project-local adapter:
-   - Claude Code: `.mcp.json` plus local approval.
-   - Codex: `.codex/config.toml`.
-   - Gemini CLI: `.gemini/settings.json`.
-4. Points every adapter at the same `tools/kb-mcp-server/server.ts`.
-5. Runs `smoke:mcp` once to confirm the shared stdio server works.
+### Default MCP surface
 
-The MCP catalog is schema-budgeted in CI. Every advertised tool has a formal
-output schema and safety annotations, while indexed records are also
-addressable through `gke://` resources. MCP therefore stays a thin
-interoperability layer over the deterministic CLI/core.
+The intentionally small `core` profile exposes:
 
-Restart the client from this repository after setup. To configure only one client:
-`--client claude`, `--client codex`, or `--client gemini`. Other flags:
-`--profile core|full`, `--no-writes` (read-only KB), and `--skip-smoke`. The old `npm run setup:claude`
-command remains as a Claude-only compatibility alias.
+- `kb.search` — ranked local evidence with citations.
+- `kb.get_record` — one indexed record by path, title, slug, or filename.
+- `kb.answer_and_capture` — grounded answer plus capture policy.
+- `kb.resume_project` — one compact, cited project capsule.
 
-> The server speaks newline-delimited JSON over stdio (the MCP transport standard). If
-> you fork it, keep `sendMessage`/`parseMessages` newline-framed — LSP-style
-> `Content-Length` framing makes Claude Code hang at "connecting".
+The `full` profile adds advanced retrieval, refresh, explicit write tools, and
+compatibility aliases. Write tools are omitted from discovery unless writes are
+enabled.
 
-## Layers
+MCP resources expose addressable context without inflating the tool list:
 
-| Layer | Role | Portability |
-|---|---|---|
-| **CLI** (`tools/grounding`) | Deterministic index / retrieve / evaluate. Scriptable, CI-able, no agent. | Universal |
-| **MCP server** (`tools/kb-mcp-server`) | The same capability exposed to any agent over a standard protocol. | Any MCP client |
-| **Skill** | Policy/playbook (local-first routing, capture discipline). | Deferred to a later release |
+- `gke://workspace/info`
+- `gke://record/{path}`
+- `gke://project/{projectId}/context`
 
-See [`docs/architecture.md`](docs/architecture.md) for the layered diagram and design choices.
+Every advertised tool has a formal output schema and MCP safety annotations.
+Catalog character and tool-count budgets are enforced by
+`npm run test:mcp:catalog`.
 
-## Ingesting documents
+> The local server uses newline-delimited JSON over standard input/output. It is
+> not a remote HTTP service and does not use LSP `Content-Length` framing.
 
-The most valuable workflow is **document-first**: feed real documents in and let
-them become durable, grounded context. Whatever the path, ingestion ends the
-same way — content becomes Markdown notes the engine indexes, so grounding and
-the cockpit graph pick it up unchanged. Full design:
-[`docs/document-ingestion-plan.md`](docs/document-ingestion-plan.md).
+## Structured project context
 
-**Via the CLI** (PDF / DOCX / XLSX / Markdown / text — fully local, no external API):
+Canonical projects use one explicit record:
+
+```text
+kb/
+├── projects/
+│   └── router-rollout/
+│       └── project.md
+└── sources/
+    └── router-rollout/
+        └── evidence.md
+```
+
+`project.md` identifies the project with `record_type: project` and
+`project_id`. Project membership is explicit through `project_id`,
+`source_roots`, the canonical project folder, or linked documents. Semantic
+similarity alone never makes a document part of a project.
+
+`kb.resume_project` resolves only the requested ID and abstains for unknown
+projects. Its output includes:
+
+- a start-here brief;
+- current focus and last meaningful change;
+- active decisions;
+- blockers and open questions;
+- exactly the next three actions;
+- key documents and line citations.
+
+The shared parser and handoff formatter live under
+[`tools/projects`](tools/projects). The Cockpit consumes the same model rather
+than maintaining a separate interpretation of project Markdown. Legacy project
+notes remain readable for compatibility.
+
+## Operator Cockpit
+
+Run the local preview:
 
 ```bash
-npm run ingest -- ./inbox                 # capture every supported doc in ./inbox
-npm run ingest -- ./inbox --dry-run       # preview notes without writing
+cd apps/cockpit
+npm install
+npm run dev
+```
+
+The Cockpit reads `demo-kb` and `kb`, maps both into one logical knowledge
+namespace, and provides:
+
+- Mission Control and quick search;
+- a Markdown knowledge library;
+- a project board;
+- structured project detail with focus, changes, decisions, questions,
+  blockers, actions, and linked resources;
+- **Copy Handoff**, including a fallback for restricted browser shells;
+- a context graph.
+
+See [`apps/cockpit/README.md`](apps/cockpit/README.md) for routes and development
+details.
+
+## Ingest real documents
+
+Feed a folder containing PDF, DOCX, XLSX, Markdown, or text files:
+
+```bash
+npm run ingest -- ./inbox
+npm run ingest -- ./inbox --dry-run
 npm run ingest -- ./inbox --module general --no-scrub
 ```
 
-Each document becomes a topic note with provenance and a deterministic,
-source-derived path (distinct files never collide; re-ingesting is idempotent).
-Secrets/API keys are scrubbed by default; scanned image-only PDFs are detected
-and skipped (OCR is out of scope). See
-[`tools/ingest/README.md`](tools/ingest/README.md) for the module-level guide.
+The fully local pipeline is:
 
-**Via an agent** (Claude Code, Codex, Gemini CLI, or another MCP client with the
-`kb` server connected): attach a document and ask the agent to capture it — see
-the copy-paste prompt in [`docs/ingest-recipe.md`](docs/ingest-recipe.md).
+```text
+detect → extract → normalize → scrub → capture → index
+```
 
-Ingestion is verified end to end (`npm run test:ingest`): each format's content
-is extracted, captured, and proven retrievable and cited.
+Each source receives a deterministic path, making re-ingestion idempotent and
+preventing same-named files from colliding. Secret-like values are scrubbed by
+default. Image-only PDFs are detected and skipped because OCR is outside the
+current scope.
 
-## What this is / is not
+Agents can also capture an attached document through the connected MCP server;
+see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
+[`tools/ingest/README.md`](tools/ingest/README.md).
 
-- It **is** a local-first grounding engine: your docs stay on your machine, the
-  index is derived data, and the MCP server runs locally.
-- It is **not** a hosted SaaS or a production knowledge platform.
+## Architecture
 
-## Demo knowledge base
+| Layer | Responsibility |
+|---|---|
+| [`tools/grounding`](tools/grounding) | Deterministic indexing, retrieval, grounded synthesis, and evaluation. |
+| [`tools/projects`](tools/projects) | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting. |
+| [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio MCP catalog, handlers, resources, profiles, and safety contracts. |
+| [`tools/ingest`](tools/ingest) | Local document extraction and capture adapters. |
+| [`apps/cockpit`](apps/cockpit) | Optional local React preview over the same Markdown and shared project model. |
+| `demo-kb/` and `kb/` | Canonical plain-file knowledge and project state. |
 
-`demo-kb/` holds the runnable demo: paraphrased notes from the MIT-licensed
-[Model Context Protocol docs](https://github.com/modelcontextprotocol/docs) plus a
-thin original orchestration shell (a project board and open-questions log). Sources
-and attribution are documented in [`docs/demo-sources.md`](docs/demo-sources.md).
+See [`docs/architecture.md`](docs/architecture.md) for the engine diagram and
+[`docs/workspace-data-architecture.md`](docs/workspace-data-architecture.md) for
+the wider project/workspace data model and planned consultant features.
 
-## License
+## Verification
 
-[MIT](LICENSE).
+```bash
+# Engine
+npm run typecheck
+npm run build
+npm run test:gke
+npm run scrub
+
+# Cockpit
+cd apps/cockpit
+npm run typecheck
+npm run test
+npm run build
+```
+
+CI verifies type safety, builds, retrieval quality, MCP setup and contracts,
+Project Context isolation, the capture/reuse loop, binary document ingestion,
+the Cockpit, and secret/filename sanitization.
+
+## Boundaries
+
+- GKE is local-first: files and the MCP process stay on your machine.
+- The Markdown files are canonical; indexes and preview content are derived.
+- The project scope is explicit and deterministic.
+- GKE is not a hosted SaaS, Jira replacement, or general document-management
+  platform.
+- A temporary remote gateway for enterprise agents is a planned, opt-in
+  integration—not part of the current core.
+
+## Demo sources and license
+
+The demo knowledge base contains paraphrased notes from the MIT-licensed
+[Model Context Protocol documentation](https://github.com/modelcontextprotocol/docs)
+plus original synthetic project records used to test isolation and handoff
+behavior. Attribution is documented in
+[`docs/demo-sources.md`](docs/demo-sources.md).
+
+[MIT](LICENSE)
