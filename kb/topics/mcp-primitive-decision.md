@@ -4,7 +4,7 @@ track: demo
 status: canonical
 type: project
 owner: mcp-smoke
-updated: 2026-06-17
+updated: 2026-06-22
 tags: demo, capture, decision-log
 ---
 # MCP Primitive Decision

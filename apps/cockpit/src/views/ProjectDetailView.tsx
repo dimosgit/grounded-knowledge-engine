@@ -1,6 +1,8 @@
-import { AlertTriangle, BarChart3, CheckCircle2, FileText, Square, Target } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, BarChart3, CheckCircle2, ClipboardCopy, FileText, History, Square, Target } from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
 import { OperatorFrame } from "../components/OperatorFrame";
+import { writeTextToClipboard } from "../utils/clipboard";
 
 const PROGRESS_PHASE = {
   active: { label: "In Progress", percent: 60 },
@@ -30,6 +32,15 @@ export function ProjectDetailView({
   linkedDocs,
   onOpenDoc,
 }) {
+  const [handoffCopyState, setHandoffCopyState] = useState("idle");
+
+  async function copyHandoff() {
+    if (!activeProject?.handoffMarkdown) return;
+    const copied = await writeTextToClipboard(activeProject.handoffMarkdown);
+    setHandoffCopyState(copied ? "copied" : "failed");
+    window.setTimeout(() => setHandoffCopyState("idle"), 1600);
+  }
+
   return (
     <OperatorFrame
       activeView="projects"
@@ -59,11 +70,43 @@ export function ProjectDetailView({
             <h1 className="font-display text-display-lg text-on-surface">{activeProject?.title || "Project Context"}</h1>
           </div>
           {activeProject && (
-            <button className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary" type="button" onClick={() => onOpenDoc(activeProject.sourceDocPath)}>
-              <FileText size={16} />
-              Open Source Doc
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button className="flex items-center gap-2 rounded border border-border-subtle bg-surface-container px-4 py-2 text-label-caps font-semibold uppercase text-on-surface hover:border-primary" type="button" onClick={copyHandoff}>
+                <ClipboardCopy size={16} />
+                {handoffCopyState === "copied" ? "Copied" : handoffCopyState === "failed" ? "Retry Copy" : "Copy Handoff"}
+              </button>
+              <button className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary" type="button" onClick={() => onOpenDoc(activeProject.sourceDocPath)}>
+                <FileText size={16} />
+                Open Source Doc
+              </button>
+            </div>
           )}
+        </section>
+
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
+            <div className="mb-3 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
+              <History size={17} className="text-primary" />
+              Last meaningful change
+            </div>
+            <p className="text-body-md text-on-surface">{activeProject?.recentChanges || "No recent change recorded."}</p>
+          </article>
+          <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
+            <div className="mb-3 text-metadata uppercase text-on-surface-variant">Active decisions</div>
+            <ul className="space-y-2 text-body-md text-on-surface">
+              {(activeProject?.activeDecisions?.length ? activeProject.activeDecisions : ["None recorded."]).map((item, index) => (
+                <li key={`${item}-${index}`}>• {item}</li>
+              ))}
+            </ul>
+          </article>
+          <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
+            <div className="mb-3 text-metadata uppercase text-on-surface-variant">Open questions</div>
+            <ul className="space-y-2 text-body-md text-on-surface">
+              {(activeProject?.openQuestions?.length ? activeProject.openQuestions : ["None recorded."]).map((item, index) => (
+                <li key={`${item}-${index}`}>• {item}</li>
+              ))}
+            </ul>
+          </article>
         </section>
 
         <section>

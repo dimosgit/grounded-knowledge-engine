@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { writeTextToClipboard } from "../utils/clipboard";
 
 const TOC_MIN_HEADINGS = 4;
 const TOC_MIN_WORDS = 380;
@@ -83,29 +84,6 @@ function getCodeLanguage(children) {
   const className = firstChild?.props?.className || "";
   const match = /language-([a-z0-9_-]+)/i.exec(className);
   return match ? match[1].toLowerCase() : "";
-}
-
-async function writeTextToClipboard(text) {
-  if (!text) return false;
-
-  if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return true;
-  }
-
-  if (typeof document === "undefined") return false;
-
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-
-  const copied = typeof document.execCommand === "function" ? document.execCommand("copy") : false;
-  document.body.removeChild(textarea);
-  return copied;
 }
 
 function CopyablePre({ children, forceWrap = false, ...props }) {

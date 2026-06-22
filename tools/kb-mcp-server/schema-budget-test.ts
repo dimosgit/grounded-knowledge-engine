@@ -33,9 +33,10 @@ function assertCatalog(profile: McpProfile, writesEnabled: boolean): void {
   if (!writesEnabled) {
     assert.ok(!names.includes("kb.upsert_note"));
     assert.ok(!names.includes("kb.add_open_question"));
+    assert.ok(!names.includes("kb.checkpoint_project"));
   }
   if (profile === "core") {
-    assert.deepEqual(names, ["kb.search", "kb.get_record", "kb.answer_and_capture"]);
+    assert.deepEqual(names, ["kb.search", "kb.get_record", "kb.answer_and_capture", "kb.resume_project"]);
   }
   if (profile === "full") {
     assert.ok(names.includes("kb.get_topic"));
@@ -62,7 +63,7 @@ async function assertProtocolVersion(version: string): Promise<void> {
     const listed = await client.request("tools/list", {});
     assert.deepEqual(
       listed.tools.map((tool: { name: string }) => tool.name),
-      ["kb.search", "kb.get_record", "kb.answer_and_capture"],
+      ["kb.search", "kb.get_record", "kb.answer_and_capture", "kb.resume_project"],
     );
     const answerTool = listed.tools.find((tool: { name: string }) => tool.name === "kb.answer_and_capture");
     assert.equal(answerTool.annotations?.readOnlyHint, true);

@@ -6,6 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
 import { DEFAULT_SCAN_ROOTS as RETRIEVER_DEFAULT_SCAN_ROOTS, getKbRetriever } from "../grounding/retriever.js";
+import { resumeProject } from "../projects/index.js";
 import type {
   CandidateFile,
   Frontmatter,
@@ -388,7 +389,18 @@ const toolHandlers: Record<string, ToolHandler> = {
   "kb.add_open_question": handleKbAddOpenQuestion,
   "kb.answer_and_capture": handleKbAnswerAndCapture,
   "kb.refresh": handleKbRefresh,
+  "kb.resume_project": handleKbResumeProject,
 };
+
+async function handleKbResumeProject(args: JsonObject): Promise<ToolPayload> {
+  const projectId = typeof args?.projectId === "string" ? args.projectId : "";
+  if (!projectId) {
+    throw new Error("Missing required argument: projectId");
+  }
+  const scanRoots = parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS);
+  const result = await resumeProject({ projectId }, repoRoot, scanRoots);
+  return result;
+}
 
 async function main() {
   let buffer = Buffer.alloc(0);
@@ -533,6 +545,14 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
             description: "Read an indexed Markdown record by URL-encoded workspace-relative path.",
             mimeType: "text/markdown",
             annotations: { audience: ["user", "assistant"], priority: 0.7 },
+          },
+          {
+            uriTemplate: "gke://project/{projectId}/context",
+            name: "project-context",
+            title: "GKE Project Context",
+            description: "Read the same compact cited project capsule returned by kb.resume_project.",
+            mimeType: "text/markdown",
+            annotations: { audience: ["user", "assistant"], priority: 0.9 },
           },
         ],
       };
@@ -682,6 +702,35 @@ async function handleResourceRead(params: JsonObject): Promise<any> {
         },
       ],
     };
+  }
+
+  const projectMatch = uri.match(/^gke:\/\/project\/([^/]+)\/context$/);
+  if (projectMatch) {
+    let projectId: string;
+    try {
+      projectId = decodeURIComponent(projectMatch[1]);
+    } catch (error) {
+      throw createJsonRpcError(-32602, `Invalid project resource URI: ${safeErrorMessage(error)}`);
+    }
+    const scanRoots = parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS);
+    try {
+      const result = await resumeProject({ projectId }, repoRoot, scanRoots);
+      return {
+        contents: [
+          {
+            uri: `gke://project/${encodeURIComponent(result.structured.projectId)}/context`,
+            mimeType: "text/markdown",
+            text: result.contentText,
+            annotations: {
+              audience: ["user", "assistant"],
+              priority: 0.9,
+            },
+          },
+        ],
+      };
+    } catch (error) {
+      throw createJsonRpcError(-32602, safeErrorMessage(error));
+    }
   }
 
   const prefix = "gke://record/";

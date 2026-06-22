@@ -145,12 +145,18 @@ try {
   assert.ok(names.has("kb.upsert_note"));
   assert.ok(names.has("kb.add_open_question"));
   assert.ok(names.has("kb.answer_and_capture"));
+  assert.ok(names.has("kb.resume_project"));
 
   const resources = await request("resources/list", {});
   assert.ok(resources.resources.some((resource: any) => resource.uri === "gke://workspace/info"));
 
   const resourceTemplates = await request("resources/templates/list", {});
   assert.ok(resourceTemplates.resourceTemplates.some((resource: any) => resource.uriTemplate === "gke://record/{path}"));
+  assert.ok(
+    resourceTemplates.resourceTemplates.some(
+      (resource: any) => resource.uriTemplate === "gke://project/{projectId}/context",
+    ),
+  );
 
   const workspaceResource = await request("resources/read", { uri: "gke://workspace/info" });
   assert.equal(workspaceResource.contents?.[0]?.mimeType, "application/json");
@@ -177,6 +183,22 @@ try {
   const recordResource = await request("resources/read", { uri: recordUri });
   assert.equal(recordResource.contents?.[0]?.mimeType, "text/markdown");
   assert.match(recordResource.contents?.[0]?.text || "", /MCP/i);
+
+  const resumed = await request("tools/call", {
+    name: "kb.resume_project",
+    arguments: { projectId: "project-tracking" },
+  });
+  assert.equal(resumed.isError, undefined);
+  assert.equal(resumed.structuredContent?.projectId, "project-tracking");
+  assert.match(resumed.structuredContent?.currentFocus || "", /router demo/i);
+  assert.equal(resumed.structuredContent?.nextThreeActions?.length, 3);
+  assert.ok(resumed.structuredContent?.citations?.every((citation: any) => citation.path && citation.line > 0));
+
+  const projectResource = await request("resources/read", {
+    uri: "gke://project/project-tracking/context",
+  });
+  assert.equal(projectResource.contents?.[0]?.mimeType, "text/markdown");
+  assert.match(projectResource.contents?.[0]?.text || "", /Router Project Board/);
 
   const groundedBlocked = await request("tools/call", {
     name: "kb.answer_grounded",

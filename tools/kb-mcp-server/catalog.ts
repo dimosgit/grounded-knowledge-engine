@@ -252,6 +252,51 @@ function compatibilityGetter(name: "kb.get_topic" | "kb.get_term"): ToolDefiniti
   };
 }
 
+function resumeProjectTool(): ToolDefinition {
+  return {
+    name: "kb.resume_project",
+    title: "Resume Project Context",
+    description: "Return a compact cited capsule for one explicitly identified project.",
+    annotations: annotations.read,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        projectId: { type: "string", minLength: 1 },
+      },
+      required: ["projectId"],
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        projectId: { type: "string" },
+        title: { type: "string" },
+        startHereBrief: { type: "string" },
+        currentFocus: { type: "string" },
+        recentChanges: { type: "string" },
+        activeDecisions: { type: "array", items: { type: "string" } },
+        blockersAndQuestions: { type: "array", items: { type: "string" } },
+        nextThreeActions: { type: "array", items: { type: "string" } },
+        keyDocuments: { type: "array", items: { type: "string" } },
+        citations: { type: "array", items: citationSchema },
+      },
+      required: [
+        "projectId",
+        "title",
+        "startHereBrief",
+        "currentFocus",
+        "recentChanges",
+        "activeDecisions",
+        "blockersAndQuestions",
+        "nextThreeActions",
+        "keyDocuments",
+        "citations",
+      ],
+    },
+  };
+}
+
 function fullTools(options: CatalogOptions): ToolDefinition[] {
   const tools: ToolDefinition[] = [
     compatibilityGetter("kb.get_topic"),
@@ -376,11 +421,11 @@ export function normalizeMcpProfile(value: unknown): McpProfile {
 }
 
 export function buildToolCatalog(options: CatalogOptions): ToolDefinition[] {
-  const core = [searchTool(options), getRecordTool(), answerAndCaptureTool(options)];
+  const core = [searchTool(options), getRecordTool(), answerAndCaptureTool(options), resumeProjectTool()];
   return options.profile === "full" ? [...core, ...fullTools(options)] : core;
 }
 
 export const CATALOG_BUDGETS = {
-  core: { maxTools: 4, maxCharacters: 5200 },
-  full: { maxTools: 10, maxCharacters: 12000 },
+  core: { maxTools: 4, maxCharacters: 7000 },
+  full: { maxTools: 11, maxCharacters: 13500 },
 } as const;
