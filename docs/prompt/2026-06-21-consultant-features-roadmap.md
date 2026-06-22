@@ -1,7 +1,7 @@
 # Consultant Features — Implementation Roadmap
 
 **Status:** Planned. **Repository:** Grounded Knowledge Engine.
-**Last updated:** 2026-06-21.
+**Last updated:** 2026-06-22.
 
 ## Product goal
 
@@ -35,7 +35,7 @@ resources, and schema-budget gate that all later features must extend.
 flowchart LR
     W[Workspace Vaults<br/>hard trust boundary]
     P[Project Context API<br/>structured project intelligence]
-    R[Remote MCP Gateway<br/>additional agent surfaces]
+    R[Local HTTP + temporary tunnel<br/>additional agent surfaces]
     C[Claude · Codex · Gemini<br/>GitHub Copilot · MS Copilot]
 
     W --> P
@@ -48,9 +48,9 @@ flowchart LR
   reusable core-engine capability.
 - **Workspace Vaults** ensures project context from one client cannot leak into
   another client or a personal workspace.
-- **Remote MCP Gateway** safely exposes those capabilities to Copilot Studio
-  and Microsoft 365 declarative agents while preserving the local `stdio`
-  workflow.
+- **Local HTTP + temporary tunnel** safely exposes those capabilities from the
+  user's machine to Copilot Studio and Microsoft 365 declarative agents while
+  preserving the local `stdio` workflow and avoiding permanent deployment.
 
 ## Delivery order
 
@@ -81,13 +81,13 @@ already exists in the Cockpit.
 Deliver:
 
 - Canonical `project_id` and project manifest schema.
-- Shared deterministic project parser/model.
-- `kb.get_project_context`.
+- Shared deterministic project parser/model with legacy `module`,
+  `lifecycle`, and `Next 3 actions` compatibility.
 - `kb.resume_project`.
-- `kb.checkpoint_project`.
-- `kb.create_handoff`.
+- Addressable `gke://project/<project-id>/context` resource.
+- One deterministic technical-peer handoff.
 - Cockpit refactor to consume the same model.
-- Strict project-scoped retrieval tests.
+- Strict project-scoped retrieval and abstention tests.
 
 Exit gate:
 
@@ -96,16 +96,16 @@ Exit gate:
 
 ### Phase 2 — Workspace Vaults and Leakage Guard
 
-Introduce the trust boundary before any remote deployment.
+Introduce the trust boundary before any tunnel exposure.
 
 Deliver:
 
 - Immutable workspace context at process startup.
 - One MCP process/config entry per workspace.
-- Read and write root enforcement.
-- Symlink/path-traversal protection.
-- Read-only defaults and sensitivity labels.
-- Privacy-safe audit trail.
+- Canonical read and write root enforcement.
+- Configured-root, symlink, and path-traversal protection before indexing and
+  writing.
+- Read-only defaults.
 - Workspace identity in MCP responses and Cockpit chrome.
 - Adversarial cross-workspace tests.
 
@@ -114,7 +114,7 @@ Exit gate:
 > A Client Alpha process cannot retrieve, cite, or write any Client Beta or
 > personal content, even through direct path or symlink attacks.
 
-### Phase 3 — Remote MCP Gateway and Copilot adapters
+### Phase 3 — Local Microsoft Copilot tunnel proof and Copilot adapters
 
 Add new agent surfaces only after the workspace policy is reusable.
 
@@ -122,19 +122,26 @@ Deliver:
 
 - Shared MCP application layer.
 - Existing local `stdio` transport retained.
-- Authenticated Streamable HTTP transport.
-- Read-only remote defaults.
+- Loopback-only Streamable HTTP transport.
+- Short-lived authenticated ngrok-compatible HTTPS tunnel.
+- Strictly read-only tunnel profile with mutation tools unavailable.
+- Dedicated sanitized demo workspace by default.
 - Workspace-relative citations.
 - GitHub Copilot local adapter.
 - Copilot Studio setup guide.
 - Microsoft 365 declarative-agent example.
-- Transport-parity and authentication tests.
+- Transport-parity, authentication, write-denial, and tunnel-shutdown tests.
 
 Exit gate:
 
-> The same workspace-scoped `kb.get_project_context` result is available through
-> local `stdio` and authenticated Streamable HTTP without exposing host paths or
-> enabling unauthorized writes.
+> The same workspace-scoped project-resume result is available through local
+> `stdio` and a short-lived authenticated tunnel to the local Streamable HTTP
+> endpoint, without exposing host paths or advertising remote writes.
+
+This phase is a controlled proof of concept, not permanent deployment.
+Canonical files and engine execution remain local, but returned evidence
+traverses Microsoft and the tunnel provider. Internal company content requires
+explicit approval.
 
 ## Shared architectural rules
 
@@ -148,8 +155,8 @@ Exit gate:
 6. Every mutation is explicit, write-gated, and supports dry-run where relevant.
 7. Provider integrations are adapters; no Claude-, Microsoft-, or
    GitHub-specific grounding implementation is allowed.
-8. Remote access is opt-in, authenticated, workspace-scoped, and read-only by
-   default.
+8. Tunnel access is opt-in, authenticated, short-lived, workspace-scoped, and
+   strictly read-only in the first milestone.
 9. Existing Claude, Codex, and Gemini local workflows must remain compatible.
 
 ## Shared validation gate
@@ -165,8 +172,9 @@ npm --prefix apps/cockpit run build
 npm run scrub
 ```
 
-The Remote MCP phase additionally requires its HTTP integration and
-authentication tests. No phase may be committed with a failing required check.
+The tunnel phase additionally requires its HTTP integration, authentication,
+write-denial, and shutdown tests. No phase may be committed with a failing
+required check.
 
 ## Public demonstration sequence
 
@@ -178,10 +186,29 @@ The three features can be demonstrated as one coherent consultant story:
 4. Export a technical handoff.
 5. Attempt to retrieve a similarly named Personal Project fact and show it being
    blocked.
-6. Open a Microsoft Copilot agent and retrieve the same Client Alpha context
-   through the authenticated remote MCP endpoint.
+6. Open a Microsoft Copilot agent and retrieve the same sanitized workspace
+   context through a short-lived authenticated tunnel to the local MCP endpoint.
 
 This presents a stronger product story than three unrelated feature demos:
 
 > Resume any project, preserve the boundary, use the agent your environment
 > requires.
+
+## Accepted roadmap decisions — 2026-06-22
+
+1. Project Context ships as a reduced compatibility-first milestone: one resume
+   tool, one project-context resource, one technical-peer handoff, and strict
+   abstention outside the requested project.
+2. Workspace Vaults ships as a thin security kernel: immutable process identity,
+   realpath-enforced scan/write roots, read-only policy, and adversarial
+   isolation tests. Audit/compliance extras are deferred.
+3. Microsoft 365 Copilot remains a priority because it is the user's real
+   workplace surface and can be tested with colleagues.
+4. Microsoft validation must not require permanent deployment. The first path
+   is a local loopback HTTP server exposed temporarily through an authenticated
+   tunnel such as ngrok.
+5. The tunnel milestone is read-only and uses sanitized or explicitly approved
+   data. It is not production architecture.
+6. GitHub Copilot local `stdio` support ships independently as a small adapter.
+7. Decision Replay follows this three-phase foundation unless Microsoft testing
+   reveals a more urgent user requirement.
