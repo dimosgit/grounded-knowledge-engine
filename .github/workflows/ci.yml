@@ -47,6 +47,9 @@ jobs:
       - name: MCP catalog contract (profiles, schemas, annotations, budget)
         run: npm run test:mcp:catalog
 
+      - name: Project Context contract (strict resolution, isolation, resource parity)
+        run: npm run test:projects
+
       - name: Loop integration test (ground -> capture -> re-ground -> cite)
         run: npm run test:loop
 

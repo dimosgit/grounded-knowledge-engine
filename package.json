@@ -18,6 +18,7 @@
     "test:mcp:catalog": "tsx tools/kb-mcp-server/schema-budget-test.ts",
     "test:loop": "tsx tools/kb-mcp-server/loop-integration-test.ts",
     "test:projects": "tsx tools/projects/project-context-test.ts",
+    "demo:project": "tsx tools/projects/demo-resume.ts",
     "test:ingest:unit": "tsx tools/ingest/unit-test.ts",
     "test:ingest": "tsx tools/ingest/ingest-integration-test.ts",
     "test:gke": "npm run test:mcp:catalog && npm run test:projects && npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run eval",

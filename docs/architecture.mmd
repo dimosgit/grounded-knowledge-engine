@@ -1,0 +1,47 @@
+flowchart TB
+    FILES["Markdown · PDF · DOCX · XLSX · text"]
+    INGEST["Local ingestion<br/>detect · extract · scrub · capture"]
+    KB["Markdown knowledge base<br/>canonical source of truth"]
+    INDEX[("Derived retrieval index<br/>BM25 · SQLite FTS5")]
+
+    subgraph CLIENTS["Agent clients"]
+        CLAUDE["Claude Code"]
+        CODEX["Codex"]
+        GEMINI["Gemini CLI"]
+        OTHER["Other MCP clients"]
+    end
+
+    MCP["Local provider-neutral MCP server<br/>4-tool core + gke:// resources"]
+    GROUND["Grounded retrieval + capture<br/>answer with citations"]
+    PROJECT["Project Context core<br/>strict scope · resume · handoff"]
+    COCKPIT["Operator Cockpit<br/>library · project board · graph"]
+
+    FILES --> INGEST
+    INGEST --> KB
+    KB --> INDEX
+    INDEX -. regenerable .-> KB
+
+    CLAUDE --> MCP
+    CODEX --> MCP
+    GEMINI --> MCP
+    OTHER --> MCP
+
+    MCP --> GROUND
+    MCP --> PROJECT
+    GROUND --> INDEX
+    GROUND -->|capture useful learning| KB
+    PROJECT -->|read explicit project records| KB
+    PROJECT --> CAPSULE["Cited project capsule<br/>focus · decisions · blockers · next 3 actions"]
+
+    KB --> COCKPIT
+    PROJECT --> COCKPIT
+
+    classDef canonical fill:#0f2f2b,stroke:#4adea3,color:#f7faff,stroke-width:2px;
+    classDef derived fill:#14233c,stroke:#7c9cff,color:#f7faff,stroke-width:2px;
+    classDef surface fill:#202033,stroke:#58d7e8,color:#f7faff,stroke-width:2px;
+    classDef client fill:#291f25,stroke:#e58b68,color:#f7faff;
+
+    class KB canonical;
+    class INDEX derived;
+    class MCP,GROUND,PROJECT,COCKPIT,CAPSULE,INGEST surface;
+    class CLAUDE,CODEX,GEMINI,OTHER client;
