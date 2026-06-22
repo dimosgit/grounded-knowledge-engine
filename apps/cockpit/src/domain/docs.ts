@@ -2,6 +2,8 @@ export const tagLabels = {
   all: "All",
   modules: "Modules",
   clients: "Clients",
+  projects: "Projects",
+  sources: "Sources",
   terms: "Terms",
   topics: "Topics",
   digests: "Digests",
@@ -72,7 +74,7 @@ export const trackDisplay = {
   },
 };
 
-export const tagOrder = ["all", "modules", "clients", "terms", "topics", "digests", "kb", "readme", "other"];
+export const tagOrder = ["all", "projects", "sources", "modules", "clients", "terms", "topics", "digests", "kb", "readme", "other"];
 export const learningItemOrder = ["all", "module", "canonical", "concept", "review", "reference", "archive"];
 export const trackOrder = [
   "demo",
@@ -156,6 +158,8 @@ export function normalizePath(rawPath) {
 export function getTag(path) {
   if (path.startsWith("kb/modules/")) return "modules";
   if (path.startsWith("kb/clients/")) return "clients";
+  if (path.startsWith("kb/projects/")) return "projects";
+  if (path.startsWith("kb/sources/")) return "sources";
   if (path.startsWith("kb/terms/")) return "terms";
   if (path.startsWith("kb/topics/")) return "topics";
   if (path.startsWith("kb/digests/")) return "digests";
@@ -167,6 +171,8 @@ export function getTag(path) {
 export function getSection(path) {
   if (path.startsWith("kb/modules/")) return "kb/modules";
   if (path.startsWith("kb/clients/")) return "kb/clients";
+  if (path.startsWith("kb/projects/")) return "kb/projects";
+  if (path.startsWith("kb/sources/")) return "kb/sources";
   if (path.startsWith("kb/terms/")) return "kb/terms";
   if (path.startsWith("kb/topics/")) return "kb/topics";
   if (path.startsWith("kb/digests/")) return "kb/digests";
@@ -175,6 +181,8 @@ export function getSection(path) {
 }
 
 export function getDocType(path, title, content, frontmatter: any = {}) {
+  if (frontmatter.record_type === "project" || /^kb\/projects\/[^/]+\/project\.md$/.test(path)) return "project";
+  if (frontmatter.record_type === "source" || path.startsWith("kb/sources/")) return "source";
   if (path.startsWith("kb/modules/")) return "module";
   if (path.startsWith("kb/clients/")) return "client";
   if (path.startsWith("kb/topics/")) {
@@ -196,6 +204,7 @@ export function getLearningItemType(docType) {
   if (docType === "canonical") return "canonical";
   if (docType === "term") return "concept";
   if (docType === "digest") return "review";
+  if (docType === "project" || docType === "source") return "reference";
   if (docType === "merged") return "archive";
   return "reference";
 }
@@ -240,6 +249,8 @@ export function getTrackDescription(trackKey) {
 export function getDocBadge(docType) {
   if (docType === "module") return "Module";
   if (docType === "client") return "Client";
+  if (docType === "project") return "Project";
+  if (docType === "source") return "Source";
   if (docType === "canonical") return "Canonical";
   if (docType === "merged") return "Merged";
   if (docType === "term") return "Term";
@@ -250,6 +261,8 @@ export function getDocBadge(docType) {
 export function getDocGuidance(docType) {
   if (docType === "module") return "Module page: use this as your navigation and consolidation hub.";
   if (docType === "client") return "Client page: use this as the client-specific navigation hub.";
+  if (docType === "project") return "Project record: canonical current state used by MCP and the Project Board.";
+  if (docType === "source") return "Source record: imported or curated evidence with provenance.";
   if (docType === "canonical") return "Canonical note: this is the primary source for this topic.";
   if (docType === "merged") return "Merged stub: historical note, redirected to a canonical page.";
   if (docType === "digest") return "Weekly digest: progress and consolidation outcomes.";
@@ -259,6 +272,8 @@ export function getDocGuidance(docType) {
 export function getSectionLabel(section) {
   if (section === "kb/modules") return "Modules";
   if (section === "kb/clients") return "Clients";
+  if (section === "kb/projects") return "Projects";
+  if (section === "kb/sources") return "Sources";
   if (section === "kb/topics") return "Topics";
   if (section === "kb/terms") return "Terms";
   if (section === "kb/digests") return "Digests";
