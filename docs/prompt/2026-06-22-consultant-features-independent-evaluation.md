@@ -10,8 +10,8 @@ Do not implement the features during this task. Produce a candid, evidence-based
 
 ## 3. Context
 - Product area: `Local-first grounded knowledge, project memory, MCP interoperability, consultant workflows, and public engineering portfolio`
-- Public repository to evaluate: `/Users/dimouzunov/00 Coding/09 Grounded Knowledge Engine`
-- Private production-like reference implementation: `/Users/dimouzunov/00 Coding/learning-sap-tutor`
+- Public repository to evaluate: the current repository root.
+- Optional production-like reference implementation: a larger local installation supplied separately to the evaluator and never quoted in the public report.
 - Current behavior: `GKE indexes Markdown, retrieves cited evidence through BM25 or SQLite, ingests PDF/DOCX/XLSX/Markdown, captures useful knowledge back into Markdown, and exposes the same provider-neutral MCP server to Claude Code, Codex, and Gemini CLI. An optional React Operator Cockpit already derives project boards, project detail, quick recall, blockers, open questions, and next actions from Markdown.`
 - Problem to solve: `A consultant or technical user moves between projects, clients, devices, and AI agents. They need fast project resumption, hard protection against cross-client leakage, and access from the agent surface their environment permits. The proposed features attempt to turn the existing local grounding engine into that trusted working environment.`
 
@@ -161,20 +161,15 @@ Use Decision Replay as a challenger when judging prioritization: would it delive
 
 This public repository is intended to become the first Featured artifact on LinkedIn and evidence for applications. The hiring strategy explicitly says the artifact should prove AI-assisted delivery/project-memory claims with one click.
 
-Primary hiring documents are in the private repository:
+Optional hiring materials may be supplied separately to the evaluator and must
+not be copied into this repository. They include:
 
-- Strategy:
-  - `/Users/dimouzunov/00 Coding/learning-sap-tutor/docs/hiring-strategy/referral_first_job_strategy_plan_v2.docx`
-- Execution playbook:
-  - `/Users/dimouzunov/00 Coding/learning-sap-tutor/docs/hiring-strategy/execution_playbook.docx`
-- CV A — primary Senior Product Engineer positioning:
-  - `/Users/dimouzunov/00 Coding/learning-sap-tutor/docs/hiring-strategy/dimo-uzunov-cv-A.pdf`
-- CV B — Principal Full-Stack Engineer:
-  - `/Users/dimouzunov/00 Coding/learning-sap-tutor/docs/hiring-strategy/dimo-uzunov-cv-B.pdf`
-- CV C — AI Product Engineer:
-  - `/Users/dimouzunov/00 Coding/learning-sap-tutor/docs/hiring-strategy/dimo-uzunov-cv-C.pdf`
-- CV D — Forward Deployed Engineer:
-  - `/Users/dimouzunov/00 Coding/learning-sap-tutor/docs/hiring-strategy/dimo-uzunov-cv-D.pdf`
+- Referral-first hiring strategy.
+- Execution playbook.
+- CV A — primary Senior Product Engineer positioning.
+- CV B — Principal Full-Stack Engineer.
+- CV C — AI Product Engineer.
+- CV D — Forward Deployed Engineer.
 
 Relevant positioning:
 
@@ -186,7 +181,7 @@ Relevant positioning:
   - Internal tools, automation, APIs, and integrations.
   - AI-assisted project-memory workflows.
   - Operational B2B software and enterprise-grade boundaries.
-- The public artifact must translate enterprise experience into modern product-engineering evidence rather than lead with SAP.
+- The public artifact must translate enterprise-platform experience into modern product-engineering evidence rather than lead with a vendor-specific identity.
 - The hiring strategy originally timeboxed the project-memory repository to roughly 15–20 hours over 3–4 weeks. The repository has already grown beyond a tiny template, so evaluate whether the new roadmap sharpens the proof or becomes portfolio-diluting overbuild.
 - The desired proof is not “many features.” It is a clear, defensible story that a hiring manager can understand quickly.
 
@@ -197,7 +192,10 @@ Evaluate which proposed feature most strengthens each CV variant:
 - CV C: durable agent memory, grounding, multi-agent interoperability.
 - CV D: client switching, handoff, deployment, enterprise integration.
 
-Do not recommend exposing private client/SAP knowledge in the public repository. The private `learning-sap-tutor` repository may be inspected only as evidence that the engine works with a larger real knowledge base and domain-specific extensions.
+Do not recommend exposing employer, client, or domain-specific private knowledge
+in the public repository. A larger local installation may be inspected only as
+evidence that the engine works with a production-like knowledge base and
+domain-specific extensions.
 
 ## 4. Scope
 - In scope:
@@ -214,7 +212,7 @@ Do not recommend exposing private client/SAP knowledge in the public repository.
   1. Implementing or editing any feature.
   2. Committing or pushing repository changes.
   3. Rewriting the CVs or hiring strategy.
-  4. Evaluating private client/SAP content for public release.
+  4. Evaluating private employer or client content for public release.
   5. Designing a full multi-tenant SaaS.
   6. Treating every planned requirement as mandatory merely because it is documented.
 
@@ -281,7 +279,7 @@ Do not recommend exposing private client/SAP knowledge in the public repository.
    - The deterministic CLI/core remains independent from MCP providers.
    - Local `stdio` workflows remain functional.
    - Writes remain explicit and gated.
-   - Public examples contain no private client/SAP data.
+   - Public examples contain no private employer or client data.
 3. Do not propose provider-specific forks of the grounding engine.
 4. Do not assume semantic filtering is an adequate security boundary.
 5. Do not assume a remote process can access files that remain only on the user's laptop.
@@ -305,9 +303,8 @@ Do not recommend exposing private client/SAP knowledge in the public repository.
    - Ingestion: `tools/ingest/`
    - Cockpit source: `apps/cockpit/src/`
    - CI: `.github/workflows/ci.yml`
-3. Use the private repository only for contextual comparison:
-   - `/Users/dimouzunov/00 Coding/learning-sap-tutor`
-   - It contains the same modernized core plus SAP/Vorwerk-specific extensions and a larger real KB.
+3. Use any separately supplied production-like installation only for contextual
+   comparison. Do not quote its paths, organization names, or knowledge.
 4. Do not interpret the three feature documents as independent. Evaluate their combined architecture and whether dependencies force unnecessary coupling.
 5. Suggested evaluation frame:
    - Product truth: Is the pain frequent and costly?
@@ -339,7 +336,7 @@ Do not recommend exposing private client/SAP knowledge in the public repository.
 5. The report explicitly judges Decision Replay as a competing priority.
 6. The report connects recommendations to CV A/B/C/D and the public LinkedIn Featured artifact.
 7. The report defines what should be visible in a 30–60 second public demo.
-8. The report names the top three decisions Dimo should make before implementation.
+8. The report names the top three decisions the maintainer should make before implementation.
 9. The report contains a concise final recommendation that can guide the next implementation plan.
 
 ## 10. Deliverables
@@ -355,13 +352,13 @@ Do not recommend exposing private client/SAP knowledge in the public repository.
 5. Recommended roadmap for the next three milestones.
 6. Public-demo and technical-interview demo recommendations.
 7. Portfolio/hiring assessment tied to the supplied strategy and CV variants.
-8. Top three decisions requiring Dimo's approval.
+8. Top three decisions requiring maintainer approval.
 9. Exact files, tests, and official sources inspected.
 
 ## 11. Mandatory Agent Rules
 1. Inspect implementation evidence before reaching conclusions.
 2. Do not modify, commit, or push repository changes.
-3. Do not expose private SAP, Vorwerk, employer, client, or personal knowledge in the report.
+3. Do not expose private employer, client, or personal knowledge in the report.
 4. Distinguish verified facts, inferences, and recommendations.
 5. Re-verify temporally unstable Microsoft/GitHub integration claims using official documentation.
 6. Report exact commands executed and whether each passed.
@@ -369,8 +366,8 @@ Do not recommend exposing private client/SAP knowledge in the public repository.
 
 ## 12. Assumptions and Open Questions
 - Assumptions:
-  1. The evaluator has read access to both local repositories and the hiring-strategy files.
-  2. The public repository, not the private SAP tutor, is the intended LinkedIn artifact.
+  1. The evaluator has read access to the public repository and any optional context supplied outside it.
+  2. This public repository is the intended LinkedIn artifact.
   3. The immediate objective is a polished proof artifact and credible product direction, not maximizing feature count.
   4. One engineer will implement and maintain the near-term roadmap.
   5. Decision Replay remains a proposal and can still replace or follow one of the three features.
