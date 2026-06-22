@@ -151,8 +151,20 @@ export function sectionItems(section: ProjectSection | undefined): string[] {
 
 export function sectionSummary(section: ProjectSection | undefined): string {
   if (!section?.content) return "";
-  return section.content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => Boolean(line) && !line.startsWith("#"))?.replace(/^[-*]\s+/, "") || "";
+  const lines = section.content.split(/\r?\n/).map((line) => line.trim());
+  const start = lines.findIndex((line) => Boolean(line) && !line.startsWith("#"));
+  if (start < 0) return "";
+
+  const first = lines[start];
+  if (/^[-*]\s+/.test(first) || /^\d+[.)]\s+/.test(first)) {
+    return first.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "");
+  }
+
+  const paragraph: string[] = [];
+  for (let index = start; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line || line.startsWith("#") || /^[-*]\s+/.test(line) || /^\d+[.)]\s+/.test(line)) break;
+    paragraph.push(line);
+  }
+  return paragraph.join(" ");
 }
