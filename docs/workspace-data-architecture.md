@@ -1,6 +1,6 @@
 # Workspace Data Architecture
 
-**Status:** Normative target architecture. **Last updated:** 2026-06-21.
+**Status:** Normative target architecture. **Last updated:** 2026-06-22.
 
 This document is the shared data contract for:
 
@@ -575,9 +575,10 @@ Rules:
 1. `.gke/` and `.cache/` are gitignored by default.
 2. Workspace configuration contains policy, not secrets.
 3. Authentication secrets come from environment variables or a secret store.
-4. Audit logs do not contain document bodies or full prompts by default.
-5. If audit is mandatory for a restricted workspace and cannot be written,
-   mutating operations fail.
+4. Audit logging is optional in the first local milestone and never contains
+   document bodies or full prompts by default.
+5. Optional audit failure does not block ordinary local writes. A future
+   restricted-workspace profile may explicitly require fail-closed audit.
 
 ## Ingestion lifecycle
 
@@ -623,7 +624,20 @@ kb-personal      -> personal workspace -> stdio process
 kb-client-alpha -> client-alpha workspace -> stdio process
 ```
 
-Remote:
+Temporary Microsoft proof of concept:
+
+```text
+Microsoft declarative agent
+    -> short-lived authenticated HTTPS tunnel
+    -> loopback-only local Streamable HTTP process
+    -> one sanitized or explicitly approved workspace
+```
+
+The first tunnel milestone is strictly read-only and does not advertise
+mutation tools. Canonical files and engine execution remain local, but returned
+evidence traverses Microsoft and the tunnel provider.
+
+Possible future organization-controlled gateway:
 
 ```text
 https://gke.example.com/client-alpha/mcp
@@ -631,8 +645,8 @@ https://gke.example.com/client-alpha/mcp
     -> client-alpha workspace only
 ```
 
-The URL or process configuration chooses the workspace. A tool argument does
-not.
+In every mode, the URL or process configuration chooses the workspace. A tool
+argument does not.
 
 ## Migration from the current public repository
 
