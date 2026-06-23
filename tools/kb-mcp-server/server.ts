@@ -5,11 +5,26 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
+import { negotiateProtocolVersion } from "./protocol.js";
+import {
+  MCP_RESOURCES,
+  MCP_RESOURCE_TEMPLATES,
+  readMcpResource,
+} from "./resources.js";
+import { startJsonRpcStdioTransport } from "./transport.js";
+import {
+  gatherCandidateFiles as gatherKnowledgeFiles,
+  getDocumentTitle,
+  inferSourceKind,
+  inferTrack,
+  normalizeScalar,
+  normalizeScanRoots,
+  parseFrontmatter,
+  parsePositiveInt,
+} from "../grounding/document-core.js";
 import { DEFAULT_SCAN_ROOTS as RETRIEVER_DEFAULT_SCAN_ROOTS, getKbRetriever } from "../grounding/retriever.js";
 import { resumeProject } from "../projects/index.js";
 import type {
-  CandidateFile,
-  Frontmatter,
   IndexedDocument,
   KbRetriever,
   SearchArgs,
@@ -27,7 +42,6 @@ const SERVER_INFO = {
 };
 
 type JsonObject = Record<string, any>;
-type JsonRpcId = string | number | null;
 
 interface OwnershipData {
   owners?: Record<string, string>;
@@ -40,33 +54,16 @@ interface ToolPayload {
   structured: any;
 }
 
-interface RpcMessage {
-  id?: JsonRpcId;
-  method?: string;
-  params?: JsonObject;
-}
-
 interface LocalDocument extends IndexedDocument {
   absPath: string;
   body: string;
   lines: string[];
 }
 
-interface ParsedFrontmatter {
-  frontmatter: Frontmatter;
-  body: string;
-}
-
-interface ServerCandidateFile {
-  absPath: string;
-  relPath: string;
-}
-
 type LogLevel = "off" | "error" | "warn" | "info" | "debug";
 type ResponseFormat = "compact" | "full";
 
 
-const DEFAULT_PROTOCOL_VERSION = "2024-11-05";
 const DEFAULT_CACHE_TTL_MS = parsePositiveInt(process.env.KB_MCP_CACHE_TTL_MS, 15000, 1000, 10 * 60 * 1000);
 const DEFAULT_SLO_MS = parsePositiveInt(process.env.KB_MCP_SLO_MS, 3000, 50, 120 * 1000);
 const DEFAULT_REQUIRE_CAPTURE = parseBooleanEnv(process.env.KB_MCP_REQUIRE_CAPTURE, true);
@@ -141,233 +138,6 @@ async function getSqliteRetriever(forceRefresh = false): Promise<KbRetriever> {
   });
 }
 
-const legacyTools = [
-  {
-    name: "kb.search",
-    description: "Search the local KB and Domain markdown/text sources for grounded evidence.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        query: { type: "string", minLength: 2, description: "Search query" },
-        limit: { type: "integer", minimum: 1, maximum: MAX_LIMIT, description: `Max hits (default ${DEFAULT_LIMIT})` },
-        context: { type: "integer", minimum: 0, maximum: MAX_CONTEXT, description: "Context lines around each hit" },
-        mode: {
-          type: "string",
-          enum: ["auto", "domain", "project", "generic"],
-          description: "Scoring mode",
-        },
-        track: { type: "string", description: "Optional track filter, e.g. domain, ai, knowledge-ops" },
-        module: { type: "string", description: "Optional module filter, e.g. dev-tooling" },
-        includeArchive: { type: "boolean", description: "Include kb/archive files" },
-        backend: {
-          type: "string",
-          enum: ["bm25", "sqlite"],
-          description: "Retrieval backend override. Default is KB_MCP_RETRIEVAL_BACKEND or bm25.",
-        },
-        responseFormat: {
-          type: "string",
-          enum: ["compact", "full"],
-          description: "compact omits bulky context/debug fields from structured output unless explicitly requested.",
-        },
-        debug: { type: "boolean", description: "Include retrieval trace diagnostics" },
-        debugTopN: { type: "integer", minimum: 1, maximum: 25, description: "Top traced candidates when debug=true" },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "kb.get_topic",
-    description: "Get a KB topic by slug, filename, path, or title.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        topic: { type: "string", minLength: 2, description: "Topic slug/path/title query" },
-        maxChars: { type: "integer", minimum: 500, maximum: 50000, description: "Max body characters in response" },
-      },
-      required: ["topic"],
-    },
-  },
-  {
-    name: "kb.get_term",
-    description: "Get a KB term note by term name, slug, or filename.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        term: { type: "string", minLength: 1, description: "Term name or slug" },
-        maxChars: { type: "integer", minimum: 300, maximum: 30000, description: "Max body characters in response" },
-      },
-      required: ["term"],
-    },
-  },
-  {
-    name: "kb.list_modules",
-    description: "List KB modules with title, track, and topic counts.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
-  },
-  {
-    name: "kb.answer_grounded",
-    description: "Build a retrieval-grounded answer with confidence and citations from local KB evidence.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        question: { type: "string", minLength: 3, description: "Question to answer using local evidence" },
-        limit: { type: "integer", minimum: 3, maximum: MAX_LIMIT, description: "Evidence hit count to use" },
-        mode: { type: "string", enum: ["auto", "domain", "project", "generic"] },
-        track: { type: "string", description: "Optional track filter" },
-        module: { type: "string", description: "Optional module filter" },
-        includeArchive: { type: "boolean", description: "Include kb/archive files" },
-        strict: { type: "boolean", description: "When true (default), abstain if evidence quality is below threshold." },
-        sloMs: {
-          type: "integer",
-          minimum: 50,
-          maximum: 120000,
-          description: `SLO threshold in milliseconds for response-time guard (default ${DEFAULT_SLO_MS})`,
-        },
-        responseMode: {
-          type: "string",
-          enum: ["auto", "fast", "curate"],
-          description: "auto: prefer fast term lane, fast: force term-first shortcuts, curate: always run full retrieval/gating",
-        },
-        backend: {
-          type: "string",
-          enum: ["bm25", "sqlite"],
-          description: "Retrieval backend override. Default is KB_MCP_RETRIEVAL_BACKEND or bm25.",
-        },
-        responseFormat: {
-          type: "string",
-          enum: ["compact", "full"],
-          description: "compact omits bulky evidence context from structured output.",
-        },
-        debug: { type: "boolean", description: "Include retrieval trace diagnostics" },
-        debugTopN: { type: "integer", minimum: 1, maximum: 25, description: "Top traced candidates when debug=true" },
-        allowDirect: {
-          type: "boolean",
-          description: "Explicitly allow direct call when capture-first mode is enabled (debug/migration use only).",
-        },
-      },
-      required: ["question"],
-    },
-  },
-  {
-    name: "kb.upsert_note",
-    description: "Create or update a KB note under kb/topics or kb/terms.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        kind: { type: "string", enum: ["topic", "term"], description: "Note type to upsert" },
-        title: { type: "string", minLength: 2, description: "Note title" },
-        body: { type: "string", minLength: 1, description: "Note body content (markdown)" },
-        path: { type: "string", description: "Optional relative path override, e.g. kb/topics/my-topic.md" },
-        module: { type: "string", description: "Topic module key (for topic notes)" },
-        track: { type: "string", description: "Optional track frontmatter value" },
-        type: { type: "string", enum: ["concept", "howto", "project", "redirect"], description: "Topic type" },
-        status: { type: "string", enum: ["draft", "canonical", "merged", "deprecated"], description: "Topic status" },
-        tags: {
-          oneOf: [
-            { type: "string" },
-            { type: "array", items: { type: "string" } },
-          ],
-          description: "Tags as comma-separated string or string[]",
-        },
-        owner: { type: "string", description: "Owner frontmatter value" },
-        updated: { type: "string", description: "YYYY-MM-DD override for updated date" },
-        append: { type: "boolean", description: "Append body to existing note instead of overwrite" },
-        dryRun: { type: "boolean", description: "Validate and preview changes without writing files" },
-      },
-      required: ["kind", "title", "body"],
-    },
-  },
-  {
-    name: "kb.add_open_question",
-    description: "Append an unresolved (or resolved) item to kb/open_questions.md.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        question: { type: "string", minLength: 3, description: "Open question text" },
-        whyOpen: { type: "string", minLength: 3, description: "Why the question is open" },
-        whatWouldResolve: { type: "string", minLength: 3, description: "What would resolve it" },
-        status: { type: "string", enum: ["open", "resolved"], description: "Question status" },
-        resolvedBy: { type: "string", description: "Optional markdown link or file reference when resolved" },
-        relatedPath: { type: "string", description: "Optional related file path, e.g. kb/topics/example.md" },
-        dryRun: { type: "boolean", description: "Validate and preview without writing file" },
-      },
-      required: ["question", "whyOpen", "whatWouldResolve"],
-    },
-  },
-  {
-    name: "kb.answer_and_capture",
-    description: "Answer with local grounding; supports fast term mode and optional capture skip for already-curated term answers.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        question: { type: "string", minLength: 3, description: "Question to answer" },
-        limit: { type: "integer", minimum: 3, maximum: MAX_LIMIT, description: "Evidence hit count to use" },
-        mode: { type: "string", enum: ["auto", "domain", "project", "generic"] },
-        track: { type: "string" },
-        module: { type: "string" },
-        includeArchive: { type: "boolean" },
-        strict: { type: "boolean", description: "Strict evidence gate for answer quality (default true)" },
-        sloMs: {
-          type: "integer",
-          minimum: 50,
-          maximum: 120000,
-          description: `SLO threshold in milliseconds for response-time guard (default ${DEFAULT_SLO_MS})`,
-        },
-        responseMode: {
-          type: "string",
-          enum: ["auto", "fast", "curate"],
-          description: "auto: prefer fast term lane, fast: force term-first shortcuts, curate: always run full retrieval/gating",
-        },
-        backend: { type: "string", enum: ["bm25", "sqlite"] },
-        responseFormat: { type: "string", enum: ["compact", "full"] },
-        debug: { type: "boolean" },
-        debugTopN: { type: "integer", minimum: 1, maximum: 25 },
-        captureStrategy: {
-          type: "string",
-          enum: ["auto", "note", "open_question", "none"],
-          description: "auto: note when grounded, open question when abstained, none when caller wants read-only",
-        },
-        noteKind: { type: "string", enum: ["topic", "term"] },
-        notePath: { type: "string", description: "Optional note path override under kb/" },
-        noteTitle: { type: "string" },
-        noteBody: { type: "string" },
-        noteType: { type: "string", enum: ["concept", "howto", "project", "redirect"] },
-        noteStatus: { type: "string", enum: ["draft", "canonical", "merged", "deprecated"] },
-        noteTags: {
-          oneOf: [
-            { type: "string" },
-            { type: "array", items: { type: "string" } },
-          ],
-        },
-        noteOwner: { type: "string" },
-        append: { type: "boolean" },
-        dryRun: { type: "boolean", description: "Preview capture without writing files" },
-      },
-      required: ["question"],
-    },
-  },
-  {
-    name: "kb.refresh",
-    description: "Force-refresh in-memory KB index cache.",
-    inputSchema: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-    },
-  },
-];
-
 const tools = buildToolCatalog({
   profile: DEFAULT_MCP_PROFILE,
   writesEnabled: DEFAULT_ENABLE_WRITES,
@@ -403,101 +173,17 @@ async function handleKbResumeProject(args: JsonObject): Promise<ToolPayload> {
 }
 
 async function main() {
-  let buffer = Buffer.alloc(0);
-
-  process.stdin.on("data", (chunk: Buffer) => {
-    buffer = Buffer.concat([buffer, chunk]);
-    void parseMessages();
+  startJsonRpcStdioTransport({
+    input: process.stdin,
+    output: process.stdout,
+    handleRequest: (method, params) => handleRequest(method, params as JsonObject),
+    handleNotification: (method, params) =>
+      handleNotification(method, params as JsonObject),
+    errorCode: toJsonRpcErrorCode,
+    errorMessage: safeErrorMessage,
+    log: (message) => log("debug", message),
+    onEnd: () => process.exit(0),
   });
-
-  process.stdin.on("end", () => {
-    log("info", "stdin ended, shutting down");
-    process.exit(0);
-  });
-
-  process.stdin.resume();
-
-  async function parseMessages() {
-    while (true) {
-      // Detect framing from the buffer prefix. The MCP stdio transport uses
-      // newline-delimited JSON; we also accept legacy LSP-style Content-Length
-      // frames so the server keeps working with either client.
-      const prefix = buffer.slice(0, 16).toString("utf8");
-      const looksLikeHeader = /^\s*content-length:/i.test(prefix);
-
-      if (looksLikeHeader) {
-        const headerEnd = buffer.indexOf("\r\n\r\n");
-        if (headerEnd === -1) return;
-        const headerRaw = buffer.slice(0, headerEnd).toString("utf8");
-        const lengthMatch = headerRaw.match(/content-length:\s*(\d+)/i);
-        if (!lengthMatch) {
-          sendError(null, -32700, "Missing Content-Length header");
-          buffer = Buffer.alloc(0);
-          return;
-        }
-
-        const contentLength = Number.parseInt(lengthMatch[1], 10);
-        const frameEnd = headerEnd + 4 + contentLength;
-        if (buffer.length < frameEnd) return;
-
-        const payloadRaw = buffer.slice(headerEnd + 4, frameEnd).toString("utf8");
-        buffer = buffer.slice(frameEnd);
-
-        let message;
-        try {
-          message = JSON.parse(payloadRaw);
-        } catch (error) {
-          sendError(null, -32700, `Invalid JSON payload: ${safeErrorMessage(error)}`);
-          continue;
-        }
-        void dispatchMessage(message);
-        continue;
-      }
-
-      // Newline-delimited JSON: each message is a single line terminated by "\n".
-      const newlineIdx = buffer.indexOf("\n");
-      if (newlineIdx === -1) return;
-      const lineBuf = buffer.slice(0, newlineIdx);
-      buffer = buffer.slice(newlineIdx + 1);
-      const line = lineBuf.toString("utf8").trim();
-      if (line.length === 0) continue;
-
-      let message;
-      try {
-        message = JSON.parse(line);
-      } catch (error) {
-        sendError(null, -32700, `Invalid JSON payload: ${safeErrorMessage(error)}`);
-        continue;
-      }
-      void dispatchMessage(message);
-    }
-  }
-}
-
-async function dispatchMessage(message: RpcMessage): Promise<void> {
-  if (!message || typeof message !== "object") return;
-  const id = Object.prototype.hasOwnProperty.call(message, "id") ? message.id : undefined;
-  const method = typeof message.method === "string" ? message.method : "";
-  const params = message.params ?? {};
-
-  if (!method) {
-    if (id !== undefined) sendError(id, -32600, "Invalid Request: missing method");
-    return;
-  }
-
-  log("debug", `request: ${method}`);
-
-  try {
-    if (id === undefined) {
-      await handleNotification(method, params);
-      return;
-    }
-
-    const result = await handleRequest(method, params);
-    sendResult(id, result);
-  } catch (error) {
-    sendError(id, toJsonRpcErrorCode(error), safeErrorMessage(error));
-  }
 }
 
 async function handleNotification(method: string, _params: JsonObject = {}): Promise<void> {
@@ -510,7 +196,7 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
   switch (method) {
     case "initialize":
       return {
-        protocolVersion: normalizeProtocolVersion(params?.protocolVersion),
+        protocolVersion: negotiateProtocolVersion(params?.protocolVersion),
         capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
         instructions:
@@ -523,41 +209,18 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
     case "tools/call":
       return await handleToolCall(params);
     case "resources/list":
-      return {
-        resources: [
-          {
-            uri: "gke://workspace/info",
-            name: "workspace-info",
-            title: "GKE Workspace Information",
-            description: "Active repository root and indexed logical scan roots.",
-            mimeType: "application/json",
-            annotations: { audience: ["user", "assistant"], priority: 0.9 },
-          },
-        ],
-      };
+      return { resources: MCP_RESOURCES };
     case "resources/templates/list":
-      return {
-        resourceTemplates: [
-          {
-            uriTemplate: "gke://record/{path}",
-            name: "knowledge-record",
-            title: "GKE Knowledge Record",
-            description: "Read an indexed Markdown record by URL-encoded workspace-relative path.",
-            mimeType: "text/markdown",
-            annotations: { audience: ["user", "assistant"], priority: 0.7 },
-          },
-          {
-            uriTemplate: "gke://project/{projectId}/context",
-            name: "project-context",
-            title: "GKE Project Context",
-            description: "Read the same compact cited project capsule returned by kb.resume_project.",
-            mimeType: "text/markdown",
-            annotations: { audience: ["user", "assistant"], priority: 0.9 },
-          },
-        ],
-      };
+      return { resourceTemplates: MCP_RESOURCE_TEMPLATES };
     case "resources/read":
-      return await handleResourceRead(params);
+      return await readMcpResource(params, {
+        repoRoot,
+        workspaceId: normalizeScalar(process.env.KB_MCP_WORKSPACE_ID) || "default",
+        profile: DEFAULT_MCP_PROFILE,
+        writesEnabled: DEFAULT_ENABLE_WRITES,
+        scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+        getDocuments: () => getDocuments(false),
+      });
     case "prompts/list":
       return { prompts: [] };
     default:
@@ -680,87 +343,6 @@ function filterDocumentsByKind(docs: LocalDocument[], kind: string): LocalDocume
   const segment = pathSegments[kind];
   if (!segment) throw new Error(`Unsupported record kind '${kind}'.`);
   return docs.filter((doc) => `/${doc.relPath}`.includes(segment) && doc.relPath.endsWith(".md"));
-}
-
-async function handleResourceRead(params: JsonObject): Promise<any> {
-  const uri = normalizeScalar(params?.uri);
-  if (!uri) throw createJsonRpcError(-32602, "Missing resource URI.");
-
-  if (uri === "gke://workspace/info") {
-    const value = {
-      workspaceId: normalizeScalar(process.env.KB_MCP_WORKSPACE_ID) || "default",
-      profile: DEFAULT_MCP_PROFILE,
-      writesEnabled: DEFAULT_ENABLE_WRITES,
-      scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
-    };
-    return {
-      contents: [
-        {
-          uri,
-          mimeType: "application/json",
-          text: JSON.stringify(value, null, 2),
-        },
-      ],
-    };
-  }
-
-  const projectMatch = uri.match(/^gke:\/\/project\/([^/]+)\/context$/);
-  if (projectMatch) {
-    let projectId: string;
-    try {
-      projectId = decodeURIComponent(projectMatch[1]);
-    } catch (error) {
-      throw createJsonRpcError(-32602, `Invalid project resource URI: ${safeErrorMessage(error)}`);
-    }
-    const scanRoots = parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS);
-    try {
-      const result = await resumeProject({ projectId }, repoRoot, scanRoots);
-      return {
-        contents: [
-          {
-            uri: `gke://project/${encodeURIComponent(result.structured.projectId)}/context`,
-            mimeType: "text/markdown",
-            text: result.contentText,
-            annotations: {
-              audience: ["user", "assistant"],
-              priority: 0.9,
-            },
-          },
-        ],
-      };
-    } catch (error) {
-      throw createJsonRpcError(-32602, safeErrorMessage(error));
-    }
-  }
-
-  const prefix = "gke://record/";
-  if (!uri.startsWith(prefix)) {
-    throw createJsonRpcError(-32602, `Unsupported resource URI: ${uri}`);
-  }
-
-  let relPath: string;
-  try {
-    relPath = sanitizeRelativePath(decodeURIComponent(uri.slice(prefix.length)));
-  } catch (error) {
-    throw createJsonRpcError(-32602, `Invalid record URI: ${safeErrorMessage(error)}`);
-  }
-  const docs = await getDocuments(false);
-  const doc = docs.find((item) => item.relPath === relPath);
-  if (!doc) throw createJsonRpcError(-32602, `Indexed record not found: ${relPath}`);
-  const raw = await fs.readFile(doc.absPath, "utf8");
-  return {
-    contents: [
-      {
-        uri: `gke://record/${encodeURIComponent(doc.relPath)}`,
-        mimeType: doc.relPath.endsWith(".md") ? "text/markdown" : "text/plain",
-        text: raw,
-        annotations: {
-          audience: ["user", "assistant"],
-          priority: 0.7,
-        },
-      },
-    ],
-  };
 }
 
 async function handleKbGetTopic(args: JsonObject): Promise<ToolPayload> {
@@ -2259,7 +1841,7 @@ async function getDocuments(forceRefresh: boolean): Promise<LocalDocument[]> {
 
 async function loadDocuments(): Promise<LocalDocument[]> {
   const roots = parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS);
-  const candidates = await gatherCandidateFiles(roots);
+  const candidates = await gatherKnowledgeFiles(repoRoot, roots);
   const docs: LocalDocument[] = [];
 
   for (const file of candidates) {
@@ -2294,107 +1876,8 @@ async function loadDocuments(): Promise<LocalDocument[]> {
   return docs;
 }
 
-async function gatherCandidateFiles(scanRoots: string[]): Promise<ServerCandidateFile[]> {
-  const candidates: ServerCandidateFile[] = [];
-  for (const root of scanRoots) {
-    const absRoot = path.resolve(repoRoot, root);
-    let stat;
-    try {
-      stat = await fs.stat(absRoot);
-    } catch {
-      continue;
-    }
-
-    if (stat.isDirectory()) {
-      await walk(absRoot, candidates);
-      continue;
-    }
-    const relPath = toPosix(path.relative(repoRoot, absRoot));
-    if (isSearchableTextFile(relPath)) candidates.push({ absPath: absRoot, relPath });
-  }
-  return candidates;
-}
-
-async function walk(dir: string, out: ServerCandidateFile[]): Promise<void> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const absPath = path.join(dir, entry.name);
-    const relPath = toPosix(path.relative(repoRoot, absPath));
-    if (entry.isDirectory()) {
-      if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "dist" || entry.name === "content") {
-        continue;
-      }
-      await walk(absPath, out);
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    if (!isSearchableTextFile(relPath)) continue;
-    out.push({ absPath, relPath });
-  }
-}
-
-function isSearchableTextFile(relPath: string): boolean {
-  const lower = relPath.toLowerCase();
-  if (lower.endsWith(".md") || lower.endsWith(".txt")) return true;
-  return false;
-}
-
 function parseScanRoots(raw: string | undefined, defaults: string[]): string[] {
-  if (!raw || !raw.trim()) return defaults;
-  return raw
-    .split(",")
-    .map((part) => part.trim())
-    .filter(Boolean);
-}
-
-function parseFrontmatter(raw: string): ParsedFrontmatter {
-  if (!raw.startsWith("---\n")) return { frontmatter: {}, body: raw };
-  const end = raw.indexOf("\n---\n", 4);
-  if (end === -1) return { frontmatter: {}, body: raw };
-
-  const header = raw.slice(4, end);
-  const body = raw.slice(end + 5);
-  const frontmatter: Record<string, string> = {};
-  for (const line of header.split("\n")) {
-    const sep = line.indexOf(":");
-    if (sep === -1) continue;
-    const key = line.slice(0, sep).trim();
-    const value = line.slice(sep + 1).trim();
-    if (!key) continue;
-    frontmatter[key] = value;
-  }
-  return { frontmatter, body };
-}
-
-function getDocumentTitle(body: string, relPath: string): string {
-  const headingMatch = body.match(/^#\s+(.+)$/m);
-  if (headingMatch?.[1]) return headingMatch[1].trim();
-  return path.basename(relPath, path.extname(relPath));
-}
-
-function inferSourceKind(relPath: string): string {
-  if (relPath.startsWith("source-docs/")) return "reference-source";
-  if (relPath.startsWith("kb/topics/")) return "kb-topic";
-  if (relPath.startsWith("kb/terms/")) return "kb-term";
-  if (relPath.startsWith("kb/modules/")) return "kb-module";
-  if (relPath.startsWith("kb/digests/")) return "kb-digest";
-  if (relPath.startsWith("kb/clients/")) return "kb-client";
-  if (relPath.startsWith("project/")) return "project";
-  return "doc";
-}
-
-function inferTrack(relPath: string, frontmatter: Frontmatter): string {
-  const explicit = normalizeScalar(frontmatter.track);
-  if (explicit) return explicit;
-  if (relPath.startsWith("source-docs/")) return "domain";
-  if (relPath.startsWith("kb/")) return "domain";
-  if (relPath.startsWith("project/")) return "domain";
-  return "";
-}
-
-function normalizeScalar(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value.trim().replace(/^['"]|['"]$/g, "");
+  return normalizeScanRoots(raw || defaults, defaults);
 }
 
 function normalizeForMatch(value: unknown): string {
@@ -2514,14 +1997,6 @@ function truncateOneLine(text: string, maxLength: number): string {
   return `${clean.slice(0, maxLength - 3)}...`;
 }
 
-function parsePositiveInt(value: unknown, fallback: number, min: number, max: number): number {
-  const raw = typeof value === "string" || typeof value === "number" ? Number.parseInt(`${value}`, 10) : NaN;
-  let out = Number.isFinite(raw) ? raw : fallback;
-  if (Number.isFinite(min)) out = Math.max(min, out);
-  if (Number.isFinite(max)) out = Math.min(max, out);
-  return out;
-}
-
 function parseBooleanEnv(raw: unknown, fallback: boolean): boolean {
   if (typeof raw !== "string") return fallback;
   const normalized = raw.trim().toLowerCase();
@@ -2627,11 +2102,6 @@ function compactHit(hit: SearchHit | any) {
   };
 }
 
-function normalizeProtocolVersion(version: unknown): string {
-  if (typeof version === "string" && version.trim()) return version.trim();
-  return DEFAULT_PROTOCOL_VERSION;
-}
-
 function normalizeLogLevel(level: unknown): LogLevel {
   const candidate = `${level || ""}`.toLowerCase().trim();
   if (candidate in logOrder) return candidate as LogLevel;
@@ -2700,32 +2170,6 @@ function jsonRpcToolError(message: string) {
     isError: true,
     content: [{ type: "text", text: message }],
   };
-}
-
-function sendResult(id: JsonRpcId, result: unknown): void {
-  sendMessage({
-    jsonrpc: "2.0",
-    id,
-    result,
-  });
-}
-
-function sendError(id: JsonRpcId, code: number, message: string): void {
-  sendMessage({
-    jsonrpc: "2.0",
-    id,
-    error: {
-      code,
-      message,
-    },
-  });
-}
-
-function sendMessage(payload: JsonObject): void {
-  // MCP stdio transport uses newline-delimited JSON. JSON.stringify escapes any
-  // embedded newlines, so the serialized message is always a single line.
-  const body = JSON.stringify(payload);
-  process.stdout.write(body + "\n");
 }
 
 main().catch((error) => {
