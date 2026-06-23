@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   buildBreadcrumbs,
   buildDigestQuickView,
@@ -60,11 +60,14 @@ import {
 import { useRecentPaths } from "./hooks/useRecentPaths";
 import { useRouteSync } from "./hooks/useRouteSync";
 import { renderHighlighted } from "./components/HighlightedText";
-import { ContextGraphView } from "./views/ContextGraphView";
 import { HubView } from "./views/HubView";
 import { LibraryView } from "./views/LibraryView";
 import { ProjectBoardView } from "./views/ProjectBoardView";
 import { ProjectDetailView } from "./views/ProjectDetailView";
+
+const ContextGraphView = lazy(() =>
+  import("./views/ContextGraphView").then((module) => ({ default: module.ContextGraphView })),
+);
 
 export { isExternalResource, normalizeDocPath, resolveMarkdownAssetPath, resolveMarkdownDocPath };
 
@@ -468,24 +471,32 @@ export default function App() {
 
   if (viewMode === "graph") {
     return (
-      <ContextGraphView
-        docs={docs}
-        commandBarOpen={isCommandBarOpen}
-        onCommandBarOpenChange={setIsCommandBarOpen}
-        onCommand={() => setIsCommandBarOpen(true)}
-        onHub={goToHub}
-        onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-        onProjects={goToProjects}
-        onGraph={goToGraph}
-        onCommandSelect={(item) => openDoc(item.path)}
-        contextGraph={contextGraph}
-        graphFocusOption={graphFocusOption}
-        graphFocusOptions={graphFocusOptions}
-        graphQuery={graphQuery}
-        onGraphQueryChange={setGraphQuery}
-        onFocusGraphPath={focusGraphPath}
-        onOpenGraphNode={openGraphNode}
-      />
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-surface-main p-8 text-body-md text-on-surface-variant">
+            Loading context graph…
+          </div>
+        }
+      >
+        <ContextGraphView
+          docs={docs}
+          commandBarOpen={isCommandBarOpen}
+          onCommandBarOpenChange={setIsCommandBarOpen}
+          onCommand={() => setIsCommandBarOpen(true)}
+          onHub={goToHub}
+          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+          onProjects={goToProjects}
+          onGraph={goToGraph}
+          onCommandSelect={(item) => openDoc(item.path)}
+          contextGraph={contextGraph}
+          graphFocusOption={graphFocusOption}
+          graphFocusOptions={graphFocusOptions}
+          graphQuery={graphQuery}
+          onGraphQueryChange={setGraphQuery}
+          onFocusGraphPath={focusGraphPath}
+          onOpenGraphNode={openGraphNode}
+        />
+      </Suspense>
     );
   }
 

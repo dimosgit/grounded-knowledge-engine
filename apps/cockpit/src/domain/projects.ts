@@ -1,4 +1,5 @@
 import {
+  meaningfulSectionItems,
   normalizeProjectId,
   parseProjectData,
   sectionItems,
@@ -29,35 +30,48 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
       const { manifest, sections, explicitPaths } = parsed;
       if (!manifest.projectId) return;
 
+      const outcome = sectionSummary(sections.get("outcome"));
       const currentStatus = sectionSummary(sections.get("current-status")) || doc.excerpt;
       const currentFocus = sectionSummary(sections.get("current-focus")) || currentStatus;
       const recentChanges =
         sectionSummary(sections.get("last-meaningful-change")) ||
         currentStatus ||
         "No recent change recorded.";
-      const activeDecisions = sectionItems(sections.get("active-decisions"));
-      const blockers = sectionItems(sections.get("blockers"));
-      const openQuestions = sectionItems(sections.get("open-questions"));
-      const nextActions = sectionItems(sections.get("next-actions")).slice(0, 5);
+      const activeDecisions = meaningfulSectionItems(sections.get("active-decisions"));
+      const blockers = meaningfulSectionItems(sections.get("blockers")).slice(0, 5);
+      const openQuestions = meaningfulSectionItems(sections.get("open-questions"));
+      const completed = COMPLETED_LIFECYCLES.has(
+        (
+          lifecycleOverrides[manifest.projectId] ??
+          normalizeFrontmatterScalar(doc.frontmatter?.lifecycle) ??
+          manifest.status ??
+          ""
+        ).toLowerCase(),
+      );
+      const nextActions = completed
+        ? []
+        : meaningfulSectionItems(sections.get("next-actions")).slice(0, 5);
       const keyDocuments = unique([
         ...sectionItems(sections.get("key-documents")).map(stripMarkdownLink),
         ...explicitPaths.map((item) => resolveLogicalPath(doc.path, item)),
       ]);
+      const startHereBrief = outcome || currentStatus || currentFocus;
       const lifecycle = (
         lifecycleOverrides[manifest.projectId] ??
-        doc.frontmatter?.lifecycle ??
+        normalizeFrontmatterScalar(doc.frontmatter?.lifecycle) ??
         manifest.status ??
         ""
       ).toLowerCase();
       const eligiblePaths = buildEligiblePaths(docs, doc, manifest.projectId, manifest.sourceRoots, keyDocuments);
-      const project = {
+      const projectCore = {
         id: manifest.projectId,
         baseId: manifest.projectId,
         title: manifest.title || doc.title,
         track: doc.track,
         trackLabel: doc.trackLabel,
-        module: doc.frontmatter?.module || manifest.projectId,
+        module: normalizeFrontmatterScalar(doc.frontmatter?.module) || manifest.projectId,
         lifecycle,
+        startHereBrief,
         currentStatus,
         currentFocus,
         recentChanges,
@@ -67,7 +81,7 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
         blockersAndQuestions: [...blockers, ...openQuestions],
         nextActions,
         keyDocuments,
-        updated: manifest.updated || doc.frontmatter?.updated || "",
+        updated: manifest.updated || normalizeFrontmatterScalar(doc.frontmatter?.updated),
         reviewAfter: manifest.reviewAfter,
         progressPercent: calculateProjectProgress(doc.content),
         sourceDocPath: doc.path,
@@ -75,9 +89,19 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
         eligiblePaths,
         legacy: manifest.legacy,
       };
+      const project = {
+        ...projectCore,
+        glance: buildProjectGlance(projectCore),
+      };
       const score = projectRecordScore(doc);
       const existing = projectGroups.get(project.id);
-      if (!existing || score > existing.score) projectGroups.set(project.id, { score, project });
+      if (
+        !existing ||
+        score > existing.score ||
+        (score === existing.score && (project.updated || "") > (existing.project.updated || ""))
+      ) {
+        projectGroups.set(project.id, { score, project });
+      }
     });
 
   return Array.from(projectGroups.values())
@@ -92,6 +116,33 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
       if (statusDelta !== 0) return statusDelta;
       return (b.updated || "").localeCompare(a.updated || "");
     });
+}
+
+export function compactProjectText(value: string, maxLength: number): string {
+  const normalized = `${value || ""}`.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  const clipped = normalized.slice(0, Math.max(0, maxLength - 1));
+  const lastSpace = clipped.lastIndexOf(" ");
+  const boundary = lastSpace >= Math.floor(maxLength * 0.65) ? lastSpace : clipped.length;
+  return `${clipped.slice(0, boundary).trimEnd()}…`;
+}
+
+function buildProjectGlance(project) {
+  return {
+    startHere: compactProjectText(project.startHereBrief, 180),
+    currentFocus: compactProjectText(project.currentFocus, 160),
+    recentChanges: compactProjectText(project.recentChanges, 160),
+    blocker: compactProjectText(project.blockers[0] || "", 160),
+    activeDecisions: project.activeDecisions
+      .slice(0, 2)
+      .map((item) => compactProjectText(item, 150)),
+    openQuestions: project.openQuestions
+      .slice(0, 2)
+      .map((item) => compactProjectText(item, 150)),
+    nextActions: project.nextActions
+      .slice(0, 3)
+      .map((item) => compactProjectText(item, 160)),
+  };
 }
 
 export function buildOpenQuestionItems(docs) {
@@ -160,7 +211,9 @@ export function formatTechnicalPeerHandoff(project) {
 function isProjectDoc(doc): boolean {
   if (doc.frontmatter?.record_type === "project") return true;
   if (doc.frontmatter?.type === "project") return true;
-  if (/^kb\/projects\/[^/]+\/project\.md$/.test(doc.path)) return true;
+  if (/^(?:demo-kb|kb)\/projects\/[^/]+\/project\.md$/.test(doc.path || "")) return true;
+  const explicitType = doc.frontmatter?.type;
+  if (explicitType && explicitType !== "project") return false;
   return ["Current status", "Current focus", "Next 3 actions", "Next actions", "Blockers"].some((heading) =>
     new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "m").test(doc.content || ""),
   );
@@ -184,7 +237,7 @@ function getProjectStatusBucket(project): string {
 function projectRecordScore(doc): number {
   let score = 0;
   if (doc.frontmatter?.record_type === "project") score += 20;
-  if (/^kb\/projects\/[^/]+\/project\.md$/.test(doc.path)) score += 10;
+  if (/^(?:demo-kb|kb)\/projects\/[^/]+\/project\.md$/.test(doc.path || "")) score += 10;
   if (doc.frontmatter?.project_id) score += 5;
   if (doc.frontmatter?.type === "project") score += 2;
   return score;
@@ -222,11 +275,29 @@ function stripMarkdownLink(value: string): string {
   return match ? match[2] : value.replace(/^`|`$/g, "");
 }
 
-function calculateProjectProgress(content: string): number | null {
-  const tasks = content.match(/^\s*-\s+\[([ xX])\]\s+.+$/gm) || [];
-  if (!tasks.length) return null;
-  const completed = tasks.filter((task) => /^\s*-\s+\[[xX]\]/.test(task)).length;
-  return Math.round((completed / tasks.length) * 100);
+function calculateProjectProgress(content: string) {
+  const lines = content.split("\n");
+  let totalWeight = 0;
+  let completedWeight = 0;
+  const weightMap: Record<string, number> = { XS: 0.5, S: 1, M: 3, L: 5, XL: 8 };
+  const taskRegex = /^\s*-\s+\[([ xX])\]\s+(.*)$/;
+
+  for (const line of lines) {
+    const match = line.match(taskRegex);
+    if (!match) continue;
+    const markerMatch = match[2].match(/[\[\(](XS|S|M|L|XL)[\]\)]$/i);
+    const weight = markerMatch ? weightMap[markerMatch[1].toUpperCase()] || 1 : 1;
+    totalWeight += weight;
+    if (match[1].trim().toLowerCase() === "x") completedWeight += weight;
+  }
+
+  if (totalWeight === 0) return null;
+  return Math.round((completedWeight / totalWeight) * 100);
+}
+
+function normalizeFrontmatterScalar(value): string {
+  if (typeof value !== "string") return "";
+  return value.trim().replace(/^['"]|['"]$/g, "");
 }
 
 function asMarkdownList(items: string[]): string[] {
