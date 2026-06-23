@@ -20,6 +20,7 @@ interface CliOptions {
 export async function runProjectCli(argv: string[], cwd = process.cwd()): Promise<number> {
   const [command, ...rest] = argv.filter((arg) => arg !== "--");
   const parsed = parseArgs(rest);
+  assertKnownOptions(command, parsed);
   const repoRoot = path.resolve(first(parsed, "repo-root") || cwd);
   const json = has(parsed, "json");
 
@@ -219,6 +220,58 @@ function all(options: CliOptions, name: string): string[] {
 
 function has(options: CliOptions, name: string): boolean {
   return options.values.has(name);
+}
+
+function assertKnownOptions(command: string | undefined, options: CliOptions): void {
+  const globalOptions = ["repo-root", "json"];
+  const commandOptions: Record<string, string[]> = {
+    create: [
+      "title",
+      "workspace",
+      "status",
+      "lifecycle",
+      "owner",
+      "started-at",
+      "updated",
+      "review-after",
+      "tag",
+      "source-root",
+      "no-source-dir",
+      "dry-run",
+    ],
+    list: [],
+    show: ["raw"],
+    validate: [],
+    update: [
+      "title",
+      "status",
+      "lifecycle",
+      "owner",
+      "updated",
+      "review-after",
+      "tag",
+      "source-root",
+      "outcome",
+      "current-focus",
+      "last-change",
+      "decision",
+      "blocker",
+      "open-question",
+      "next-action",
+      "key-document",
+      "dry-run",
+    ],
+    link: ["label", "dry-run"],
+    help: [],
+    "--help": [],
+    "-h": [],
+  };
+  if (!command || !(command in commandOptions)) return;
+  const allowed = new Set([...globalOptions, ...commandOptions[command]]);
+  const unknown = [...options.values.keys()].filter((name) => !allowed.has(name));
+  if (unknown.length) {
+    throw new Error(`Unknown option for '${command}': --${unknown[0]}`);
+  }
 }
 
 function printHelp(): void {

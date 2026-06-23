@@ -1,0 +1,4 @@
+interface:
+  display_name: "Grounded Knowledge Workflow"
+  short_description: "Ground, retain, and resume knowledge safely"
+  default_prompt: "Use $grounded-knowledge-workflow to answer from my local knowledge first and retain useful new context."
