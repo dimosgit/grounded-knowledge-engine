@@ -3,7 +3,5 @@
   "installCommand": "npm --prefix apps/cockpit install",
   "buildCommand": "npm --prefix apps/cockpit run build",
   "outputDirectory": "apps/cockpit/dist",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

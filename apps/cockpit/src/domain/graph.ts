@@ -71,13 +71,19 @@ function scoreGraphRelationship(focusMeta, candidateMeta) {
     score += 7;
     reasons.push("backlink to focus");
   }
-  if (focusMeta.moduleKey && candidateMeta.moduleKey && focusMeta.moduleKey === candidateMeta.moduleKey) {
+  if (
+    focusMeta.moduleKey &&
+    candidateMeta.moduleKey &&
+    focusMeta.moduleKey === candidateMeta.moduleKey
+  ) {
     score += 5;
     reasons.push(`same module: ${focusMeta.moduleKey}`);
   }
 
   const focusModulePath = focusMeta.moduleKey ? `kb/modules/${focusMeta.moduleKey}.md` : "";
-  const candidateModulePath = candidateMeta.moduleKey ? `kb/modules/${candidateMeta.moduleKey}.md` : "";
+  const candidateModulePath = candidateMeta.moduleKey
+    ? `kb/modules/${candidateMeta.moduleKey}.md`
+    : "";
   if (focusModulePath && candidateMeta.doc.path === focusModulePath) {
     score += 6;
     reasons.push("owning module");
@@ -244,7 +250,12 @@ export function getMajorGraphFocusOptions(docs, projectSummaries, tracks) {
   }));
 
   return [
-    { id: "overview", label: "All major contexts", kind: "Overview", searchText: "overview all major contexts" },
+    {
+      id: "overview",
+      label: "All major contexts",
+      kind: "Overview",
+      searchText: "overview all major contexts",
+    },
     ...trackOptions,
     ...moduleOptions,
     ...clientOptions,
@@ -262,7 +273,11 @@ export function filterMajorGraphFocusOptions(docs, projectSummaries, tracks, que
 }
 
 export function getMajorGraphFocusOption(docs, projectSummaries, tracks, focusId) {
-  return getMajorGraphFocusOptions(docs, projectSummaries, tracks).find((option) => option.id === focusId) || null;
+  return (
+    getMajorGraphFocusOptions(docs, projectSummaries, tracks).find(
+      (option) => option.id === focusId,
+    ) || null
+  );
 }
 
 export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId = "overview") {
@@ -302,7 +317,9 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
   const moduleDocs = docs.filter((doc) => doc.docType === "module");
   for (const doc of moduleDocs) {
     const moduleKey = getDocModuleKey(doc) || doc.path;
-    const moduleDocsCount = docs.filter((item) => getDocModuleKey(item) === moduleKey && item.path !== doc.path).length;
+    const moduleDocsCount = docs.filter(
+      (item) => getDocModuleKey(item) === moduleKey && item.path !== doc.path,
+    ).length;
     addNode({
       id: `module:${moduleKey}`,
       label: doc.title,
@@ -338,7 +355,9 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
       projectId: project.id,
       moduleKey: project.module,
       trackKey: project.track,
-      summary: project.blockers.length ? `${project.blockers.length} blockers` : `${project.nextActions.length} next actions`,
+      summary: project.blockers.length
+        ? `${project.blockers.length} blockers`
+        : `${project.nextActions.length} next actions`,
       count: project.blockers.length || project.nextActions.length,
       statusBucket: project.statusBucket,
     });
@@ -409,7 +428,7 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
     const radiusX = 33;
     const radiusY = 34;
     neighbors.forEach((node, index) => {
-      const angle = (-Math.PI / 2) + (index * 2 * Math.PI) / Math.max(neighbors.length, 1);
+      const angle = -Math.PI / 2 + (index * 2 * Math.PI) / Math.max(neighbors.length, 1);
       node.x = 50 + Math.cos(angle) * radiusX;
       node.y = 50 + Math.sin(angle) * radiusY;
     });

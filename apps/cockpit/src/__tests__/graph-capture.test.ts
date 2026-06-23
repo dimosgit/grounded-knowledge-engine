@@ -51,9 +51,7 @@ describe("Context Graph reflects newly captured knowledge", () => {
     expect(capturedNode, "captured note should be a graph node").toBeDefined();
     expect(capturedNode?.label).toBe("Sandbox Integration Blocker");
 
-    const edge = graph.edges.find(
-      (e) => e.from === focusDoc.path && e.to === capturedNote.path,
-    );
+    const edge = graph.edges.find((e) => e.from === focusDoc.path && e.to === capturedNote.path);
     expect(edge, "an edge should connect the focus to the captured note").toBeDefined();
     expect(edge?.score).toBeGreaterThan(0);
   });

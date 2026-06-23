@@ -7,9 +7,24 @@ import {
 } from "../../../../tools/projects/project-manifest";
 
 const COMPLETED_LIFECYCLES = new Set(["completed", "done", "complete", "shipped", "delivered"]);
-const ACTIVE_LIFECYCLES = new Set(["active", "in-progress", "in_progress", "wip", "ongoing", "doing"]);
+const ACTIVE_LIFECYCLES = new Set([
+  "active",
+  "in-progress",
+  "in_progress",
+  "wip",
+  "ongoing",
+  "doing",
+]);
 const BLOCKED_LIFECYCLES = new Set(["blocked", "on-hold", "on_hold", "stuck", "waiting"]);
-const NEXT_LIFECYCLES = new Set(["next", "todo", "to-do", "planned", "queued", "upcoming", "backlog"]);
+const NEXT_LIFECYCLES = new Set([
+  "next",
+  "todo",
+  "to-do",
+  "planned",
+  "queued",
+  "upcoming",
+  "backlog",
+]);
 
 export const BUCKET_LIFECYCLE: Record<string, string> = {
   active: "active",
@@ -26,7 +41,12 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
     .filter((doc) => !isArchivedDoc(doc))
     .filter(isProjectDoc)
     .forEach((doc) => {
-      const parsed = parseProjectData(doc.frontmatter || {}, doc.content || "", doc.path, doc.title);
+      const parsed = parseProjectData(
+        doc.frontmatter || {},
+        doc.content || "",
+        doc.path,
+        doc.title,
+      );
       const { manifest, sections, explicitPaths } = parsed;
       if (!manifest.projectId) return;
 
@@ -62,7 +82,13 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
         manifest.status ??
         ""
       ).toLowerCase();
-      const eligiblePaths = buildEligiblePaths(docs, doc, manifest.projectId, manifest.sourceRoots, keyDocuments);
+      const eligiblePaths = buildEligiblePaths(
+        docs,
+        doc,
+        manifest.projectId,
+        manifest.sourceRoots,
+        keyDocuments,
+      );
       const projectCore = {
         id: manifest.projectId,
         baseId: manifest.projectId,
@@ -136,23 +162,21 @@ function buildProjectGlance(project) {
     activeDecisions: project.activeDecisions
       .slice(0, 2)
       .map((item) => compactProjectText(item, 150)),
-    openQuestions: project.openQuestions
-      .slice(0, 2)
-      .map((item) => compactProjectText(item, 150)),
-    nextActions: project.nextActions
-      .slice(0, 3)
-      .map((item) => compactProjectText(item, 160)),
+    openQuestions: project.openQuestions.slice(0, 2).map((item) => compactProjectText(item, 150)),
+    nextActions: project.nextActions.slice(0, 3).map((item) => compactProjectText(item, 160)),
   };
 }
 
 export function buildOpenQuestionItems(docs) {
   const openQuestionsDoc = docs.find((doc) => doc.path === "kb/open_questions.md");
   if (!openQuestionsDoc) return [];
-  return listItems(openQuestionsDoc.content).slice(0, 6).map((label, index) => ({
-    id: `open-question-${index}`,
-    label,
-    path: openQuestionsDoc.path,
-  }));
+  return listItems(openQuestionsDoc.content)
+    .slice(0, 6)
+    .map((label, index) => ({
+      id: `open-question-${index}`,
+      label,
+      path: openQuestionsDoc.path,
+    }));
 }
 
 export function getActiveProject(projectSummaries, selectedProjectId) {
@@ -214,13 +238,17 @@ function isProjectDoc(doc): boolean {
   if (/^(?:demo-kb|kb)\/projects\/[^/]+\/project\.md$/.test(doc.path || "")) return true;
   const explicitType = doc.frontmatter?.type;
   if (explicitType && explicitType !== "project") return false;
-  return ["Current status", "Current focus", "Next 3 actions", "Next actions", "Blockers"].some((heading) =>
-    new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "m").test(doc.content || ""),
+  return ["Current status", "Current focus", "Next 3 actions", "Next actions", "Blockers"].some(
+    (heading) => new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "m").test(doc.content || ""),
   );
 }
 
 function isArchivedDoc(doc): boolean {
-  return doc.path?.includes("/archive/") || doc.frontmatter?.type === "redirect" || doc.frontmatter?.status === "merged";
+  return (
+    doc.path?.includes("/archive/") ||
+    doc.frontmatter?.type === "redirect" ||
+    doc.frontmatter?.status === "merged"
+  );
 }
 
 function getProjectStatusBucket(project): string {
@@ -246,12 +274,12 @@ function projectRecordScore(doc): number {
 function buildEligiblePaths(docs, projectDoc, projectId, sourceRoots, keyDocuments): string[] {
   return unique([
     projectDoc.path,
-    ...docs
-      .filter((doc) => doc.frontmatter?.project_id === projectId)
-      .map((doc) => doc.path),
+    ...docs.filter((doc) => doc.frontmatter?.project_id === projectId).map((doc) => doc.path),
     ...docs
       .filter((doc) =>
-        sourceRoots.some((root) => doc.path === root || doc.path.startsWith(`${root.replace(/\/+$/, "")}/`)),
+        sourceRoots.some(
+          (root) => doc.path === root || doc.path.startsWith(`${root.replace(/\/+$/, "")}/`),
+        ),
       )
       .map((doc) => doc.path),
     ...keyDocuments,
@@ -285,7 +313,7 @@ function calculateProjectProgress(content: string) {
   for (const line of lines) {
     const match = line.match(taskRegex);
     if (!match) continue;
-    const markerMatch = match[2].match(/[\[\(](XS|S|M|L|XL)[\]\)]$/i);
+    const markerMatch = match[2].match(/[[(](XS|S|M|L|XL)[\])]$/i);
     const weight = markerMatch ? weightMap[markerMatch[1].toUpperCase()] || 1 : 1;
     totalWeight += weight;
     if (match[1].trim().toLowerCase() === "x") completedWeight += weight;

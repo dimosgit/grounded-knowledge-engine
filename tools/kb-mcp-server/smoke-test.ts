@@ -52,7 +52,10 @@ const child = spawn(process.execPath, serverArgs, {
 
 let stdoutBuffer = Buffer.alloc(0);
 let nextId = 1;
-const pending = new Map<number, { resolve: (result: any) => void; reject: (error: Error) => void }>();
+const pending = new Map<
+  number,
+  { resolve: (result: any) => void; reject: (error: Error) => void }
+>();
 
 child.stdout.on("data", (chunk) => {
   stdoutBuffer = Buffer.concat([stdoutBuffer, chunk]);
@@ -163,7 +166,11 @@ try {
   assert.ok(resources.resources.some((resource: any) => resource.uri === "gke://workspace/info"));
 
   const resourceTemplates = await request("resources/templates/list", {});
-  assert.ok(resourceTemplates.resourceTemplates.some((resource: any) => resource.uriTemplate === "gke://record/{path}"));
+  assert.ok(
+    resourceTemplates.resourceTemplates.some(
+      (resource: any) => resource.uriTemplate === "gke://record/{path}",
+    ),
+  );
   assert.ok(
     resourceTemplates.resourceTemplates.some(
       (resource: any) => resource.uriTemplate === "gke://project/{projectId}/context",
@@ -212,7 +219,11 @@ try {
   assert.equal(resumed.structuredContent?.projectId, "project-tracking");
   assert.match(resumed.structuredContent?.currentFocus || "", /router demo/i);
   assert.equal(resumed.structuredContent?.nextThreeActions?.length, 3);
-  assert.ok(resumed.structuredContent?.citations?.every((citation: any) => citation.path && citation.line > 0));
+  assert.ok(
+    resumed.structuredContent?.citations?.every(
+      (citation: any) => citation.path && citation.line > 0,
+    ),
+  );
 
   const projectResource = await request("resources/read", {
     uri: "gke://project/project-tracking/context",
@@ -326,7 +337,10 @@ try {
   assert.equal(answerAndCaptureNote.structuredContent?.strategy, "note");
   assert.equal(answerAndCaptureNote.structuredContent?.capture?.dryRun, false);
   assert.equal(answerAndCaptureNote.structuredContent?.capture?.kind, "topic");
-  assert.equal(answerAndCaptureNote.structuredContent?.capture?.path, "kb/topics/mcp-primitive-decision.md");
+  assert.equal(
+    answerAndCaptureNote.structuredContent?.capture?.path,
+    "kb/topics/mcp-primitive-decision.md",
+  );
   assert.equal(typeof answerAndCaptureNote.structuredContent?.timings?.retrievalMs, "number");
   assert.equal(typeof answerAndCaptureNote.structuredContent?.timings?.synthesisMs, "number");
   assert.equal(typeof answerAndCaptureNote.structuredContent?.timings?.captureMs, "number");
@@ -352,7 +366,8 @@ try {
       allowDirect: true,
     },
   });
-  const retainedCitationPaths = retained.structuredContent?.citations?.map((citation: any) => citation.path) || [];
+  const retainedCitationPaths =
+    retained.structuredContent?.citations?.map((citation: any) => citation.path) || [];
   assert.ok(retainedCitationPaths.includes("kb/topics/mcp-primitive-decision.md"));
 
   const answerAndCaptureOpen = await request("tools/call", {
