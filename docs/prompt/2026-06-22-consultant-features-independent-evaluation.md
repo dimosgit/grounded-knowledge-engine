@@ -73,9 +73,13 @@ Proposed capabilities:
 
 Important nuance: this is not simply “show the project and quick glance.” The Cockpit already has a useful presentation, but the project model is not yet a first-class shared core contract. Today, another MCP client cannot reliably request the same structured project state or export a deterministic handoff.
 
-Full plan:
+Implemented surface:
 
-- `docs/prompt/2026-06-21-project-context-api.md`
+- `tools/projects/`
+- `tools/kb-mcp-server/`
+- `apps/cockpit/src/domain/projects.ts`
+- `apps/cockpit/src/views/ProjectDetailView.tsx`
+- `demo-kb/projects/`
 
 #### Proposal 2: Workspace Vaults and Leakage Guard
 

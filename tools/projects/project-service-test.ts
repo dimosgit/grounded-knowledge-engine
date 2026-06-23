@@ -315,6 +315,17 @@ Duplicate.
     const invalidResult = await runCli(["create", "Bad Project", "--repo-root", cliRoot]);
     assert.equal(invalidResult.code, 1);
     assert.match(invalidResult.stderr, /canonical lowercase slug/);
+
+    const unknownOptionResult = await runCli([
+      "update",
+      "cli-project",
+      "--repo-root",
+      cliRoot,
+      "--focus",
+      "This typo must not be ignored.",
+    ]);
+    assert.equal(unknownOptionResult.code, 1);
+    assert.match(unknownOptionResult.stderr, /Unknown option for 'update': --focus/);
   } finally {
     await fs.rm(cliRoot, { recursive: true, force: true });
   }
