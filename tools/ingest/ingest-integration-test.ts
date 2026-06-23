@@ -24,8 +24,16 @@ async function seedSandboxKb(repoRoot: string): Promise<void> {
   const kb = path.join(repoRoot, "kb");
   await fs.mkdir(path.join(kb, "topics"), { recursive: true });
   await fs.mkdir(path.join(kb, "terms"), { recursive: true });
-  await fs.writeFile(path.join(kb, "index.md"), "# Sandbox KB\n\nThrowaway KB for the ingestion test.\n", "utf8");
-  await fs.writeFile(path.join(kb, "terms", "RAP.md"), "# RAP\n\nSeed evidence so the index is non-empty.\n", "utf8");
+  await fs.writeFile(
+    path.join(kb, "index.md"),
+    "# Sandbox KB\n\nThrowaway KB for the ingestion test.\n",
+    "utf8",
+  );
+  await fs.writeFile(
+    path.join(kb, "terms", "RAP.md"),
+    "# RAP\n\nSeed evidence so the index is non-empty.\n",
+    "utf8",
+  );
 }
 
 function runIngestCli(repoRoot: string): Promise<number> {
@@ -34,7 +42,12 @@ function runIngestCli(repoRoot: string): Promise<number> {
       process.execPath,
       ["--import", "tsx", ingestEntry, fixturesDir, "--module", "general"],
       {
-        env: { ...process.env, KB_MCP_REPO_ROOT: repoRoot, KB_MCP_SCAN_ROOTS: "kb", KB_MCP_LOG_LEVEL: "error" },
+        env: {
+          ...process.env,
+          KB_MCP_REPO_ROOT: repoRoot,
+          KB_MCP_SCAN_ROOTS: "kb",
+          KB_MCP_LOG_LEVEL: "error",
+        },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -104,17 +117,25 @@ async function main(): Promise<void> {
         allowDirect: true,
       });
       const citations = (grounded.structuredContent?.citations || []) as any[];
-      assert.ok(citations.length > 0, `[${format}] grounded answer produced no citations for ${token}.`);
+      assert.ok(
+        citations.length > 0,
+        `[${format}] grounded answer produced no citations for ${token}.`,
+      );
 
       let citedWithToken = false;
       for (const citation of citations) {
         const cited = await fs.readFile(path.join(repoRoot, citation.path), "utf8").catch(() => "");
-        if (cited.includes(token)) { citedWithToken = true; break; }
+        if (cited.includes(token)) {
+          citedWithToken = true;
+          break;
+        }
       }
       assert.ok(citedWithToken, `[${format}] no cited note actually contains ${token}.`);
     }
 
-    console.log("Ingestion integration test passed (PDF/DOCX/XLSX -> grounded & cited; secrets scrubbed).");
+    console.log(
+      "Ingestion integration test passed (PDF/DOCX/XLSX -> grounded & cited; secrets scrubbed).",
+    );
   } finally {
     if (serverChild) serverChild.kill("SIGTERM");
     await fs.rm(repoRoot, { recursive: true, force: true });

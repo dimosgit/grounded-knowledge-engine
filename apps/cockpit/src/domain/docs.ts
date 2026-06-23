@@ -74,8 +74,28 @@ export const trackDisplay = {
   },
 };
 
-export const tagOrder = ["all", "projects", "sources", "modules", "clients", "terms", "topics", "digests", "kb", "readme", "other"];
-export const learningItemOrder = ["all", "module", "canonical", "concept", "review", "reference", "archive"];
+export const tagOrder = [
+  "all",
+  "projects",
+  "sources",
+  "modules",
+  "clients",
+  "terms",
+  "topics",
+  "digests",
+  "kb",
+  "readme",
+  "other",
+];
+export const learningItemOrder = [
+  "all",
+  "module",
+  "canonical",
+  "concept",
+  "review",
+  "reference",
+  "archive",
+];
 export const trackOrder = [
   "demo",
   "ai",
@@ -90,9 +110,7 @@ export const trackOrder = [
 ];
 
 export function toPrettyLabel(value) {
-  return value
-    .replace(/[-_]/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return value.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function toSlug(value) {
@@ -140,11 +158,7 @@ export function getExcerpt(body) {
     .split("\n")
     .map((item) => item.trim())
     .find(
-      (item) =>
-        item &&
-        !item.startsWith("#") &&
-        !item.startsWith("- ") &&
-        !item.startsWith("* "),
+      (item) => item && !item.startsWith("#") && !item.startsWith("- ") && !item.startsWith("* "),
     );
 
   if (!line) return "No summary line found.";
@@ -181,7 +195,8 @@ export function getSection(path) {
 }
 
 export function getDocType(path, title, content, frontmatter: any = {}) {
-  if (frontmatter.record_type === "project" || /^kb\/projects\/[^/]+\/project\.md$/.test(path)) return "project";
+  if (frontmatter.record_type === "project" || /^kb\/projects\/[^/]+\/project\.md$/.test(path))
+    return "project";
   if (frontmatter.record_type === "source" || path.startsWith("kb/sources/")) return "source";
   if (path.startsWith("kb/modules/")) return "module";
   if (path.startsWith("kb/clients/")) return "client";
@@ -259,9 +274,11 @@ export function getDocBadge(docType) {
 }
 
 export function getDocGuidance(docType) {
-  if (docType === "module") return "Module page: use this as your navigation and consolidation hub.";
+  if (docType === "module")
+    return "Module page: use this as your navigation and consolidation hub.";
   if (docType === "client") return "Client page: use this as the client-specific navigation hub.";
-  if (docType === "project") return "Project record: canonical current state used by MCP and the Project Board.";
+  if (docType === "project")
+    return "Project record: canonical current state used by MCP and the Project Board.";
   if (docType === "source") return "Source record: imported or curated evidence with provenance.";
   if (docType === "canonical") return "Canonical note: this is the primary source for this topic.";
   if (docType === "merged") return "Merged stub: historical note, redirected to a canonical page.";
@@ -397,7 +414,8 @@ export function getMarkdownSection(content, heading) {
     const currentHeading = headingMatches[index][1].trim();
     if (currentHeading !== heading) continue;
     const start = headingMatches[index].index + headingMatches[index][0].length;
-    const end = index + 1 < headingMatches.length ? headingMatches[index + 1].index : content.length;
+    const end =
+      index + 1 < headingMatches.length ? headingMatches[index + 1].index : content.length;
     return content.slice(start, end);
   }
   return "";
@@ -431,7 +449,8 @@ function getMarkdownSubsection(content, heading) {
     const currentHeading = headingMatches[index][1].trim();
     if (currentHeading !== heading) continue;
     const start = headingMatches[index].index + headingMatches[index][0].length;
-    const end = index + 1 < headingMatches.length ? headingMatches[index + 1].index : content.length;
+    const end =
+      index + 1 < headingMatches.length ? headingMatches[index + 1].index : content.length;
     return content.slice(start, end);
   }
   return "";
@@ -442,7 +461,9 @@ export function buildQuickRecall(content) {
   if (!quickRecall) return null;
 
   const atGlance = getSectionBullets(getMarkdownSubsection(quickRecall, "At a glance")).slice(0, 4);
-  const nextSteps = getSectionBullets(getMarkdownSubsection(quickRecall, "Next starting point")).slice(0, 3);
+  const nextSteps = getSectionBullets(
+    getMarkdownSubsection(quickRecall, "Next starting point"),
+  ).slice(0, 3);
 
   if (!atGlance.length && !nextSteps.length) return null;
   return { atGlance, nextSteps };
@@ -454,15 +475,21 @@ export function stripMarkdownSection(content, heading) {
     const currentHeading = headingMatches[index][1].trim();
     if (currentHeading !== heading) continue;
     const start = headingMatches[index].index;
-    const end = index + 1 < headingMatches.length ? headingMatches[index + 1].index : content.length;
+    const end =
+      index + 1 < headingMatches.length ? headingMatches[index + 1].index : content.length;
     return `${content.slice(0, start)}${content.slice(end)}`.replace(/\n{3,}/g, "\n\n");
   }
   return content;
 }
 
 export function buildDigestQuickView(content) {
-  const weekAtGlance = getSectionBullets(getMarkdownSection(content, "Week at a glance")).slice(0, 5);
-  const nextSteps = getSectionBullets(getMarkdownSection(content, "Next session starting point")).slice(0, 3);
+  const weekAtGlance = getSectionBullets(getMarkdownSection(content, "Week at a glance")).slice(
+    0,
+    5,
+  );
+  const nextSteps = getSectionBullets(
+    getMarkdownSection(content, "Next session starting point"),
+  ).slice(0, 3);
   const fastLinks = getSectionLinks(getMarkdownSection(content, "Fast links")).slice(0, 10);
 
   if (!weekAtGlance.length && !nextSteps.length && !fastLinks.length) {
@@ -495,7 +522,9 @@ export function resolveMarkdownDocPath(currentPath, href) {
   const cleanHref = href.split("#")[0].split("?")[0];
   if (!cleanHref.endsWith(".md")) return null;
 
-  const currentDir = currentPath.includes("/") ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1) : "";
+  const currentDir = currentPath.includes("/")
+    ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1)
+    : "";
 
   if (cleanHref.startsWith("/")) {
     const absolute = normalizeDocPath(cleanHref.slice(1));
@@ -509,14 +538,21 @@ export function resolveMarkdownDocPath(currentPath, href) {
 }
 
 export function isExternalResource(target) {
-  return /^https?:\/\//i.test(target) || /^\/\//.test(target) || target.startsWith("data:") || target.startsWith("blob:");
+  return (
+    /^https?:\/\//i.test(target) ||
+    /^\/\//.test(target) ||
+    target.startsWith("data:") ||
+    target.startsWith("blob:")
+  );
 }
 
 export function resolveMarkdownAssetPath(currentPath, src) {
   if (!src) return src;
   if (isExternalResource(src)) return src;
 
-  const currentDir = currentPath.includes("/") ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1) : "";
+  const currentDir = currentPath.includes("/")
+    ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1)
+    : "";
 
   if (src.startsWith("/")) {
     const absolute = normalizeDocPath(src.slice(1));

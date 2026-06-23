@@ -24,11 +24,26 @@ const PROGRESS_PHASE = {
 };
 
 const STATUS_PILL = {
-  active: { label: "Active", className: "border-status-done/30 bg-status-done/10 text-status-done" },
-  blocked: { label: "Blocked", className: "border-status-blocked/30 bg-status-blocked/10 text-status-blocked" },
-  next: { label: "Queued", className: "border-status-waiting/30 bg-status-waiting/10 text-status-waiting" },
-  done: { label: "Completed", className: "border-status-done/30 bg-status-done/10 text-status-done" },
-  reference: { label: "Reference", className: "border-outline-variant bg-surface-container-high text-on-surface-variant" },
+  active: {
+    label: "Active",
+    className: "border-status-done/30 bg-status-done/10 text-status-done",
+  },
+  blocked: {
+    label: "Blocked",
+    className: "border-status-blocked/30 bg-status-blocked/10 text-status-blocked",
+  },
+  next: {
+    label: "Queued",
+    className: "border-status-waiting/30 bg-status-waiting/10 text-status-waiting",
+  },
+  done: {
+    label: "Completed",
+    className: "border-status-done/30 bg-status-done/10 text-status-done",
+  },
+  reference: {
+    label: "Reference",
+    className: "border-outline-variant bg-surface-container-high text-on-surface-variant",
+  },
 };
 
 export function ProjectDetailView({
@@ -65,7 +80,14 @@ export function ProjectDetailView({
     <OperatorFrame
       activeView="projects"
       title={activeProject?.title || "Project Context"}
-      commandBar={<CommandBar items={docs} isOpen={commandBarOpen} onOpenChange={onCommandBarOpenChange} onSelect={onCommandSelect} />}
+      commandBar={
+        <CommandBar
+          items={docs}
+          isOpen={commandBarOpen}
+          onOpenChange={onCommandBarOpenChange}
+          onSelect={onCommandSelect}
+        />
+      }
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
@@ -79,23 +101,43 @@ export function ProjectDetailView({
               {(() => {
                 const pill = STATUS_PILL[activeProject?.statusBucket] || STATUS_PILL.reference;
                 return (
-                  <span className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-label-caps uppercase ${pill.className}`}>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-label-caps uppercase ${pill.className}`}
+                  >
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
                     {pill.label}
                   </span>
                 );
               })()}
-              <span className="text-metadata text-on-surface-variant">{activeProject?.updated ? `Last updated ${activeProject.updated}` : "Live project context"}</span>
+              <span className="text-metadata text-on-surface-variant">
+                {activeProject?.updated
+                  ? `Last updated ${activeProject.updated}`
+                  : "Live project context"}
+              </span>
             </div>
-            <h1 className="font-display text-display-lg text-on-surface">{activeProject?.title || "Project Context"}</h1>
+            <h1 className="font-display text-display-lg text-on-surface">
+              {activeProject?.title || "Project Context"}
+            </h1>
           </div>
           {activeProject && (
             <div className="flex flex-wrap gap-2">
-              <button className="flex items-center gap-2 rounded border border-border-subtle bg-surface-container px-4 py-2 text-label-caps font-semibold uppercase text-on-surface hover:border-primary" type="button" onClick={copyHandoff}>
+              <button
+                className="flex items-center gap-2 rounded border border-border-subtle bg-surface-container px-4 py-2 text-label-caps font-semibold uppercase text-on-surface hover:border-primary"
+                type="button"
+                onClick={copyHandoff}
+              >
                 <ClipboardCopy size={16} />
-                {handoffCopyState === "copied" ? "Copied" : handoffCopyState === "failed" ? "Retry Copy" : "Copy Handoff"}
+                {handoffCopyState === "copied"
+                  ? "Copied"
+                  : handoffCopyState === "failed"
+                    ? "Retry Copy"
+                    : "Copy Handoff"}
               </button>
-              <button className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary" type="button" onClick={() => onOpenDoc(activeProject.sourceDocPath)}>
+              <button
+                className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary"
+                type="button"
+                onClick={() => onOpenDoc(activeProject.sourceDocPath)}
+              >
                 <FileText size={16} />
                 Open Source Doc
               </button>
@@ -154,13 +196,20 @@ export function ProjectDetailView({
                 <BarChart3 size={18} className="text-track-ai" />
               </div>
               <>
-                <div className="font-display text-headline-md text-on-surface">{progressPhase.label}</div>
+                <div className="font-display text-headline-md text-on-surface">
+                  {progressPhase.label}
+                </div>
                 {typeof progressPercent === "number" ? (
                   <>
                     <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
-                      <div className="h-full rounded-full bg-track-ai" style={{ width: `${progressPercent}%` }} />
+                      <div
+                        className="h-full rounded-full bg-track-ai"
+                        style={{ width: `${progressPercent}%` }}
+                      />
                     </div>
-                    <div className="mt-2 text-metadata text-on-surface-variant">{progressPercent}% complete</div>
+                    <div className="mt-2 text-metadata text-on-surface-variant">
+                      {progressPercent}% complete
+                    </div>
                   </>
                 ) : (
                   <div className="mt-3 text-metadata text-on-surface-variant">
@@ -178,33 +227,51 @@ export function ProjectDetailView({
               <Sparkles size={18} className="text-primary" />
               Project context
             </span>
-            <span className="text-metadata font-normal text-on-surface-variant group-open:hidden">Show more</span>
-            <span className="hidden text-metadata font-normal text-on-surface-variant group-open:inline">Show less</span>
+            <span className="text-metadata font-normal text-on-surface-variant group-open:hidden">
+              Show more
+            </span>
+            <span className="hidden text-metadata font-normal text-on-surface-variant group-open:inline">
+              Show less
+            </span>
           </summary>
           <div className="grid gap-4 border-t border-border-subtle p-5 lg:grid-cols-2">
             <article>
               <div className="mb-2 text-metadata uppercase text-primary">Start here</div>
-              <p className="text-body-md text-on-surface">{activeProject?.startHereBrief || "No start-here brief recorded."}</p>
+              <p className="text-body-md text-on-surface">
+                {activeProject?.startHereBrief || "No start-here brief recorded."}
+              </p>
             </article>
             <article>
               <div className="mb-2 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
                 <History size={17} className="text-primary" />
                 Last meaningful change
               </div>
-              <p className="text-body-md text-on-surface">{activeProject?.recentChanges || "No recent change recorded."}</p>
+              <p className="text-body-md text-on-surface">
+                {activeProject?.recentChanges || "No recent change recorded."}
+              </p>
             </article>
             <article>
-              <div className="mb-2 text-metadata uppercase text-on-surface-variant">Active decisions</div>
+              <div className="mb-2 text-metadata uppercase text-on-surface-variant">
+                Active decisions
+              </div>
               <ul className="space-y-2 text-body-md text-on-surface">
-                {(activeProject?.activeDecisions?.length ? activeProject.activeDecisions : ["None recorded."]).map((item) => (
+                {(activeProject?.activeDecisions?.length
+                  ? activeProject.activeDecisions
+                  : ["None recorded."]
+                ).map((item) => (
                   <li key={item}>• {item}</li>
                 ))}
               </ul>
             </article>
             <article>
-              <div className="mb-2 text-metadata uppercase text-on-surface-variant">Open questions</div>
+              <div className="mb-2 text-metadata uppercase text-on-surface-variant">
+                Open questions
+              </div>
               <ul className="space-y-2 text-body-md text-on-surface">
-                {(activeProject?.openQuestions?.length ? activeProject.openQuestions : ["None recorded."]).map((item) => (
+                {(activeProject?.openQuestions?.length
+                  ? activeProject.openQuestions
+                  : ["None recorded."]
+                ).map((item) => (
                   <li key={item}>• {item}</li>
                 ))}
               </ul>
@@ -216,13 +283,22 @@ export function ProjectDetailView({
           <h2 className="mb-4 font-display text-headline-sm text-on-surface">Linked Resources</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {linkedDocs.map((doc) => (
-              <button key={doc.path} className="flex items-center gap-4 rounded-lg border border-border-subtle bg-surface-container p-4 text-left hover:border-primary" type="button" onClick={() => onOpenDoc(doc.path)}>
+              <button
+                key={doc.path}
+                className="flex items-center gap-4 rounded-lg border border-border-subtle bg-surface-container p-4 text-left hover:border-primary"
+                type="button"
+                onClick={() => onOpenDoc(doc.path)}
+              >
                 <div className="flex h-10 w-10 items-center justify-center rounded bg-primary/10 text-primary">
                   <FileText size={20} />
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate text-body-md font-semibold text-on-surface">{doc.title}</div>
-                  <div className="truncate font-mono text-code-sm text-on-surface-variant">{doc.path}</div>
+                  <div className="truncate text-body-md font-semibold text-on-surface">
+                    {doc.title}
+                  </div>
+                  <div className="truncate font-mono text-code-sm text-on-surface-variant">
+                    {doc.path}
+                  </div>
                 </div>
               </button>
             ))}

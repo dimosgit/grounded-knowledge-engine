@@ -219,7 +219,9 @@ export async function getProject(
 
   if (!matches.length) throw new Error(`Unknown project ID: ${projectId}`);
   if (matches.length > 1) {
-    throw new Error(`Duplicate project ID '${projectId}' found in: ${matches.map((item) => item.path).join(", ")}`);
+    throw new Error(
+      `Duplicate project ID '${projectId}' found in: ${matches.map((item) => item.path).join(", ")}`,
+    );
   }
   return matches[0];
 }
@@ -269,16 +271,23 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
   let content = loaded.raw;
   const frontmatterUpdates: Record<string, string> = {};
 
-  if (options.title !== undefined) frontmatterUpdates.title = requireNonEmpty(options.title, "title");
-  if (options.status !== undefined) frontmatterUpdates.status = requireNonEmpty(options.status, "status");
-  if (options.lifecycle !== undefined) frontmatterUpdates.lifecycle = normalizeLifecycle(options.lifecycle);
-  if (options.owner !== undefined) frontmatterUpdates.owner = requireNonEmpty(options.owner, "owner");
-  if (options.track !== undefined) frontmatterUpdates.track = requireNonEmpty(options.track, "track");
-  if (options.updated !== undefined) frontmatterUpdates.updated = validateDateInput(options.updated, "updated");
+  if (options.title !== undefined)
+    frontmatterUpdates.title = requireNonEmpty(options.title, "title");
+  if (options.status !== undefined)
+    frontmatterUpdates.status = requireNonEmpty(options.status, "status");
+  if (options.lifecycle !== undefined)
+    frontmatterUpdates.lifecycle = normalizeLifecycle(options.lifecycle);
+  if (options.owner !== undefined)
+    frontmatterUpdates.owner = requireNonEmpty(options.owner, "owner");
+  if (options.track !== undefined)
+    frontmatterUpdates.track = requireNonEmpty(options.track, "track");
+  if (options.updated !== undefined)
+    frontmatterUpdates.updated = validateDateInput(options.updated, "updated");
   if (options.reviewAfter !== undefined) {
     frontmatterUpdates.review_after = validateDateInput(options.reviewAfter, "reviewAfter");
   }
-  if (options.tags !== undefined) frontmatterUpdates.tags = normalizeCsvValues(options.tags).join(", ");
+  if (options.tags !== undefined)
+    frontmatterUpdates.tags = normalizeCsvValues(options.tags).join(", ");
   if (options.sourceRoots !== undefined) {
     frontmatterUpdates.source_roots = normalizeSourceRoots(options.sourceRoots).join(", ");
   }
@@ -326,7 +335,9 @@ export async function linkProjectSource(
   const projectDirectory = path.posix.dirname(loaded.path);
   let relativeTarget = path.posix.relative(projectDirectory, sourcePath);
   if (!relativeTarget.startsWith(".")) relativeTarget = `./${relativeTarget}`;
-  const label = cleanScalar(options.label) || titleFromProjectId(path.posix.basename(sourcePath, path.posix.extname(sourcePath)));
+  const label =
+    cleanScalar(options.label) ||
+    titleFromProjectId(path.posix.basename(sourcePath, path.posix.extname(sourcePath)));
   const markdownLink = `[${label}](${relativeTarget})`;
   const existing = loaded.parsed.sections.get("key-documents")?.content || "";
   const items = existing
@@ -352,12 +363,8 @@ async function validateLoadedProject(
 ): Promise<ProjectValidationIssue[]> {
   const issues: ProjectValidationIssue[] = [];
   const { frontmatter } = parseProjectFrontmatter(loaded.raw);
-  const add = (
-    severity: "error" | "warning",
-    code: string,
-    message: string,
-    field?: string,
-  ) => issues.push({ severity, code, message, path: loaded.path, field });
+  const add = (severity: "error" | "warning", code: string, message: string, field?: string) =>
+    issues.push({ severity, code, message, path: loaded.path, field });
 
   for (const field of REQUIRED_FRONTMATTER) {
     if (!cleanScalar(frontmatter[field])) {
@@ -365,13 +372,26 @@ async function validateLoadedProject(
     }
   }
   if (frontmatter.schema_version && frontmatter.schema_version !== "1") {
-    add("error", "unsupported-schema-version", "Only schema_version 1 is supported.", "schema_version");
+    add(
+      "error",
+      "unsupported-schema-version",
+      "Only schema_version 1 is supported.",
+      "schema_version",
+    );
   }
   if (frontmatter.record_type && frontmatter.record_type !== "project") {
     add("error", "invalid-record-type", "record_type must be 'project'.", "record_type");
   }
-  if (frontmatter.project_id && normalizeProjectId(frontmatter.project_id) !== frontmatter.project_id) {
-    add("error", "noncanonical-project-id", "project_id must be a lowercase canonical slug.", "project_id");
+  if (
+    frontmatter.project_id &&
+    normalizeProjectId(frontmatter.project_id) !== frontmatter.project_id
+  ) {
+    add(
+      "error",
+      "noncanonical-project-id",
+      "project_id must be a lowercase canonical slug.",
+      "project_id",
+    );
   }
   const folderId = canonicalProjectIdFromPath(loaded.path);
   if (folderId && folderId !== loaded.parsed.manifest.projectId) {
@@ -383,7 +403,12 @@ async function validateLoadedProject(
     );
   }
   if (duplicateCount > 1) {
-    add("error", "duplicate-project-id", `Project ID is declared by ${duplicateCount} project records.`, "project_id");
+    add(
+      "error",
+      "duplicate-project-id",
+      `Project ID is declared by ${duplicateCount} project records.`,
+      "project_id",
+    );
   }
   if (frontmatter.lifecycle && !VALID_LIFECYCLES.has(frontmatter.lifecycle)) {
     add(
@@ -410,7 +435,12 @@ async function validateLoadedProject(
       const candidates = equivalentWorkspacePaths(sourceRoot);
       const found = await anyWorkspacePathExists(repoRoot, candidates);
       if (!found) {
-        add("warning", "missing-source-root", `Configured source root does not exist: ${sourceRoot}`, "source_roots");
+        add(
+          "warning",
+          "missing-source-root",
+          `Configured source root does not exist: ${sourceRoot}`,
+          "source_roots",
+        );
       }
     } catch (error) {
       add("error", "unsafe-source-root", errorMessage(error), "source_roots");
@@ -545,7 +575,8 @@ function renderSectionValue(key: ProjectSectionKey, value: string | string[]): s
   if (Array.isArray(value)) {
     const items = value.map(cleanScalar).filter(Boolean);
     if (!items.length) return "- None recorded.";
-    if (key === "next-actions") return items.map((item, index) => `${index + 1}. ${item}`).join("\n");
+    if (key === "next-actions")
+      return items.map((item, index) => `${index + 1}. ${item}`).join("\n");
     return items.map((item) => (/^[-*]\s+/.test(item) ? item : `- ${item}`)).join("\n");
   }
   return value.trim() || (isListSection(key) ? "- None recorded." : "None recorded.");
@@ -580,7 +611,13 @@ function sectionHeading(key: ProjectSectionKey): string {
 }
 
 function isListSection(key: ProjectSectionKey): boolean {
-  return ["active-decisions", "blockers", "open-questions", "next-actions", "key-documents"].includes(key);
+  return [
+    "active-decisions",
+    "blockers",
+    "open-questions",
+    "next-actions",
+    "key-documents",
+  ].includes(key);
 }
 
 async function discoverProjectRecords(
@@ -642,7 +679,10 @@ async function atomicWrite(target: string, content: string): Promise<void> {
 }
 
 function normalizeWorkspaceRelativePath(value: string): string {
-  const normalized = cleanScalar(value).replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "");
+  const normalized = cleanScalar(value)
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/^\/+/, "");
   if (!normalized) throw new Error("Workspace-relative path is required.");
   if (normalized.split("/").some((part) => part === ".." || part === "")) {
     throw new Error(`Unsafe workspace-relative path: ${value}`);
@@ -655,7 +695,14 @@ function normalizeSourceRoots(values: string[]): string[] {
 }
 
 function normalizeCsvValues(values: string[]): string[] {
-  return [...new Set(values.flatMap((value) => value.split(",")).map(cleanScalar).filter(Boolean))];
+  return [
+    ...new Set(
+      values
+        .flatMap((value) => value.split(","))
+        .map(cleanScalar)
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function requireCanonicalProjectId(value: string): string {
@@ -663,7 +710,9 @@ function requireCanonicalProjectId(value: string): string {
   const normalized = normalizeProjectId(raw);
   if (!raw || !normalized) throw new Error("Project ID is required.");
   if (raw !== normalized) {
-    throw new Error(`Project ID must already be a canonical lowercase slug. Suggested: ${normalized}`);
+    throw new Error(
+      `Project ID must already be a canonical lowercase slug. Suggested: ${normalized}`,
+    );
   }
   return normalized;
 }
@@ -680,7 +729,8 @@ function lifecycleFromStatus(value: unknown): string {
   const status = cleanScalar(value).toLowerCase();
   if (status === "planned" || status === "next") return "next";
   if (status === "blocked") return "blocked";
-  if (["completed", "complete", "done", "shipped", "delivered"].includes(status)) return "completed";
+  if (["completed", "complete", "done", "shipped", "delivered"].includes(status))
+    return "completed";
   return "active";
 }
 

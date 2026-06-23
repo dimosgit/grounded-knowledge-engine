@@ -21,11 +21,26 @@ const TRACK_BADGE = {
 const TRACK_BADGE_DEFAULT = "border-primary/35 bg-primary/10 text-primary";
 
 const STATUS_BADGE = {
-  active: { label: "Active", className: "border-status-done/45 bg-status-done/10 text-status-done" },
-  blocked: { label: "Blocked", className: "border-status-blocked/45 bg-status-blocked/10 text-status-blocked" },
-  next: { label: "Queued", className: "border-status-waiting/45 bg-status-waiting/10 text-status-waiting" },
-  done: { label: "Completed", className: "border-status-done/45 bg-status-done/10 text-status-done" },
-  reference: { label: "Reference", className: "border-outline-variant bg-surface-container-high text-on-surface-variant" },
+  active: {
+    label: "Active",
+    className: "border-status-done/45 bg-status-done/10 text-status-done",
+  },
+  blocked: {
+    label: "Blocked",
+    className: "border-status-blocked/45 bg-status-blocked/10 text-status-blocked",
+  },
+  next: {
+    label: "Queued",
+    className: "border-status-waiting/45 bg-status-waiting/10 text-status-waiting",
+  },
+  done: {
+    label: "Completed",
+    className: "border-status-done/45 bg-status-done/10 text-status-done",
+  },
+  reference: {
+    label: "Reference",
+    className: "border-outline-variant bg-surface-container-high text-on-surface-variant",
+  },
 };
 
 export function ProjectCard({ project, onOpen, onMove }) {
@@ -65,10 +80,14 @@ export function ProjectCard({ project, onOpen, onMove }) {
               aria-hidden="true"
             />
           )}
-          <span className={`inline-flex max-w-full items-center rounded border px-2 py-0.5 font-mono text-code-sm uppercase ${trackClassName}`}>
+          <span
+            className={`inline-flex max-w-full items-center rounded border px-2 py-0.5 font-mono text-code-sm uppercase ${trackClassName}`}
+          >
             <span className="truncate">{project.trackLabel || project.track}</span>
           </span>
-          <span className={`inline-flex shrink-0 items-center rounded border px-2 py-0.5 font-mono text-code-sm uppercase ${status.className}`}>
+          <span
+            className={`inline-flex shrink-0 items-center rounded border px-2 py-0.5 font-mono text-code-sm uppercase ${status.className}`}
+          >
             {status.label}
           </span>
         </div>
@@ -76,7 +95,9 @@ export function ProjectCard({ project, onOpen, onMove }) {
           {project.updated || "live"}
         </span>
       </div>
-      <h3 className="mb-2 line-clamp-2 font-display text-body-md font-semibold text-on-surface">{project.title}</h3>
+      <h3 className="mb-2 line-clamp-2 font-display text-body-md font-semibold text-on-surface">
+        {project.title}
+      </h3>
       <p className="mb-3 line-clamp-2 text-metadata leading-5 text-on-surface-variant">
         {project.glance?.startHere || project.currentStatus}
       </p>
@@ -99,7 +120,11 @@ export function ProjectCard({ project, onOpen, onMove }) {
         {canMove && (
           <label className="relative ml-auto flex items-center text-on-surface-variant opacity-0 transition-opacity duration-150 hover:text-on-surface group-hover:opacity-100 focus-within:opacity-100">
             <span className="sr-only">Move {project.title} to lane</span>
-            <ArrowRightLeft size={14} className="pointer-events-none absolute left-2" aria-hidden="true" />
+            <ArrowRightLeft
+              size={14}
+              className="pointer-events-none absolute left-2"
+              aria-hidden="true"
+            />
             <select
               className="cursor-pointer appearance-none rounded-md bg-transparent py-1 pl-7 pr-2 text-code-sm text-current hover:bg-surface-container focus:bg-surface-container focus:outline-none focus:ring-1 focus:ring-primary"
               value={project.statusBucket}

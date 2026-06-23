@@ -7,13 +7,21 @@ import { spawnKbServer } from "../kb-mcp-server/mcp-client.js";
 import { formatTechnicalPeerHandoff, resumeProject } from "./index.js";
 
 const publicRepoRoot = process.cwd();
-const canonicalDemo = await resumeProject({ projectId: "router-rollout" }, publicRepoRoot, ["demo-kb", "kb"]);
+const canonicalDemo = await resumeProject({ projectId: "router-rollout" }, publicRepoRoot, [
+  "demo-kb",
+  "kb",
+]);
 assert.equal(canonicalDemo.structured.title, "Router Rollout");
 assert.match(canonicalDemo.structured.currentFocus, /project-resume capsule/i);
-assert.ok(canonicalDemo.structured.keyDocuments.includes("demo-kb/sources/router-rollout/evidence.md"));
+assert.ok(
+  canonicalDemo.structured.keyDocuments.includes("demo-kb/sources/router-rollout/evidence.md"),
+);
 assert.ok(!canonicalDemo.contentText.includes("transport project"));
 
-const legacyDemo = await resumeProject({ projectId: "project-tracking" }, publicRepoRoot, ["demo-kb", "kb"]);
+const legacyDemo = await resumeProject({ projectId: "project-tracking" }, publicRepoRoot, [
+  "demo-kb",
+  "kb",
+]);
 assert.equal(legacyDemo.structured.title, "Router Project Board");
 assert.equal(legacyDemo.structured.nextThreeActions.length, 3);
 
@@ -136,8 +144,15 @@ Completed.
   ]);
   assert.ok(alpha.structured.keyDocuments.includes("kb/sources/client-alpha/evidence.md"));
   assert.ok(!alpha.contentText.includes("Beta-only"));
-  assert.ok(alpha.structured.citations.every((citation) => citation.path === "kb/projects/client-alpha/project.md"));
-  assert.match(formatTechnicalPeerHandoff(alpha.structured), /Technical handoff: Client Alpha Rollout/);
+  assert.ok(
+    alpha.structured.citations.every(
+      (citation) => citation.path === "kb/projects/client-alpha/project.md",
+    ),
+  );
+  assert.match(
+    formatTechnicalPeerHandoff(alpha.structured),
+    /Technical handoff: Client Alpha Rollout/,
+  );
 
   const completed = await resumeProject({ projectId: "completed-project" }, root, ["kb"]);
   assert.deepEqual(completed.structured.blockersAndQuestions, []);

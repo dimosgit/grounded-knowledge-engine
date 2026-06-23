@@ -112,7 +112,8 @@ export function OperatorFrame({
         <nav className="flex flex-1 flex-col gap-1" aria-label="Mobile operator views">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.key === activeView || (item.key === "library" && activeView === "doc");
+            const isActive =
+              item.key === activeView || (item.key === "library" && activeView === "doc");
             return (
               <button
                 key={item.key}
@@ -134,11 +135,19 @@ export function OperatorFrame({
         </nav>
 
         <div className="mt-auto flex flex-col gap-1 border-t border-border-subtle pt-4">
-          <button className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45" disabled type="button">
+          <button
+            className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45"
+            disabled
+            type="button"
+          >
             <HelpCircle size={20} />
             Support
           </button>
-          <button className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45" disabled type="button">
+          <button
+            className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45"
+            disabled
+            type="button"
+          >
             <Archive size={20} />
             Archive
           </button>
@@ -149,7 +158,9 @@ export function OperatorFrame({
           isNavCollapsed ? "w-[88px] px-3" : "w-[280px] px-4"
         }`}
       >
-        <div className={`mb-8 flex gap-3 ${isNavCollapsed ? "flex-col items-center px-0" : "items-center px-2"}`}>
+        <div
+          className={`mb-8 flex gap-3 ${isNavCollapsed ? "flex-col items-center px-0" : "items-center px-2"}`}
+        >
           <button
             type="button"
             className={`flex items-center gap-3 rounded py-1 text-left transition hover:bg-surface-container-high ${
@@ -195,7 +206,8 @@ export function OperatorFrame({
         <nav className="flex flex-1 flex-col gap-1" aria-label="Operator views">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.key === activeView || (item.key === "library" && activeView === "doc");
+            const isActive =
+              item.key === activeView || (item.key === "library" && activeView === "doc");
             return (
               <button
                 key={item.key}
@@ -246,7 +258,9 @@ export function OperatorFrame({
         </div>
       </aside>
 
-      <main className={`min-h-screen transition-[margin] duration-200 ${isNavCollapsed ? "md:ml-[88px]" : "md:ml-[280px]"}`}>
+      <main
+        className={`min-h-screen transition-[margin] duration-200 ${isNavCollapsed ? "md:ml-[88px]" : "md:ml-[280px]"}`}
+      >
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border-subtle bg-background/90 px-4 backdrop-blur md:px-8">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
@@ -257,12 +271,20 @@ export function OperatorFrame({
             >
               <Menu size={19} />
             </button>
-            <div className="truncate font-display text-headline-md font-semibold text-on-background">{title}</div>
+            <div className="truncate font-display text-headline-md font-semibold text-on-background">
+              {title}
+            </div>
           </div>
           <div className="mx-6 hidden shrink-0 items-center gap-5 text-label-caps uppercase text-on-surface-variant lg:flex">
-            <button type="button" className="hover:text-primary">Recent</button>
-            <button type="button" className="cursor-not-allowed opacity-45" disabled>Pinned</button>
-            <button type="button" className="cursor-not-allowed opacity-45" disabled>Shared</button>
+            <button type="button" className="hover:text-primary">
+              Recent
+            </button>
+            <button type="button" className="cursor-not-allowed opacity-45" disabled>
+              Pinned
+            </button>
+            <button type="button" className="cursor-not-allowed opacity-45" disabled>
+              Shared
+            </button>
           </div>
           <div className="flex shrink-0 items-center gap-3 text-primary">
             <button
@@ -273,7 +295,9 @@ export function OperatorFrame({
             >
               <Search size={16} className="shrink-0" />
               <span className="hidden text-body-md md:inline">Quick Search</span>
-              <span className="hidden rounded border border-border-subtle bg-surface-container-high px-1.5 py-0.5 font-mono text-[11px] lg:inline-block">⌘ K</span>
+              <span className="hidden rounded border border-border-subtle bg-surface-container-high px-1.5 py-0.5 font-mono text-[11px] lg:inline-block">
+                ⌘ K
+              </span>
             </button>
             <History size={20} className="hidden shrink-0 md:block" />
             <UserCircle size={22} className="shrink-0" />
