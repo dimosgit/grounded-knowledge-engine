@@ -29,6 +29,7 @@
     "test:ingest": "tsx tools/ingest/ingest-integration-test.ts",
     "test:gke": "npm run test:mcp:catalog && npm run test:mcp:transport && npm run test:projects && npm run test:project-service && npm run test:document-core && npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run eval",
     "project": "tsx tools/projects/cli.ts",
+    "export:demo-projects": "tsx tools/projects/export-demo.ts",
     "ingest": "tsx tools/ingest/ingest.ts",
     "ingest:fixtures": "tsx tools/ingest/fixtures/make-fixtures.ts",
     "scrub": "bash scripts/scrub-gate.sh"

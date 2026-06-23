@@ -132,6 +132,21 @@ Every advertised tool has a formal output schema and MCP safety annotations.
 Catalog character and tool-count budgets are enforced by
 `npm run test:mcp:catalog`.
 
+### Thin agent skill
+
+The provider-neutral
+[`grounded-knowledge-workflow`](skills/grounded-knowledge-workflow/SKILL.md)
+skill teaches an agent when to search local evidence, resume a project, retain
+durable knowledge, or use the deterministic project CLI. It contains policy
+only; all retrieval, citations, scoping, and writes remain in the shared engine.
+
+Agents that support the Agent Skills layout can load the folder directly. For a
+personal Codex installation, copy it into the local skill directory:
+
+```bash
+cp -R skills/grounded-knowledge-workflow ~/.codex/skills/
+```
+
 > The local server emits newline-delimited JSON over standard input/output. It
 > is not a remote HTTP service. The transport also accepts legacy
 > `Content-Length` input frames for compatibility, but generated client
@@ -224,6 +239,18 @@ links. Controlled updates preserve unknown frontmatter and body sections.
 Direct editing remains supported. A manually created canonical record under
 `kb/projects/<project-id>/project.md` is discovered by the CLI, Cockpit, and
 `kb.resume_project` in the same way as a generated record.
+
+To recreate the repository's demo as a standalone, portable workspace through
+the same CLI:
+
+```bash
+npm run export:demo-projects
+npm run project -- validate --repo-root examples/demo-project-workspace
+```
+
+The generated [`examples/demo-project-workspace`](examples/demo-project-workspace)
+uses `kb/projects`, `kb/sources`, and `kb/topics` without duplicating IDs in the
+main workspace.
 
 ## Operator Cockpit
 

@@ -1,7 +1,7 @@
 # Consultant Features — Implementation Roadmap
 
-**Status:** Planned. **Repository:** Grounded Knowledge Engine.
-**Last updated:** 2026-06-22.
+**Status:** In progress — Project Context delivered. **Repository:** Grounded Knowledge Engine.
+**Last updated:** 2026-06-23.
 
 ## Product goal
 
@@ -11,7 +11,7 @@ clients, projects, agents, and Microsoft development environments.
 
 The roadmap contains three connected features:
 
-1. [Project Context API](2026-06-21-project-context-api.md)
+1. [Project Context](../../README.md#structured-project-context) — implemented
 2. [Workspace Vaults and Leakage Guard](2026-06-21-workspace-vaults-leakage-guard.md)
 3. [Remote MCP Gateway for Microsoft and GitHub Copilot](2026-06-21-remote-mcp-microsoft-copilot.md)
 
@@ -73,10 +73,10 @@ Exit gate:
 > and later features have a semantic extension pattern that does not require
 > one low-level tool per file operation.
 
-### Phase 1 — Shared Project Context model
+### Phase 1 — Shared Project Context model — delivered
 
-Implement the Project Context API first because much of the user experience
-already exists in the Cockpit.
+The shared Project Context model is implemented across the core, MCP server,
+demo workspace, project CLI, and Operator Cockpit.
 
 Deliver:
 
@@ -93,6 +93,9 @@ Exit gate:
 
 > The Cockpit and a fresh MCP session return the same cited project facts, and
 > two projects with overlapping terminology never contaminate each other.
+
+Status: passed by the project-context, MCP catalog/transport, Cockpit, and
+full GKE test suites.
 
 ### Phase 2 — Workspace Vaults and Leakage Guard
 
