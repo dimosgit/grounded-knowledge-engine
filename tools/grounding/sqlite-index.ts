@@ -4,9 +4,19 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { DEFAULT_SCAN_ROOTS } from "./retriever.js";
+import {
+  buildManifestHash,
+  gatherCandidateFiles,
+  getDocumentTitle,
+  inferSourceKind,
+  inferTrack,
+  normalizeScalar,
+  normalizeScanRoots,
+  parseFrontmatter,
+  parsePositiveInt,
+} from "./document-core.js";
 import type {
   CandidateFile,
-  Frontmatter,
   IndexedDocument,
   KbRetriever,
   ResolvedRetrieverOptions,
@@ -53,11 +63,6 @@ interface ChunkDraft {
   startLine: number;
   endLine: number;
   text: string;
-}
-
-interface ParsedFrontmatter {
-  frontmatter: Frontmatter;
-  body: string;
 }
 
 interface SearchCacheKeyParts {
@@ -140,7 +145,10 @@ export async function getSqliteKbRetriever(options: RetrieverOptions = {}): Prom
 
 function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
   const repoRoot = path.resolve(options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."));
-  const scanRoots = normalizeScanRoots(options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS);
+  const scanRoots = normalizeScanRoots(
+    options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS,
+    DEFAULT_SCAN_ROOTS,
+  );
   const cachePath = path.resolve(repoRoot, options.cachePath || process.env.KB_MCP_SQLITE_PATH || DEFAULT_SQLITE_INDEX_FILE);
   const queryCacheTtlMs = parsePositiveInt(
     options.queryCacheTtlMs ?? process.env.KB_MCP_QUERY_CACHE_TTL_MS,
@@ -997,56 +1005,6 @@ function chunkDocument(lines: string[]): ChunkDraft[] {
   return chunks;
 }
 
-async function gatherCandidateFiles(repoRoot: string, scanRoots: string[]): Promise<CandidateFile[]> {
-  const candidates: CandidateFile[] = [];
-  for (const root of scanRoots) {
-    const absRoot = path.resolve(repoRoot, root);
-    let stat;
-    try {
-      stat = await fs.stat(absRoot);
-    } catch {
-      continue;
-    }
-    if (stat.isDirectory()) {
-      await walk(absRoot, repoRoot, candidates);
-      continue;
-    }
-    const relPath = toPosix(path.relative(repoRoot, absRoot));
-    if (!isSearchableTextFile(relPath)) continue;
-    candidates.push({ absPath: absRoot, relPath, size: stat.size, mtimeMs: stat.mtimeMs });
-  }
-  candidates.sort((a, b) => a.relPath.localeCompare(b.relPath));
-  return candidates;
-}
-
-async function walk(dir: string, repoRoot: string, out: CandidateFile[]): Promise<void> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const absPath = path.join(dir, entry.name);
-    const relPath = toPosix(path.relative(repoRoot, absPath));
-    if (entry.isDirectory()) {
-      if (entry.name === ".git" || entry.name === "node_modules" || entry.name === "dist" || entry.name === "content" || entry.name === ".cache") continue;
-      await walk(absPath, repoRoot, out);
-      continue;
-    }
-    if (!entry.isFile()) continue;
-    if (!isSearchableTextFile(relPath)) continue;
-    let stat;
-    try {
-      stat = await fs.stat(absPath);
-    } catch {
-      continue;
-    }
-    out.push({ absPath, relPath, size: stat.size, mtimeMs: stat.mtimeMs });
-  }
-}
-
-function buildManifestHash(files: CandidateFile[]): string {
-  const hash = crypto.createHash("sha1");
-  for (const file of files) hash.update(`${file.relPath}:${file.size}:${Math.floor(file.mtimeMs)}\n`);
-  return hash.digest("hex");
-}
-
 function tokenizeQuery(text: string): string[] {
   const normalized = normalizeForTokenization(text);
   const raw = normalized
@@ -1070,30 +1028,6 @@ function normalizeForTokenization(text: string): string {
     .replace(/\bgreen[\s-]+field\b/g, " greenfield ")
     .replace(/[’']/g, "")
     .replace(/[\u2013\u2014]/g, "-");
-}
-
-function parseFrontmatter(raw: string): ParsedFrontmatter {
-  if (!raw.startsWith("---\n")) return { frontmatter: {}, body: raw };
-  const end = raw.indexOf("\n---\n", 4);
-  if (end === -1) return { frontmatter: {}, body: raw };
-  const header = raw.slice(4, end);
-  const body = raw.slice(end + 5);
-  const frontmatter: Record<string, string> = {};
-  for (const line of header.split("\n")) {
-    const sep = line.indexOf(":");
-    if (sep === -1) continue;
-    const key = line.slice(0, sep).trim();
-    const value = line.slice(sep + 1).trim();
-    if (!key) continue;
-    frontmatter[key] = value;
-  }
-  return { frontmatter, body };
-}
-
-function getDocumentTitle(body: string, relPath: string): string {
-  const heading = body.match(/^#\s+(.+)$/m);
-  if (heading?.[1]) return heading[1].trim();
-  return path.basename(relPath, path.extname(relPath));
 }
 
 function extractFastTermSummary(body: string): string {
@@ -1122,36 +1056,11 @@ function extractFastTermSummary(body: string): string {
   return "";
 }
 
-function inferSourceKind(relPath: string): string {
-  if (relPath.startsWith("source-docs/")) return "reference-source";
-  if (relPath.startsWith("kb/topics/")) return "kb-topic";
-  if (relPath.startsWith("kb/terms/")) return "kb-term";
-  if (relPath.startsWith("kb/modules/")) return "kb-module";
-  if (relPath.startsWith("kb/digests/")) return "kb-digest";
-  if (relPath.startsWith("kb/clients/")) return "kb-client";
-  if (relPath.startsWith("project/")) return "project";
-  return "doc";
-}
-
-function inferTrack(relPath: string, frontmatter: Frontmatter): string {
-  const explicit = normalizeScalar(frontmatter.track);
-  if (explicit) return explicit;
-  if (relPath.startsWith("source-docs/")) return "domain";
-  if (relPath.startsWith("project/")) return "domain";
-  if (relPath.startsWith("kb/")) return "domain";
-  return "";
-}
-
 function inferMode(query: string, explicitMode: string): SearchMode {
   if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic") return explicitMode;
   const q = query.toLowerCase();
   if (/\bproject\b|\btask\s*\d+\b/.test(q)) return "project";
   return "generic";
-}
-
-function isSearchableTextFile(relPath: string): boolean {
-  const lower = relPath.toLowerCase();
-  return lower.endsWith(".md") || lower.endsWith(".txt");
 }
 
 function trimQueryCache(cache: Map<string, { createdAt: number; value: SearchResult }>, maxEntries: number): void {
@@ -1181,17 +1090,6 @@ function cloneSearchResult(result: SearchResult): SearchResult {
   return JSON.parse(JSON.stringify(result));
 }
 
-function normalizeScanRoots(value: string[] | string): string[] {
-  if (Array.isArray(value)) return value.map((part) => `${part}`.trim()).filter(Boolean);
-  if (typeof value === "string") return value.split(",").map((part) => part.trim()).filter(Boolean);
-  return DEFAULT_SCAN_ROOTS;
-}
-
-function normalizeScalar(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value.trim().replace(/^['"]|['"]$/g, "");
-}
-
 function normalizeTermKey(value: unknown): string {
   return normalizeScalar(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -1204,14 +1102,6 @@ function singleLine(value: unknown): string {
   return `${value || ""}`.replace(/\s+/g, " ").trim();
 }
 
-function parsePositiveInt(value: unknown, fallback: number, min: number, max: number): number {
-  const raw = typeof value === "string" || typeof value === "number" ? Number.parseInt(`${value}`, 10) : Number.NaN;
-  let out = Number.isFinite(raw) ? raw : fallback;
-  if (Number.isFinite(min)) out = Math.max(min, out);
-  if (Number.isFinite(max)) out = Math.min(max, out);
-  return out;
-}
-
 function mean(values: number[]): number {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -1219,8 +1109,4 @@ function mean(values: number[]): number {
 
 function round(value: number): number {
   return Number(Number(value || 0).toFixed(3));
-}
-
-function toPosix(value: string): string {
-  return value.split(path.sep).join("/");
 }

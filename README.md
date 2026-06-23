@@ -132,8 +132,10 @@ Every advertised tool has a formal output schema and MCP safety annotations.
 Catalog character and tool-count budgets are enforced by
 `npm run test:mcp:catalog`.
 
-> The local server uses newline-delimited JSON over standard input/output. It is
-> not a remote HTTP service and does not use LSP `Content-Length` framing.
+> The local server emits newline-delimited JSON over standard input/output. It
+> is not a remote HTTP service. The transport also accepts legacy
+> `Content-Length` input frames for compatibility, but generated client
+> adapters use newline-delimited JSON.
 
 ## Structured project context
 
@@ -168,6 +170,60 @@ The shared parser and handoff formatter live under
 [`tools/projects`](tools/projects). The Cockpit consumes the same model rather
 than maintaining a separate interpretation of project Markdown. Legacy project
 notes remain readable for compatibility.
+
+### Create and validate projects
+
+Projects can be authored directly as Markdown or through the deterministic
+project CLI. MCP is not required for project administration.
+
+```bash
+# Create the canonical record and default source folder
+npm run project -- create customer-pilot \
+  --title "Customer Pilot" \
+  --owner "workspace-owner" \
+  --status active \
+  --tag pilot \
+  --tag customer
+
+# Inspect and validate projects
+npm run project -- list
+npm run project -- show customer-pilot
+npm run project -- validate customer-pilot
+npm run project -- validate             # validate every project
+
+# Update known fields or sections without replacing the whole Markdown file
+npm run project -- update customer-pilot \
+  --current-focus "Validate the pilot workflow" \
+  --next-action "Run the acceptance test" \
+  --next-action "Record the result"
+
+# Add an existing workspace file to Key documents and project scope
+npm run project -- link customer-pilot notes/pilot-evidence.md \
+  --label "Pilot evidence"
+
+# Preview generated Markdown without writing
+npm run project -- create another-pilot --title "Another Pilot" --dry-run
+npm run project -- update customer-pilot --owner "new-owner" --dry-run
+```
+
+After `npm run build`, expose the compiled CLI as `gke` with `npm link`:
+
+```bash
+npm link
+gke create customer-pilot --title "Customer Pilot"
+```
+
+The reusable TypeScript service exports `createProject`, `getProject`,
+`listProjects`, `updateProject`, `linkProjectSource`, `validateProject`, and
+`validateAllProjects` from
+[`tools/projects`](tools/projects). Creation uses workspace-relative paths and
+atomic writes. Validation is read-only and checks canonical metadata, dates,
+required sections, duplicate IDs, lifecycle values, source roots, and local
+links. Controlled updates preserve unknown frontmatter and body sections.
+
+Direct editing remains supported. A manually created canonical record under
+`kb/projects/<project-id>/project.md` is discovered by the CLI, Cockpit, and
+`kb.resume_project` in the same way as a generated record.
 
 ## Operator Cockpit
 
@@ -224,7 +280,7 @@ see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
 |---|---|
 | [`tools/grounding`](tools/grounding) | Deterministic indexing, retrieval, grounded synthesis, and evaluation. |
 | [`tools/projects`](tools/projects) | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting. |
-| [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio MCP catalog, handlers, resources, profiles, and safety contracts. |
+| [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts. |
 | [`tools/ingest`](tools/ingest) | Local document extraction and capture adapters. |
 | [`apps/cockpit`](apps/cockpit) | Optional local React preview over the same Markdown and shared project model. |
 | `demo-kb/` and `kb/` | Canonical plain-file knowledge and project state. |

@@ -90,5 +90,7 @@ flowchart TB
   scope.
 - **Small semantic MCP catalog.** Daily-use tools remain bounded, while addressable
   context uses `gke://` resources.
-- **Newline-delimited JSON over stdio** for the MCP transport (not LSP `Content-Length`
-  framing — that makes Claude Code hang at "connecting").
+- **Newline-delimited JSON over stdio** is the emitted MCP transport format.
+  The parser accepts legacy `Content-Length` input frames for compatibility,
+  while generated adapters use newline-delimited JSON to avoid client
+  connection hangs.

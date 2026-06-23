@@ -32,6 +32,33 @@ export interface ParsedProjectDocument {
   explicitPaths: string[];
 }
 
+export type ProjectValidationSeverity = "error" | "warning";
+
+export interface ProjectValidationIssue {
+  severity: ProjectValidationSeverity;
+  code: string;
+  message: string;
+  path: string;
+  field?: string;
+}
+
+export interface ProjectValidationResult {
+  valid: boolean;
+  projectId: string;
+  path: string;
+  issues: ProjectValidationIssue[];
+}
+
+export interface ProjectSummary {
+  projectId: string;
+  title: string;
+  status: string;
+  owner: string;
+  updated: string;
+  path: string;
+  workspaceId: string;
+}
+
 export interface ProjectCapsule {
   projectId: string;
   title: string;
