@@ -24,6 +24,7 @@ const STATUS_BADGE = {
   active: { label: "Active", className: "border-status-done/45 bg-status-done/10 text-status-done" },
   blocked: { label: "Blocked", className: "border-status-blocked/45 bg-status-blocked/10 text-status-blocked" },
   next: { label: "Queued", className: "border-status-waiting/45 bg-status-waiting/10 text-status-waiting" },
+  done: { label: "Completed", className: "border-status-done/45 bg-status-done/10 text-status-done" },
   reference: { label: "Reference", className: "border-outline-variant bg-surface-container-high text-on-surface-variant" },
 };
 
@@ -43,7 +44,7 @@ export function ProjectCard({ project, onOpen, onMove }) {
   const actionLabel =
     project.statusBucket === "done"
       ? "Completed"
-      : project.nextActions[0] || project.blockers[0] || "Review project context";
+      : project.glance?.nextActions?.[0] || project.glance?.blocker || "Review project context";
 
   return (
     <article
@@ -76,13 +77,15 @@ export function ProjectCard({ project, onOpen, onMove }) {
         </span>
       </div>
       <h3 className="mb-2 line-clamp-2 font-display text-body-md font-semibold text-on-surface">{project.title}</h3>
-      <p className="mb-3 line-clamp-1 text-metadata leading-5 text-on-surface-variant">{project.currentStatus}</p>
+      <p className="mb-3 line-clamp-2 text-metadata leading-5 text-on-surface-variant">
+        {project.glance?.startHere || project.currentStatus}
+      </p>
       <div className="rounded border border-border-subtle bg-surface/70 p-3">
         <div className="mb-1 flex items-center gap-2 text-code-sm uppercase text-on-surface-variant">
           <ArrowRight size={14} />
           {project.statusBucket === "done" ? "Status" : "Next Task"}
         </div>
-        <p className="line-clamp-1 text-body-md text-on-surface">{actionLabel}</p>
+        <p className="line-clamp-2 text-body-md text-on-surface">{actionLabel}</p>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button

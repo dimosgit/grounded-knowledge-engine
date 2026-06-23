@@ -233,6 +233,7 @@ project_id: ai-tutor
 title: AI Tutor Pilot
 status: active
 owner: workspace-owner
+track: product
 updated: 2026-06-21
 tags: ai, education, pilot
 ---
@@ -273,6 +274,7 @@ record_type: project
 workspace_id: personal
 project_id: ai-tutor
 title: AI Tutor Pilot
+track: ai
 status: active
 owner: workspace-owner
 started_at: 2026-05-10

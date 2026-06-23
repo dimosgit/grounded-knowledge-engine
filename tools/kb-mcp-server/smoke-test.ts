@@ -304,7 +304,7 @@ try {
       noteTitle: "MCP Primitive Decision",
       module: "knowledge-ops",
       track: "demo",
-      noteType: "project",
+      noteType: "concept",
       noteStatus: "canonical",
       noteTags: "demo, capture, decision-log",
       noteOwner: "mcp-smoke",

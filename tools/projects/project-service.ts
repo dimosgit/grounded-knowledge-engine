@@ -21,6 +21,7 @@ const REQUIRED_FRONTMATTER = [
   "title",
   "status",
   "owner",
+  "track",
   "started_at",
   "updated",
   "review_after",
@@ -50,6 +51,7 @@ export interface CreateProjectOptions extends ProjectServiceOptions {
   status?: string;
   lifecycle?: string;
   owner?: string;
+  track?: string;
   startedAt?: string;
   updated?: string;
   reviewAfter?: string;
@@ -73,6 +75,7 @@ export interface UpdateProjectOptions extends ProjectServiceOptions {
   status?: string;
   lifecycle?: string;
   owner?: string;
+  track?: string;
   updated?: string;
   reviewAfter?: string;
   tags?: string[];
@@ -126,6 +129,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
     status: cleanScalar(options.status) || lifecycle,
     lifecycle,
     owner: cleanScalar(options.owner) || "unassigned",
+    track: cleanScalar(options.track) || "general",
     startedAt: validateDateInput(options.startedAt || today, "startedAt"),
     updated: validateDateInput(options.updated || today, "updated"),
     reviewAfter: validateDateInput(options.reviewAfter || addDays(today, 14), "reviewAfter"),
@@ -149,6 +153,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
     status: values.status,
     lifecycle: values.lifecycle,
     owner: values.owner,
+    track: values.track,
     startedAt: values.startedAt,
     updated: values.updated,
     reviewAfter: values.reviewAfter,
@@ -183,6 +188,7 @@ export async function listProjects(options: ProjectServiceOptions = {}): Promise
       title: parsed.manifest.title,
       status: parsed.manifest.status,
       owner: parsed.manifest.owner,
+      track: parsed.manifest.track,
       updated: parsed.manifest.updated,
       path: record.relPath,
       workspaceId: parsed.manifest.workspaceId,
@@ -267,6 +273,7 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
   if (options.status !== undefined) frontmatterUpdates.status = requireNonEmpty(options.status, "status");
   if (options.lifecycle !== undefined) frontmatterUpdates.lifecycle = normalizeLifecycle(options.lifecycle);
   if (options.owner !== undefined) frontmatterUpdates.owner = requireNonEmpty(options.owner, "owner");
+  if (options.track !== undefined) frontmatterUpdates.track = requireNonEmpty(options.track, "track");
   if (options.updated !== undefined) frontmatterUpdates.updated = validateDateInput(options.updated, "updated");
   if (options.reviewAfter !== undefined) {
     frontmatterUpdates.review_after = validateDateInput(options.reviewAfter, "reviewAfter");
@@ -432,6 +439,7 @@ function renderProjectTemplate(values: {
   status: string;
   lifecycle: string;
   owner: string;
+  track: string;
   startedAt: string;
   updated: string;
   reviewAfter: string;
@@ -447,6 +455,7 @@ title: ${values.title}
 status: ${values.status}
 lifecycle: ${values.lifecycle}
 owner: ${values.owner}
+track: ${values.track}
 started_at: ${values.startedAt}
 updated: ${values.updated}
 review_after: ${values.reviewAfter}
