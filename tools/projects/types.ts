@@ -10,6 +10,7 @@ export interface ProjectManifest {
   workspaceId: string;
   status: string;
   owner: string;
+  track: string;
   startedAt: string;
   updated: string;
   reviewAfter: string;
@@ -54,6 +55,7 @@ export interface ProjectSummary {
   title: string;
   status: string;
   owner: string;
+  track: string;
   updated: string;
   path: string;
   workspaceId: string;
