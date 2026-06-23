@@ -253,6 +253,11 @@ adding a second incompatible frontend-only parser.
 
 ## Project record
 
+**Implementation status:** the canonical record, shared parser, project-scoped
+resume, Cockpit rendering, and project create/list/show/validate CLI are
+implemented. Controlled field/section updates and explicit source-link commands
+are also implemented. Checkpoint creation remains planned.
+
 Path:
 
 ```text
@@ -314,6 +319,9 @@ Rules:
    global workspace search.
 
 ## Checkpoint record
+
+**Implementation status:** this is the normative target format. Automatic or
+CLI checkpoint creation is not implemented yet.
 
 Path:
 

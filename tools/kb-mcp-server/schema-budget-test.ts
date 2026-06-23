@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { buildToolCatalog, CATALOG_BUDGETS, type McpProfile } from "./catalog.js";
 import { spawnKbServer } from "./mcp-client.js";
+import { DEFAULT_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS } from "./protocol.js";
 
 function build(profile: McpProfile, writesEnabled: boolean) {
   return buildToolCatalog({
@@ -96,6 +97,24 @@ assertCatalog("full", false);
 assertCatalog("full", true);
 await assertProtocolVersion("2024-11-05");
 await assertProtocolVersion("2025-06-18");
+
+{
+  const { child, client } = spawnKbServer({
+    KB_MCP_PROFILE: "core",
+    KB_MCP_ENABLE_WRITES: "false",
+  });
+  try {
+    const initialized = await client.request("initialize", {
+      protocolVersion: "2099-01-01",
+      capabilities: {},
+      clientInfo: { name: "unsupported-version-test", version: "0.1.0" },
+    });
+    assert.equal(initialized.protocolVersion, DEFAULT_PROTOCOL_VERSION);
+    assert.ok((SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(initialized.protocolVersion));
+  } finally {
+    child.kill("SIGTERM");
+  }
+}
 
 const coreSize = JSON.stringify(build("core", false)).length;
 const fullSize = JSON.stringify(build("full", true)).length;
