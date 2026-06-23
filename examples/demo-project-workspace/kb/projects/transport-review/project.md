@@ -9,7 +9,7 @@ lifecycle: next
 owner: demo
 track: demo
 started_at: 2026-06-18
-updated: 2026-06-22
+updated: 2026-06-23
 review_after: 2026-07-10
 source_roots: kb/sources/transport-review
 tags: mcp, transport, rollout, demo
@@ -29,6 +29,14 @@ Review the deployment checklist for a temporary local HTTP bridge.
 ## Last meaningful change
 
 The experiment was narrowed to loopback execution and short-lived tunnel access.
+
+## Delivery checklist
+
+- [x] Narrow the experiment to loopback execution [S]
+- [x] Keep remote writes disabled [M]
+- [ ] Confirm tenant and tunnel prerequisites [M]
+- [ ] Validate the read-only transport contract [L]
+- [ ] Record the security review outcome [M]
 
 ## Active decisions
 
