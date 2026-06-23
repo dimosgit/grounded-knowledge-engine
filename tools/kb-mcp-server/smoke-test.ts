@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +11,14 @@ const __dirname = path.dirname(__filename);
 const isTypeScriptRuntime = __filename.endsWith(".ts");
 const serverPath = path.join(__dirname, isTypeScriptRuntime ? "server.ts" : "server.js");
 const serverArgs = isTypeScriptRuntime ? ["--import", "tsx", serverPath] : [serverPath];
+const sourceRepoRoot = path.resolve(__dirname, "..", "..");
+const smokeRepoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-mcp-smoke-"));
+await fs.cp(path.join(sourceRepoRoot, "demo-kb"), path.join(smokeRepoRoot, "demo-kb"), {
+  recursive: true,
+});
+await fs.cp(path.join(sourceRepoRoot, "kb"), path.join(smokeRepoRoot, "kb"), {
+  recursive: true,
+});
 
 interface JsonRpcResponse {
   id?: number;
@@ -32,6 +42,8 @@ interface ListedTool {
 const child = spawn(process.execPath, serverArgs, {
   env: {
     ...process.env,
+    KB_MCP_REPO_ROOT: smokeRepoRoot,
+    KB_MCP_SCAN_ROOTS: "demo-kb,kb",
     KB_MCP_ENABLE_WRITES: "true",
     KB_MCP_PROFILE: "full",
   },
@@ -70,7 +82,7 @@ function parseFrames() {
     if (line.length === 0) continue;
 
     const message = JSON.parse(line) as JsonRpcResponse;
-    if (Object.prototype.hasOwnProperty.call(message, "id")) {
+    if (typeof message.id === "number") {
       const request = pending.get(message.id);
       if (!request) continue;
       pending.delete(message.id);
@@ -183,6 +195,14 @@ try {
   const recordResource = await request("resources/read", { uri: recordUri });
   assert.equal(recordResource.contents?.[0]?.mimeType, "text/markdown");
   assert.match(recordResource.contents?.[0]?.text || "", /MCP/i);
+  await assert.rejects(
+    () => request("resources/read", { uri: "gke://record/..%2Fpackage.json" }),
+    /Path traversal is not allowed/,
+  );
+  await assert.rejects(
+    () => request("resources/read", { uri: "gke://unsupported/value" }),
+    /Unsupported resource URI/,
+  );
 
   const resumed = await request("tools/call", {
     name: "kb.resume_project",
@@ -358,4 +378,5 @@ try {
   console.log("KB MCP smoke test passed.");
 } finally {
   child.kill("SIGTERM");
+  await fs.rm(smokeRepoRoot, { recursive: true, force: true });
 }

@@ -68,6 +68,20 @@ The same capsule is available as:
 gke://project/{projectId}/context
 ```
 
+Project creation and validation intentionally live outside MCP. Use the
+human-facing project CLI:
+
+```bash
+npm run project -- create my-project --title "My Project"
+npm run project -- validate my-project
+npm run project -- list
+npm run project -- update my-project --current-focus "Validate the next milestone"
+npm run project -- link my-project notes/evidence.md
+```
+
+Direct Markdown authoring remains supported at
+`kb/projects/<project-id>/project.md`.
+
 ## Resources
 
 The server advertises:
@@ -103,7 +117,10 @@ filesystem paths.
 
 ## Protocol and safety
 
-- The transport is newline-delimited JSON over stdio.
+- The transport emits newline-delimited JSON over stdio and accepts legacy
+  `Content-Length` input frames for compatibility.
+- Framing and JSON-RPC dispatch live in `transport.ts`; tool and resource
+  behavior remain transport-independent callbacks.
 - Every advertised tool has a formal output schema and MCP safety annotations.
 - The `core` catalog is limited to four tools and 7,000 serialized schema
   characters.
@@ -119,6 +136,7 @@ filesystem paths.
 
 ```bash
 npm run test:mcp:catalog  # profiles, schemas, annotations, and budgets
+npm run test:mcp:transport # framing, notifications, invalid JSON, and RPC errors
 npm run test:projects     # strict project resolution, isolation, resource parity
 npm run smoke:mcp         # discovery, resources, search, capture, reuse, resume
 npm run test:loop         # ground → capture → re-ground → cite

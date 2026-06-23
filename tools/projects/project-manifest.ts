@@ -24,7 +24,7 @@ export function normalizeProjectId(value: unknown): string {
 }
 
 export function parseProjectDocument(raw: string, relPath: string, fallbackTitle: string): ParsedProjectDocument {
-  const { frontmatter, bodyStartLine } = parseFrontmatter(raw);
+  const { frontmatter, bodyStartLine } = parseProjectFrontmatter(raw);
   const body = raw.split(/\r?\n/).slice(bodyStartLine - 1).join("\n");
   return parseProjectData(frontmatter, body, relPath, fallbackTitle, bodyStartLine);
 }
@@ -100,7 +100,10 @@ export function parseProjectData(
   };
 }
 
-function parseFrontmatter(raw: string): { frontmatter: Record<string, string>; bodyStartLine: number } {
+export function parseProjectFrontmatter(raw: string): {
+  frontmatter: Record<string, string>;
+  bodyStartLine: number;
+} {
   if (!raw.startsWith("---\n") && !raw.startsWith("---\r\n")) {
     return { frontmatter: {}, bodyStartLine: 1 };
   }

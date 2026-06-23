@@ -1,11 +1,20 @@
-import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  buildManifestHash,
+  gatherCandidateFiles,
+  getDocumentTitle,
+  inferSourceKind,
+  inferTrack,
+  normalizeScalar,
+  normalizeScanRoots,
+  parseFrontmatter,
+  parsePositiveInt,
+} from "./document-core.js";
 import type {
   CandidateFile,
   CachedRetrieverIndex,
-  Frontmatter,
   IndexedChunk,
   IndexedDocument,
   KbRetriever,
@@ -133,11 +142,6 @@ interface ChunkDraft {
   text: string;
 }
 
-interface ParsedFrontmatter {
-  frontmatter: Frontmatter;
-  body: string;
-}
-
 export async function getKbRetriever(options: RetrieverOptions = {}): Promise<KbRetriever> {
   const resolved = resolveOptions(options);
   const now = Date.now();
@@ -165,7 +169,10 @@ export async function getKbRetriever(options: RetrieverOptions = {}): Promise<Kb
 
 function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
   const repoRoot = path.resolve(options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."));
-  const scanRoots = normalizeScanRoots(options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS);
+  const scanRoots = normalizeScanRoots(
+    options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS,
+    DEFAULT_SCAN_ROOTS,
+  );
   const cachePath = path.resolve(repoRoot, options.cachePath || DEFAULT_INDEX_CACHE_FILE);
   const cacheTtlMs = parsePositiveInt(options.cacheTtlMs, DEFAULT_INDEX_CACHE_TTL_MS, 1000, 10 * 60 * 1000);
   const queryCacheTtlMs = parsePositiveInt(
@@ -292,8 +299,9 @@ async function buildIndex({
       totalChunkLength += chunk.length;
 
       for (const [term, tf] of termFreq.entries()) {
-        if (!postings.has(term)) postings.set(term, []);
-        postings.get(term).push([chunk.id, tf]);
+        const termPostings = postings.get(term) || [];
+        if (!postings.has(term)) postings.set(term, termPostings);
+        termPostings.push([chunk.id, tf]);
         docFreq.set(term, (docFreq.get(term) || 0) + 1);
       }
     }
@@ -397,8 +405,9 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
         const weightedContribution = bm25 * weight;
         candidateScores.set(chunkId, (candidateScores.get(chunkId) || 0) + weightedContribution);
 
-        if (!matchedTerms.has(chunkId)) matchedTerms.set(chunkId, new Set());
-        matchedTerms.get(chunkId).add(token);
+        const chunkMatchedTerms = matchedTerms.get(chunkId) || new Set<string>();
+        if (!matchedTerms.has(chunkId)) matchedTerms.set(chunkId, chunkMatchedTerms);
+        chunkMatchedTerms.add(token);
         if (tokenContributions) {
           if (!tokenContributions.has(chunkId)) tokenContributions.set(chunkId, new Map());
           const chunkTokenContrib = tokenContributions.get(chunkId);
@@ -423,7 +432,8 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
     const prelim: RankedCandidate[] = [...candidateScores.entries()]
       .map(([chunkId, baseScore]) => {
         const chunk = chunks[chunkId];
-        const terms = matchedTerms.get(chunkId) || new Set();
+        if (!chunk) throw new Error(`Retrieval candidate references missing chunk ${chunkId}.`);
+        const terms = matchedTerms.get(chunkId) || new Set<string>();
         const rerankResult = rerankCandidate({
           chunk,
           baseScore,
@@ -439,7 +449,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
           score: rerankResult.score,
           matchedTerms: [...terms],
           rerankAdjustments: rerankResult.adjustments,
-          tokenContributions: tokenContributions ? tokenContributions.get(chunkId) : null,
+          tokenContributions: tokenContributions ? tokenContributions.get(chunkId) ?? null : null,
         };
       })
       .sort((a, b) => b.score - a.score || a.chunk.path.localeCompare(b.chunk.path) || a.chunk.startLine - b.chunk.startLine)
@@ -1003,84 +1013,6 @@ function normalizeForTokenization(text: string): string {
     .replace(/[\u2013\u2014]/g, "-");
 }
 
-async function gatherCandidateFiles(repoRoot: string, scanRoots: string[]): Promise<CandidateFile[]> {
-  const candidates: CandidateFile[] = [];
-
-  for (const root of scanRoots) {
-    const absRoot = path.resolve(repoRoot, root);
-    let stat;
-    try {
-      stat = await fs.stat(absRoot);
-    } catch {
-      continue;
-    }
-
-    if (stat.isDirectory()) {
-      await walk(absRoot, repoRoot, candidates);
-      continue;
-    }
-
-    const relPath = toPosix(path.relative(repoRoot, absRoot));
-    if (!isSearchableTextFile(relPath)) continue;
-    candidates.push({
-      absPath: absRoot,
-      relPath,
-      size: stat.size,
-      mtimeMs: stat.mtimeMs,
-    });
-  }
-
-  candidates.sort((a, b) => a.relPath.localeCompare(b.relPath));
-  return candidates;
-}
-
-async function walk(dir: string, repoRoot: string, out: CandidateFile[]): Promise<void> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const absPath = path.join(dir, entry.name);
-    const relPath = toPosix(path.relative(repoRoot, absPath));
-
-    if (entry.isDirectory()) {
-      if (
-        entry.name === ".git" ||
-        entry.name === "node_modules" ||
-        entry.name === "dist" ||
-        entry.name === "content" ||
-        entry.name === ".cache"
-      ) {
-        continue;
-      }
-      await walk(absPath, repoRoot, out);
-      continue;
-    }
-
-    if (!entry.isFile()) continue;
-    if (!isSearchableTextFile(relPath)) continue;
-
-    let stat;
-    try {
-      stat = await fs.stat(absPath);
-    } catch {
-      continue;
-    }
-
-    out.push({
-      absPath,
-      relPath,
-      size: stat.size,
-      mtimeMs: stat.mtimeMs,
-    });
-  }
-}
-
-function buildManifestHash(files: CandidateFile[]): string {
-  const hash = crypto.createHash("sha1");
-  for (const file of files) {
-    hash.update(`${file.relPath}:${file.size}:${Math.floor(file.mtimeMs)}\n`);
-  }
-  return hash.digest("hex");
-}
-
 async function tryLoadCachedIndex(cachePath: string): Promise<CachedRetrieverIndex | null> {
   try {
     const raw = await fs.readFile(cachePath, "utf8");
@@ -1121,92 +1053,9 @@ function deserializeMap<T>(serialized: Array<[string, T]> | Map<string, T>): Map
   return serialized instanceof Map ? serialized : new Map(serialized);
 }
 
-function parseFrontmatter(raw: string): ParsedFrontmatter {
-  if (!raw.startsWith("---\n")) return { frontmatter: {}, body: raw };
-  const end = raw.indexOf("\n---\n", 4);
-  if (end === -1) return { frontmatter: {}, body: raw };
-
-  const header = raw.slice(4, end);
-  const body = raw.slice(end + 5);
-  const frontmatter: Record<string, string> = {};
-
-  for (const line of header.split("\n")) {
-    const sep = line.indexOf(":");
-    if (sep === -1) continue;
-    const key = line.slice(0, sep).trim();
-    const value = line.slice(sep + 1).trim();
-    if (!key) continue;
-    frontmatter[key] = value;
-  }
-
-  return { frontmatter, body };
-}
-
-function getDocumentTitle(body: string, relPath: string): string {
-  const heading = body.match(/^#\s+(.+)$/m);
-  if (heading?.[1]) return heading[1].trim();
-  return path.basename(relPath, path.extname(relPath));
-}
-
-function inferSourceKind(relPath: string): string {
-  if (relPath.startsWith("source-docs/")) return "reference-source";
-  if (relPath.startsWith("kb/topics/")) return "kb-topic";
-  if (relPath.startsWith("kb/terms/")) return "kb-term";
-  if (relPath.startsWith("kb/modules/")) return "kb-module";
-  if (relPath.startsWith("kb/digests/")) return "kb-digest";
-  if (relPath.startsWith("kb/clients/")) return "kb-client";
-  if (relPath.startsWith("project/")) return "project";
-  return "doc";
-}
-
-function inferTrack(relPath: string, frontmatter: Frontmatter): string {
-  const explicit = normalizeScalar(frontmatter.track);
-  if (explicit) return explicit;
-  if (relPath.startsWith("source-docs/")) return "domain";
-  if (relPath.startsWith("project/")) return "domain";
-  if (relPath.startsWith("kb/")) return "domain";
-  return "";
-}
-
 function inferMode(query: string, explicitMode: string): SearchMode {
   if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic") return explicitMode;
   const q = query.toLowerCase();
   if (/\bproject\b|\btask\s*\d+\b/.test(q)) return "project";
   return "generic";
-}
-
-function normalizeScanRoots(value: string[] | string): string[] {
-  if (Array.isArray(value)) {
-    return value.map((part) => `${part}`.trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean);
-  }
-  return DEFAULT_SCAN_ROOTS;
-}
-
-function isSearchableTextFile(relPath: string): boolean {
-  const lower = relPath.toLowerCase();
-  if (lower.endsWith(".md") || lower.endsWith(".txt")) return true;
-  return false;
-}
-
-function normalizeScalar(value: unknown): string {
-  if (typeof value !== "string") return "";
-  return value.trim().replace(/^['"]|['"]$/g, "");
-}
-
-function parsePositiveInt(value: unknown, fallback: number, min: number, max: number): number {
-  const raw = typeof value === "string" || typeof value === "number" ? Number.parseInt(`${value}`, 10) : Number.NaN;
-  let out = Number.isFinite(raw) ? raw : fallback;
-  if (Number.isFinite(min)) out = Math.max(min, out);
-  if (Number.isFinite(max)) out = Math.min(max, out);
-  return out;
-}
-
-function toPosix(value: string): string {
-  return value.split(path.sep).join("/");
 }

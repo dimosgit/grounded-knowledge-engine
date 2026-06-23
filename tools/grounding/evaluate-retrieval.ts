@@ -342,12 +342,12 @@ function buildTrace(result: SearchResult | null, limit = 3): CandidateTrace[] {
   const candidates = result?.debug?.topCandidates;
   if (!Array.isArray(candidates) || !candidates.length) return [];
   return candidates.slice(0, limit).map((item) => ({
-    path: item.path,
-    lineNumber: item.lineNumber,
-    score: item.score,
-    baseScore: item.baseScore,
-    matchedTokens: item.matchedTokens,
-    rerankAdjustments: item.rerankAdjustments,
+    path: item.path || "",
+    lineNumber: item.lineNumber || 0,
+    score: item.score || 0,
+    baseScore: item.baseScore || 0,
+    matchedTokens: item.matchedTokens || [],
+    rerankAdjustments: item.rerankAdjustments || [],
   }));
 }
 
