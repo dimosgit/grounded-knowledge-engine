@@ -2,7 +2,7 @@
 module: knowledge-ops
 track: demo
 status: canonical
-type: project
+type: concept
 owner: mcp-smoke
 updated: 2026-06-22
 tags: demo, capture, decision-log
