@@ -63,6 +63,8 @@ try {
       frontmatter.lifecycle || manifest.status,
       "--owner",
       manifest.owner,
+      "--track",
+      manifest.track,
       "--started-at",
       manifest.startedAt,
       "--updated",
@@ -89,6 +91,13 @@ try {
       ...repeatOption("--open-question", sectionItems(parsed.sections.get("open-questions"))),
       ...repeatOption("--next-action", sectionItems(parsed.sections.get("next-actions"))),
     ]);
+
+    await preserveCustomSection(
+      path.join(stagingRoot, "kb", "projects", entry.name, "project.md"),
+      "Delivery checklist",
+      sectionContent(parsed, "delivery-checklist"),
+      "Active decisions",
+    );
 
     for (const link of projectLinks(sectionContent(parsed, "key-documents"))) {
       const portableTarget = resolvePortableLink(relativeSourcePath, link.target);
@@ -181,6 +190,22 @@ async function normalizeMarkdownFiles(directory: string): Promise<void> {
     const content = await fs.readFile(target, "utf8");
     await fs.writeFile(target, `${content.trimEnd()}\n`, "utf8");
   }
+}
+
+async function preserveCustomSection(
+  projectPath: string,
+  heading: string,
+  content: string,
+  beforeHeading: string,
+): Promise<void> {
+  if (!content.trim()) return;
+  const raw = await fs.readFile(projectPath, "utf8");
+  const marker = `\n## ${beforeHeading}\n`;
+  const insertion = `\n## ${heading}\n\n${content.trim()}\n`;
+  if (!raw.includes(marker)) {
+    throw new Error(`Cannot insert '${heading}' before missing section '${beforeHeading}'.`);
+  }
+  await fs.writeFile(projectPath, raw.replace(marker, `${insertion}${marker}`), "utf8");
 }
 
 function repeatOption(option: string, values: string[]): string[] {
