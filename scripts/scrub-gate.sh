@@ -32,9 +32,9 @@ fi
 echo "string scan clean"
 
 # 2) Filename scan: no *-private* files.
-if find . -name '*-private*' -not -path './.git/*' -not -path './node_modules/*' | grep -q .; then
+if find . -name '*-private*' -not -path './.git/*' -not -path '*/node_modules/*' | grep -q .; then
   echo "SCRUB FAIL: private filename"
-  find . -name '*-private*' -not -path './.git/*' -not -path './node_modules/*'
+  find . -name '*-private*' -not -path './.git/*' -not -path '*/node_modules/*'
   exit 1
 fi
 echo "filename scan clean"
