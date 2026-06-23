@@ -1,20 +1,33 @@
 import { useState } from "react";
-import { AlertTriangle, BarChart3, CheckCircle2, ClipboardCopy, FileText, History, Square, Target } from "lucide-react";
+import {
+  AlertTriangle,
+  BarChart3,
+  CheckCircle2,
+  ClipboardCopy,
+  FileText,
+  History,
+  ListChecks,
+  Sparkles,
+  Square,
+  Target,
+} from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
 import { OperatorFrame } from "../components/OperatorFrame";
 import { writeTextToClipboard } from "../utils/clipboard";
 
 const PROGRESS_PHASE = {
-  active: { label: "In Progress", percent: 60 },
-  blocked: { label: "Blocked", percent: 40 },
-  next: { label: "Queued", percent: 20 },
-  reference: { label: "Reference", percent: 100 },
+  active: { label: "In Progress" },
+  blocked: { label: "Blocked" },
+  next: { label: "Queued" },
+  done: { label: "Completed" },
+  reference: { label: "Reference" },
 };
 
 const STATUS_PILL = {
   active: { label: "Active", className: "border-status-done/30 bg-status-done/10 text-status-done" },
   blocked: { label: "Blocked", className: "border-status-blocked/30 bg-status-blocked/10 text-status-blocked" },
   next: { label: "Queued", className: "border-status-waiting/30 bg-status-waiting/10 text-status-waiting" },
+  done: { label: "Completed", className: "border-status-done/30 bg-status-done/10 text-status-done" },
   reference: { label: "Reference", className: "border-outline-variant bg-surface-container-high text-on-surface-variant" },
 };
 
@@ -33,6 +46,13 @@ export function ProjectDetailView({
   onOpenDoc,
 }) {
   const [handoffCopyState, setHandoffCopyState] = useState("idle");
+  const hasBlocker = Boolean(activeProject?.glance?.blocker);
+  const nextItems = activeProject?.glance?.nextActions?.length
+    ? activeProject.glance.nextActions
+    : [activeProject?.statusBucket === "done" ? "None — delivered." : "Review project source doc"];
+  const progressPhase = PROGRESS_PHASE[activeProject?.statusBucket] || PROGRESS_PHASE.reference;
+  const progressPercent =
+    activeProject?.statusBucket === "done" ? 100 : activeProject?.progressPercent;
 
   async function copyHandoff() {
     if (!activeProject?.handoffMarkdown) return;
@@ -83,87 +103,114 @@ export function ProjectDetailView({
           )}
         </section>
 
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-            <div className="mb-3 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
-              <History size={17} className="text-primary" />
-              Last meaningful change
-            </div>
-            <p className="text-body-md text-on-surface">{activeProject?.recentChanges || "No recent change recorded."}</p>
-          </article>
-          <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-            <div className="mb-3 text-metadata uppercase text-on-surface-variant">Active decisions</div>
-            <ul className="space-y-2 text-body-md text-on-surface">
-              {(activeProject?.activeDecisions?.length ? activeProject.activeDecisions : ["None recorded."]).map((item, index) => (
-                <li key={`${item}-${index}`}>• {item}</li>
-              ))}
-            </ul>
-          </article>
-          <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-            <div className="mb-3 text-metadata uppercase text-on-surface-variant">Open questions</div>
-            <ul className="space-y-2 text-body-md text-on-surface">
-              {(activeProject?.openQuestions?.length ? activeProject.openQuestions : ["None recorded."]).map((item, index) => (
-                <li key={`${item}-${index}`}>• {item}</li>
-              ))}
-            </ul>
-          </article>
-        </section>
-
         <section>
-          <h2 className="mb-4 font-display text-headline-sm text-on-surface">Project Dashboard</h2>
+          <h2 className="mb-4 font-display text-headline-sm text-on-surface">At a glance</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
               <div className="mb-3 flex items-center justify-between text-metadata uppercase text-on-surface-variant">
-                Current Focus
+                Now
                 <Target size={18} className="text-primary" />
               </div>
-              <p className="text-body-md text-on-surface">{activeProject?.currentFocus || "No current focus found."}</p>
-            </article>
-            <article className="rounded-lg border border-status-blocked/30 bg-status-blocked/10 p-5">
-              <div className="mb-3 flex items-center justify-between text-metadata uppercase text-status-blocked">
-                Critical Blocker
-                <AlertTriangle size={18} />
-              </div>
-              <p className="text-body-md text-on-surface">{activeProject?.blockers?.[0] || "No critical blocker found."}</p>
+              <p className="line-clamp-4 text-body-md text-on-surface">
+                {activeProject?.glance?.currentFocus || "No current focus found."}
+              </p>
             </article>
             <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
               <div className="mb-3 flex items-center justify-between text-metadata uppercase text-on-surface-variant">
-                Next Actions
-                <CheckCircle2 size={18} />
+                Next
+                <ListChecks size={18} />
               </div>
               <ul className="space-y-2 text-body-md text-on-surface">
-                {(activeProject?.nextActions?.length ? activeProject.nextActions : ["Review project source doc"]).slice(0, 3).map((item, index) => (
+                {nextItems.map((item, index) => (
                   <li className="flex items-start gap-2" key={`${item}-${index}`}>
                     <Square size={16} className="mt-0.5 shrink-0 text-on-surface-variant" />
-                    <span>{item}</span>
+                    <span className="line-clamp-2">{item}</span>
                   </li>
                 ))}
               </ul>
+            </article>
+            <article
+              className={`rounded-lg border p-5 ${
+                hasBlocker
+                  ? "border-status-blocked/30 bg-status-blocked/10"
+                  : "border-status-done/30 bg-status-done/5"
+              }`}
+            >
+              <div
+                className={`mb-3 flex items-center justify-between text-metadata uppercase ${
+                  hasBlocker ? "text-status-blocked" : "text-status-done"
+                }`}
+              >
+                Risk
+                {hasBlocker ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+              </div>
+              <p className="line-clamp-4 text-body-md text-on-surface">
+                {activeProject?.glance?.blocker || "No active blockers."}
+              </p>
             </article>
             <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
               <div className="mb-3 flex items-center justify-between text-metadata uppercase text-on-surface-variant">
                 Progress Phase
                 <BarChart3 size={18} className="text-track-ai" />
               </div>
-              {(() => {
-                const phase = PROGRESS_PHASE[activeProject?.statusBucket] || PROGRESS_PHASE.reference;
-                const percent = activeProject?.progressPercent !== null && activeProject?.progressPercent !== undefined 
-                  ? activeProject.progressPercent 
-                  : phase.percent;
-                  
-                return (
+              <>
+                <div className="font-display text-headline-md text-on-surface">{progressPhase.label}</div>
+                {typeof progressPercent === "number" ? (
                   <>
-                    <div className="font-display text-headline-md text-on-surface">{phase.label}</div>
                     <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
-                      <div className="h-full rounded-full bg-track-ai" style={{ width: `${percent}%` }} />
+                      <div className="h-full rounded-full bg-track-ai" style={{ width: `${progressPercent}%` }} />
                     </div>
-                    <div className="mt-2 text-metadata text-on-surface-variant">{percent}% complete</div>
+                    <div className="mt-2 text-metadata text-on-surface-variant">{progressPercent}% complete</div>
                   </>
-                );
-              })()}
+                ) : (
+                  <div className="mt-3 text-metadata text-on-surface-variant">
+                    Not measured — add a weighted task checklist.
+                  </div>
+                )}
+              </>
             </article>
           </div>
         </section>
+
+        <details className="group rounded-lg border border-border-subtle bg-surface-container-low">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 text-body-md font-semibold text-on-surface">
+            <span className="flex items-center gap-2">
+              <Sparkles size={18} className="text-primary" />
+              Project context
+            </span>
+            <span className="text-metadata font-normal text-on-surface-variant group-open:hidden">Show more</span>
+            <span className="hidden text-metadata font-normal text-on-surface-variant group-open:inline">Show less</span>
+          </summary>
+          <div className="grid gap-4 border-t border-border-subtle p-5 lg:grid-cols-2">
+            <article>
+              <div className="mb-2 text-metadata uppercase text-primary">Start here</div>
+              <p className="text-body-md text-on-surface">{activeProject?.startHereBrief || "No start-here brief recorded."}</p>
+            </article>
+            <article>
+              <div className="mb-2 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
+                <History size={17} className="text-primary" />
+                Last meaningful change
+              </div>
+              <p className="text-body-md text-on-surface">{activeProject?.recentChanges || "No recent change recorded."}</p>
+            </article>
+            <article>
+              <div className="mb-2 text-metadata uppercase text-on-surface-variant">Active decisions</div>
+              <ul className="space-y-2 text-body-md text-on-surface">
+                {(activeProject?.activeDecisions?.length ? activeProject.activeDecisions : ["None recorded."]).map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </article>
+            <article>
+              <div className="mb-2 text-metadata uppercase text-on-surface-variant">Open questions</div>
+              <ul className="space-y-2 text-body-md text-on-surface">
+                {(activeProject?.openQuestions?.length ? activeProject.openQuestions : ["None recorded."]).map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </article>
+          </div>
+        </details>
 
         <section>
           <h2 className="mb-4 font-display text-headline-sm text-on-surface">Linked Resources</h2>
