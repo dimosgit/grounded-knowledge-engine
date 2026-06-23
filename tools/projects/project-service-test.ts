@@ -22,11 +22,13 @@ try {
     projectId: "alpha-pilot",
     title: "Alpha Pilot",
     owner: "tester",
+    track: "knowledge-ops",
     tags: ["alpha", "pilot"],
     dryRun: true,
   });
   assert.equal(dryRun.dryRun, true);
   assert.match(dryRun.content, /project_id: alpha-pilot/);
+  assert.match(dryRun.content, /track: knowledge-ops/);
   assert.equal(await exists(path.join(root, dryRun.path)), false);
 
   const created = await createProject({
@@ -34,6 +36,7 @@ try {
     projectId: "alpha-pilot",
     title: "Alpha Pilot",
     owner: "tester",
+    track: "knowledge-ops",
     workspaceId: "personal",
     status: "planned",
     tags: ["alpha", "pilot"],
@@ -46,6 +49,7 @@ try {
   assert.equal(loaded.parsed.manifest.title, "Alpha Pilot");
   assert.equal(loaded.parsed.manifest.status, "planned");
   assert.match(loaded.raw, /lifecycle: next/);
+  assert.match(loaded.raw, /track: knowledge-ops/);
 
   const listed = await listProjects({ repoRoot: root, scanRoots: ["kb"] });
   assert.deepEqual(listed.map((project) => project.projectId), ["alpha-pilot"]);

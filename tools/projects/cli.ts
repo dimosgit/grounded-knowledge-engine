@@ -40,6 +40,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
       status: first(parsed, "status"),
       lifecycle: first(parsed, "lifecycle"),
       owner: first(parsed, "owner"),
+      track: first(parsed, "track"),
       startedAt: first(parsed, "started-at"),
       updated: first(parsed, "updated"),
       reviewAfter: first(parsed, "review-after"),
@@ -97,6 +98,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
       console.log(`Path: ${project.path}`);
       console.log(`Status: ${manifest.status || "-"}`);
       console.log(`Owner: ${manifest.owner || "-"}`);
+      console.log(`Track: ${manifest.track || "-"}`);
       console.log(`Updated: ${manifest.updated || "-"}`);
       console.log(`Source roots: ${manifest.sourceRoots.join(", ") || "-"}`);
     }
@@ -131,6 +133,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
       status: first(parsed, "status"),
       lifecycle: first(parsed, "lifecycle"),
       owner: first(parsed, "owner"),
+      track: first(parsed, "track"),
       updated: first(parsed, "updated"),
       reviewAfter: first(parsed, "review-after"),
       tags: parsed.values.has("tag") ? all(parsed, "tag") : undefined,
@@ -231,6 +234,7 @@ function assertKnownOptions(command: string | undefined, options: CliOptions): v
       "status",
       "lifecycle",
       "owner",
+      "track",
       "started-at",
       "updated",
       "review-after",
@@ -247,6 +251,7 @@ function assertKnownOptions(command: string | undefined, options: CliOptions): v
       "status",
       "lifecycle",
       "owner",
+      "track",
       "updated",
       "review-after",
       "tag",
@@ -291,6 +296,7 @@ Create options:
   --status <status>
   --lifecycle <active|next|blocked|completed>
   --owner <owner>
+  --track <track>
   --started-at <YYYY-MM-DD>
   --updated <YYYY-MM-DD>
   --review-after <YYYY-MM-DD>
@@ -304,6 +310,7 @@ Update options:
   --status <status>
   --lifecycle <active|next|blocked|completed>
   --owner <owner>
+  --track <track>
   --updated <YYYY-MM-DD>
   --review-after <YYYY-MM-DD>
   --tag <tag>                 repeatable; replaces existing tags

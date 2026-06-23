@@ -61,6 +61,22 @@ describe("cockpit major flows", () => {
     expect(matches.length).toBeGreaterThan(0);
   });
 
+  test("project detail keeps the first screen compact and progress evidence-based", async () => {
+    const user = userEvent.setup();
+    window.location.hash = "#/project/router-rollout";
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: /Router Rollout/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "At a glance" })).toBeInTheDocument();
+    expect(screen.getByText(/Not measured — add a weighted task checklist/i)).toBeInTheDocument();
+    expect(screen.queryByText("60% complete")).not.toBeInTheDocument();
+
+    const contextToggle = screen.getByText("Project context").closest("summary");
+    expect(contextToggle).toBeInTheDocument();
+    await user.click(contextToggle!);
+    expect(screen.getByText("Last meaningful change")).toBeInTheDocument();
+  });
+
   test("context graph supports zoom reset and node repositioning", async () => {
     const originalRect = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getGraphRect() {
