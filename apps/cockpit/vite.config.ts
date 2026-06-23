@@ -81,9 +81,7 @@ function boardLifecycleWriteback() {
 
 export default defineConfig({
   plugins: [react(), boardLifecycleWriteback()],
-  server: process.env.PORT
-    ? { port: Number(process.env.PORT), strictPort: true }
-    : undefined,
+  server: process.env.PORT ? { port: Number(process.env.PORT), strictPort: true } : undefined,
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
@@ -94,6 +92,12 @@ export default defineConfig({
     setupFiles: "./src/test-setup.ts",
   },
   build: {
+    // Mermaid is large (~620 KB) but only loaded on demand via the dynamic
+    // import in MarkdownArticle, so it lands in its own chunk that the initial
+    // library and project views never fetch. Raise the size-warning ceiling
+    // above that intentional lazy chunk so the production build stays
+    // warning-free; a genuinely new oversized chunk will still trip the warning.
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
         manualChunks: {

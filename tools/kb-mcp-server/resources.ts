@@ -131,7 +131,10 @@ export async function readMcpResource(
 }
 
 function sanitizeResourcePath(value: string): string {
-  const normalized = value.replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/^\/+/, "");
+  const normalized = value
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/^\/+/, "");
   if (!normalized) throw new Error("Resource path is required.");
   if (normalized.split("/").some((part) => part === ".." || part === "")) {
     throw new Error("Path traversal is not allowed.");

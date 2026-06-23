@@ -3,8 +3,7 @@ export const DEFAULT_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSIONS[0];
 
 export function negotiateProtocolVersion(requested: unknown): string {
   const candidate = typeof requested === "string" ? requested.trim() : "";
-  return candidate &&
-    (SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(candidate)
+  return candidate && (SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(candidate)
     ? candidate
     : DEFAULT_PROTOCOL_VERSION;
 }

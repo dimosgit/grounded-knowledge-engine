@@ -32,7 +32,10 @@
     "export:demo-projects": "tsx tools/projects/export-demo.ts",
     "ingest": "tsx tools/ingest/ingest.ts",
     "ingest:fixtures": "tsx tools/ingest/fixtures/make-fixtures.ts",
-    "scrub": "bash scripts/scrub-gate.sh"
+    "scrub": "bash scripts/scrub-gate.sh",
+    "lint": "eslint tools",
+    "format": "prettier --write \"tools/**/*.ts\" \"scripts/**/*.{ts,mjs}\" \"*.{ts,json,md}\"",
+    "format:check": "prettier --check \"tools/**/*.ts\" \"scripts/**/*.{ts,mjs}\" \"*.{ts,json,md}\""
   },
   "dependencies": {
     "exceljs": "^4.4.0",
@@ -40,11 +43,17 @@
     "unpdf": "^1.6.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.4",
     "@types/node": "^25.9.3",
     "@types/pdfkit": "^0.17.6",
     "docx": "^9.7.1",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^9.1.2",
+    "globals": "^15.15.0",
     "pdfkit": "^0.19.1",
+    "prettier": "^3.8.4",
     "tsx": "^4.22.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.0"
   }
 }

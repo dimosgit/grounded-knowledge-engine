@@ -52,7 +52,10 @@ try {
   assert.match(loaded.raw, /track: knowledge-ops/);
 
   const listed = await listProjects({ repoRoot: root, scanRoots: ["kb"] });
-  assert.deepEqual(listed.map((project) => project.projectId), ["alpha-pilot"]);
+  assert.deepEqual(
+    listed.map((project) => project.projectId),
+    ["alpha-pilot"],
+  );
 
   const valid = await validateProject("alpha-pilot", { repoRoot: root, scanRoots: ["kb"] });
   assert.equal(valid.valid, true, JSON.stringify(valid.issues));
@@ -104,11 +107,7 @@ try {
   assert.match(updatedRaw, /custom_field: keep-me/);
   assert.match(updatedRaw, /## Custom operator notes\n\nPreserve this section exactly\./);
 
-  await write(
-    root,
-    "notes/alpha-evidence.md",
-    "# Alpha Evidence\n\nExplicitly linked evidence.\n",
-  );
+  await write(root, "notes/alpha-evidence.md", "# Alpha Evidence\n\nExplicitly linked evidence.\n");
   const linked = await linkProjectSource({
     repoRoot: root,
     scanRoots: ["kb"],

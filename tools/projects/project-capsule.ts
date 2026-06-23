@@ -1,7 +1,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getKbRetriever } from "../grounding/retriever.js";
-import type { IndexedDocument } from "../grounding/types.js";
 import {
   meaningfulSectionItems,
   parseProjectDocument,
@@ -40,7 +39,8 @@ export async function resumeProject(
       parsed.explicitPaths,
     ),
   );
-  if (!projectDocs.length) throw new Error(`No project context found for project ID: ${requestedProjectId}`);
+  if (!projectDocs.length)
+    throw new Error(`No project context found for project ID: ${requestedProjectId}`);
 
   const outcome = sectionSummary(parsed.sections.get("outcome"));
   const currentStatus = sectionSummary(parsed.sections.get("current-status"));
@@ -125,7 +125,9 @@ export function renderProjectCapsule(capsule: ProjectCapsule): string {
     ...asMarkdownList(capsule.keyDocuments),
     "",
     "## Citations",
-    ...capsule.citations.map((citation) => `- ${citation.path}:${citation.line} — ${citation.section}`),
+    ...capsule.citations.map(
+      (citation) => `- ${citation.path}:${citation.line} — ${citation.section}`,
+    ),
   ].join("\n");
 }
 
