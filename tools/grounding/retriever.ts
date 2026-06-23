@@ -51,7 +51,82 @@ const MAX_LIMIT = 30;
 const MAX_CONTEXT = 3;
 
 const STOPWORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "if", "in", "into", "is", "it", "its", "of", "on", "or", "that", "the", "their", "then", "there", "these", "this", "to", "was", "were", "what", "when", "where", "which", "who", "why", "with", "you", "your", "after", "before", "during", "about", "can", "could", "should", "would", "do", "does", "did", "done", "than", "over", "under", "through", "up", "down", "across", "within", "without", "using", "use", "used", "via", "only", "also", "more", "most", "less", "least", "very", "much", "many", "few", "some", "any",
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "how",
+  "if",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "their",
+  "then",
+  "there",
+  "these",
+  "this",
+  "to",
+  "was",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "who",
+  "why",
+  "with",
+  "you",
+  "your",
+  "after",
+  "before",
+  "during",
+  "about",
+  "can",
+  "could",
+  "should",
+  "would",
+  "do",
+  "does",
+  "did",
+  "done",
+  "than",
+  "over",
+  "under",
+  "through",
+  "up",
+  "down",
+  "across",
+  "within",
+  "without",
+  "using",
+  "use",
+  "used",
+  "via",
+  "only",
+  "also",
+  "more",
+  "most",
+  "less",
+  "least",
+  "very",
+  "much",
+  "many",
+  "few",
+  "some",
+  "any",
 ]);
 
 // Optional query-expansion dictionary: maps an acronym/term to related words so a
@@ -168,13 +243,20 @@ export async function getKbRetriever(options: RetrieverOptions = {}): Promise<Kb
 }
 
 function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
-  const repoRoot = path.resolve(options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."));
+  const repoRoot = path.resolve(
+    options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
+  );
   const scanRoots = normalizeScanRoots(
     options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS,
     DEFAULT_SCAN_ROOTS,
   );
   const cachePath = path.resolve(repoRoot, options.cachePath || DEFAULT_INDEX_CACHE_FILE);
-  const cacheTtlMs = parsePositiveInt(options.cacheTtlMs, DEFAULT_INDEX_CACHE_TTL_MS, 1000, 10 * 60 * 1000);
+  const cacheTtlMs = parsePositiveInt(
+    options.cacheTtlMs,
+    DEFAULT_INDEX_CACHE_TTL_MS,
+    1000,
+    10 * 60 * 1000,
+  );
   const queryCacheTtlMs = parsePositiveInt(
     options.queryCacheTtlMs ?? process.env.KB_MCP_QUERY_CACHE_TTL_MS,
     DEFAULT_QUERY_CACHE_TTL_MS,
@@ -225,7 +307,6 @@ async function loadOrBuildIndex(options: ResolvedRetrieverOptions): Promise<Retr
 }
 
 async function buildIndex({
-  repoRoot,
   files,
   manifestHash,
   scanRoots,
@@ -250,7 +331,9 @@ async function buildIndex({
     }
 
     const isMarkdown = file.relPath.endsWith(".md");
-    const parsed = isMarkdown ? parseFrontmatter(raw) : { frontmatter: {} as Record<string, string>, body: raw };
+    const parsed = isMarkdown
+      ? parseFrontmatter(raw)
+      : { frontmatter: {} as Record<string, string>, body: raw };
     const body = parsed.body || "";
     if (!body.trim()) continue;
 
@@ -337,7 +420,12 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
     const mode = inferMode(query, normalizeScalar(args.mode) || "auto");
     const limit = parsePositiveInt(args.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
     const contextRadius = parsePositiveInt(args.context, 1, 0, MAX_CONTEXT);
-    const maxPerPath = parsePositiveInt(args.maxPerPath, Math.max(2, Math.ceil(limit / 2)), 1, limit);
+    const maxPerPath = parsePositiveInt(
+      args.maxPerPath,
+      Math.max(2, Math.ceil(limit / 2)),
+      1,
+      limit,
+    );
     const track = normalizeScalar(args.track);
     const module = normalizeScalar(args.module);
     const includeArchive = Boolean(args.includeArchive);
@@ -449,10 +537,15 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
           score: rerankResult.score,
           matchedTerms: [...terms],
           rerankAdjustments: rerankResult.adjustments,
-          tokenContributions: tokenContributions ? tokenContributions.get(chunkId) ?? null : null,
+          tokenContributions: tokenContributions ? (tokenContributions.get(chunkId) ?? null) : null,
         };
       })
-      .sort((a, b) => b.score - a.score || a.chunk.path.localeCompare(b.chunk.path) || a.chunk.startLine - b.chunk.startLine)
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          a.chunk.path.localeCompare(b.chunk.path) ||
+          a.chunk.startLine - b.chunk.startLine,
+      )
       .slice(0, topWindow);
 
     const deduped = dedupeCandidates(prelim);
@@ -596,7 +689,10 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
   };
 }
 
-function trimQueryCache(cache: Map<string, { createdAt: number; value: SearchResult }>, maxEntries: number): void {
+function trimQueryCache(
+  cache: Map<string, { createdAt: number; value: SearchResult }>,
+  maxEntries: number,
+): void {
   while (cache.size > maxEntries) {
     const oldestKey = cache.keys().next().value;
     if (!oldestKey) break;
@@ -664,7 +760,9 @@ function sourceShares(hits: SearchHit[]): number[] {
   return [...counts.values()].map((count) => count / hits.length);
 }
 
-function summarizeTokenContributions(contribMap: Map<string, number> | null): Array<{ token: string; score: number }> {
+function summarizeTokenContributions(
+  contribMap: Map<string, number> | null,
+): Array<{ token: string; score: number }> {
   if (!(contribMap instanceof Map)) return [];
   return [...contribMap.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -706,7 +804,15 @@ function bm25Score(tf: number, docLength: number, avgDocLength: number, idf: num
   return idf * (numerator / denominator);
 }
 
-function rerankCandidate({ chunk, baseScore, query, mode, matchedTokenCount, tokenWeights, debug }: RerankArgs): RerankResult {
+function rerankCandidate({
+  chunk,
+  baseScore,
+  query,
+  mode,
+  matchedTokenCount,
+  tokenWeights,
+  debug,
+}: RerankArgs): RerankResult {
   let score = baseScore;
   const adjustments: RerankAdjustment[] = [];
   const queryLower = query.toLowerCase();
@@ -721,7 +827,8 @@ function rerankCandidate({ chunk, baseScore, query, mode, matchedTokenCount, tok
 
   const tokenMatchBoost = Math.min(3.2, matchedTokenCount * 0.45);
   score += tokenMatchBoost;
-  if (debug && tokenMatchBoost) adjustments.push({ reason: "matched_token_count", delta: round(tokenMatchBoost) });
+  if (debug && tokenMatchBoost)
+    adjustments.push({ reason: "matched_token_count", delta: round(tokenMatchBoost) });
 
   for (const token of tokenWeights.keys()) {
     if (pathLower.includes(token)) {
@@ -782,14 +889,14 @@ function dedupeCandidates(candidates: RankedCandidate[]): RankedCandidate[] {
 }
 
 function normalizeSnippetKey(text: string): string {
-  return text
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase()
-    .slice(0, 180);
+  return text.replace(/\s+/g, " ").trim().toLowerCase().slice(0, 180);
 }
 
-function chooseAnchorLine(chunk: IndexedChunk, query: string, tokenWeights: QueryWeights): AnchorLine {
+function chooseAnchorLine(
+  chunk: IndexedChunk,
+  query: string,
+  tokenWeights: QueryWeights,
+): AnchorLine {
   const lines = chunk.text.split(/\r?\n/);
   const queryLower = query.toLowerCase();
   const tokens = [...tokenWeights.keys()];
@@ -817,7 +924,11 @@ function chooseAnchorLine(chunk: IndexedChunk, query: string, tokenWeights: Quer
   };
 }
 
-function buildChunkContext(chunk: IndexedChunk, anchorLineOffset: number, radius: number): SearchContextRow[] {
+function buildChunkContext(
+  chunk: IndexedChunk,
+  anchorLineOffset: number,
+  radius: number,
+): SearchContextRow[] {
   const lines = chunk.text.split(/\r?\n/);
   const start = Math.max(0, anchorLineOffset - radius);
   const end = Math.min(lines.length - 1, anchorLineOffset + radius);
@@ -859,7 +970,7 @@ function trimWindow(text: string, index: number, length: number, maxChars: numbe
   const pivot = index + Math.floor(length / 2);
   const half = Math.floor(maxChars / 2);
   let start = Math.max(0, pivot - half);
-  let end = Math.min(text.length, start + maxChars);
+  const end = Math.min(text.length, start + maxChars);
   if (end - start < maxChars) {
     start = Math.max(0, end - maxChars);
   }
@@ -870,7 +981,14 @@ function trimWindow(text: string, index: number, length: number, maxChars: numbe
   return snippet;
 }
 
-function seedFallbackCandidates({ chunks, query, mode, activeChunks, outScores, outMatchedTerms }: FallbackCandidateArgs): void {
+function seedFallbackCandidates({
+  chunks,
+  query,
+  mode,
+  activeChunks,
+  outScores,
+  outMatchedTerms,
+}: FallbackCandidateArgs): void {
   const queryLower = query.toLowerCase().trim();
   if (!queryLower) return;
 
@@ -888,7 +1006,10 @@ function seedFallbackCandidates({ chunks, query, mode, activeChunks, outScores, 
     if (mode === "project" && chunk.sourceKind === "project") score += 1.5;
 
     outScores.set(chunk.id, score);
-    outMatchedTerms.set(chunk.id, new Set(fallbackTokens.filter((token) => textLower.includes(token))));
+    outMatchedTerms.set(
+      chunk.id,
+      new Set(fallbackTokens.filter((token) => textLower.includes(token))),
+    );
   }
 }
 
@@ -1022,7 +1143,10 @@ async function tryLoadCachedIndex(cachePath: string): Promise<CachedRetrieverInd
   }
 }
 
-async function trySaveCachedIndex(cachePath: string, index: CachedRetrieverIndex | RetrieverIndex): Promise<void> {
+async function trySaveCachedIndex(
+  cachePath: string,
+  index: CachedRetrieverIndex | RetrieverIndex,
+): Promise<void> {
   try {
     await fs.mkdir(path.dirname(cachePath), { recursive: true });
     await fs.writeFile(cachePath, JSON.stringify(index), "utf8");
@@ -1054,7 +1178,8 @@ function deserializeMap<T>(serialized: Array<[string, T]> | Map<string, T>): Map
 }
 
 function inferMode(query: string, explicitMode: string): SearchMode {
-  if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic") return explicitMode;
+  if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic")
+    return explicitMode;
   const q = query.toLowerCase();
   if (/\bproject\b|\btask\s*\d+\b/.test(q)) return "project";
   return "generic";

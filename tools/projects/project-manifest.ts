@@ -23,9 +23,16 @@ export function normalizeProjectId(value: unknown): string {
     .replace(/^-+|-+$/g, "");
 }
 
-export function parseProjectDocument(raw: string, relPath: string, fallbackTitle: string): ParsedProjectDocument {
+export function parseProjectDocument(
+  raw: string,
+  relPath: string,
+  fallbackTitle: string,
+): ParsedProjectDocument {
   const { frontmatter, bodyStartLine } = parseProjectFrontmatter(raw);
-  const body = raw.split(/\r?\n/).slice(bodyStartLine - 1).join("\n");
+  const body = raw
+    .split(/\r?\n/)
+    .slice(bodyStartLine - 1)
+    .join("\n");
   return parseProjectData(frontmatter, body, relPath, fallbackTitle, bodyStartLine);
 }
 
@@ -69,7 +76,9 @@ export function parseProjectData(
     sections.set(current.key, current);
   }
 
-  const canonicalPathMatch = relPath.match(/(?:^|\/)(?:demo-kb|kb)\/projects\/([^/]+)\/project\.md$/);
+  const canonicalPathMatch = relPath.match(
+    /(?:^|\/)(?:demo-kb|kb)\/projects\/([^/]+)\/project\.md$/,
+  );
   const projectId = normalizeProjectId(
     frontmatter.project_id ||
       canonicalPathMatch?.[1] ||
@@ -149,7 +158,12 @@ export function sectionItems(section: ProjectSection | undefined): string[] {
   return section.content
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "").replace(/^\[[ xX]\]\s+/, ""))
+    .map((line) =>
+      line
+        .replace(/^[-*]\s+/, "")
+        .replace(/^\d+[.)]\s+/, "")
+        .replace(/^\[[ xX]\]\s+/, ""),
+    )
     .filter((line) => Boolean(line) && !line.startsWith("#"));
 }
 

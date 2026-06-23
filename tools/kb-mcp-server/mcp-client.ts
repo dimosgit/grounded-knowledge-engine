@@ -69,8 +69,14 @@ export class McpClient {
         reject(new Error(`Timeout waiting for response to ${method}`));
       }, timeoutMs);
       this.pending.set(id, {
-        resolve: (r) => { clearTimeout(timeout); resolve(r); },
-        reject: (e) => { clearTimeout(timeout); reject(e); },
+        resolve: (r) => {
+          clearTimeout(timeout);
+          resolve(r);
+        },
+        reject: (e) => {
+          clearTimeout(timeout);
+          reject(e);
+        },
       });
       this.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n");
     });

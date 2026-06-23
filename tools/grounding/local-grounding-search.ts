@@ -1,11 +1,6 @@
 #!/usr/bin/env node
 import { getKbRetriever } from "./retriever.js";
-import type {
-  RetrievalBackend,
-  RetrieverOptions,
-  SearchHit,
-  SearchMode,
-} from "./types.js";
+import type { RetrievalBackend, RetrieverOptions, SearchHit, SearchMode } from "./types.js";
 
 const DEFAULT_LIMIT = 12;
 const DEFAULT_CONTEXT = 1;
@@ -275,9 +270,10 @@ async function main() {
     return;
   }
 
-  const retriever = args.backend === "sqlite"
-    ? await getSqliteRetriever({ forceRefresh: args.refresh })
-    : await getKbRetriever({ forceRefresh: args.refresh });
+  const retriever =
+    args.backend === "sqlite"
+      ? await getSqliteRetriever({ forceRefresh: args.refresh })
+      : await getKbRetriever({ forceRefresh: args.refresh });
   const result = retriever.search({
     query: args.query,
     mode: args.mode,
@@ -325,16 +321,22 @@ async function main() {
     const debug = result.debug as SearchDebug;
     console.log("");
     console.log("## Retrieval Trace");
-    console.log(`Candidates (before/after dedupe): ${debug.candidateCountBeforeDedupe}/${debug.candidateCountAfterDedupe}`);
+    console.log(
+      `Candidates (before/after dedupe): ${debug.candidateCountBeforeDedupe}/${debug.candidateCountAfterDedupe}`,
+    );
     const weightedTokens = debug.queryTokens
       .map((item) => `${item.token}:${item.weight}${item.expanded ? "*" : ""}`)
       .join(", ");
     console.log(`Weighted tokens: ${weightedTokens}`);
     console.log("Top candidates:");
     debug.topCandidates.forEach((item, idx) => {
-      console.log(`${idx + 1}. [${item.score}] ${item.path}:${item.lineNumber} (base ${item.baseScore})`);
+      console.log(
+        `${idx + 1}. [${item.score}] ${item.path}:${item.lineNumber} (base ${item.baseScore})`,
+      );
       if (item.tokenContributions?.length) {
-        const tokenStr = item.tokenContributions.map((part) => `${part.token}:${part.score}`).join(", ");
+        const tokenStr = item.tokenContributions
+          .map((part) => `${part.token}:${part.score}`)
+          .join(", ");
         console.log(`   token contributions: ${tokenStr}`);
       }
       if (item.rerankAdjustments?.length) {

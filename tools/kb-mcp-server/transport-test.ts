@@ -1,10 +1,7 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
-import {
-  JsonRpcFrameParser,
-  startJsonRpcStdioTransport,
-} from "./transport.js";
+import { JsonRpcFrameParser, startJsonRpcStdioTransport } from "./transport.js";
 
 await testFrameParser();
 await testTransportDispatch();
@@ -81,7 +78,9 @@ async function testTransportDispatch(): Promise<void> {
     errorMessage: (error) => (error instanceof Error ? error.message : String(error)),
   });
 
-  input.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "echo", params: { value: "ok" } })}\n`);
+  input.write(
+    `${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "echo", params: { value: "ok" } })}\n`,
+  );
   input.write(`${JSON.stringify({ jsonrpc: "2.0", method: "ready", params: {} })}\n`);
   input.write(`${JSON.stringify({ jsonrpc: "2.0", id: 2, method: "fail", params: {} })}\n`);
   input.write(`${JSON.stringify({ jsonrpc: "2.0", id: 3, params: {} })}\n`);
@@ -103,10 +102,7 @@ async function testTransportDispatch(): Promise<void> {
   const parseError = byId.get(null);
   assert.equal(parseError?.jsonrpc, "2.0");
   assert.equal((parseError?.error as { code: number }).code, -32700);
-  assert.match(
-    ((parseError?.error as { message: string }) || {}).message,
-    /Invalid JSON payload/,
-  );
+  assert.match(((parseError?.error as { message: string }) || {}).message, /Invalid JSON payload/);
   assert.deepEqual(byId.get(2), {
     jsonrpc: "2.0",
     id: 2,
@@ -121,7 +117,8 @@ async function testTransportDispatch(): Promise<void> {
 async function waitFor(predicate: () => boolean, timeoutMs = 2000): Promise<void> {
   const started = Date.now();
   while (!predicate()) {
-    if (Date.now() - started > timeoutMs) throw new Error("Timed out waiting for transport output.");
+    if (Date.now() - started > timeoutMs)
+      throw new Error("Timed out waiting for transport output.");
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
