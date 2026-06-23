@@ -178,7 +178,7 @@ projects. Its output includes:
 - current focus and last meaningful change;
 - active decisions;
 - blockers and open questions;
-- exactly the next three actions;
+- up to the next three actions (none for completed projects);
 - key documents and line citations.
 
 The shared parser and handoff formatter live under
@@ -196,6 +196,7 @@ project CLI. MCP is not required for project administration.
 npm run project -- create customer-pilot \
   --title "Customer Pilot" \
   --owner "workspace-owner" \
+  --track "product" \
   --status active \
   --tag pilot \
   --tag customer

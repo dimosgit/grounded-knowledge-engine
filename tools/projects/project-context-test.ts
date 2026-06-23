@@ -99,6 +99,28 @@ project_id: client-beta
 Beta-only secret marker.
 `,
   );
+  await write(
+    "kb/projects/completed-project/project.md",
+    `---
+schema_version: 1
+record_type: project
+project_id: completed-project
+title: Completed Project
+status: completed
+lifecycle: completed
+---
+# Completed Project
+
+## Current focus
+Completed.
+
+## Blockers
+- None recorded.
+
+## Next actions
+- None recorded.
+`,
+  );
 
   const alpha = await resumeProject({ projectId: "client-alpha" }, root, ["kb"]);
   assert.equal(alpha.structured.title, "Client Alpha Rollout");
@@ -116,6 +138,10 @@ Beta-only secret marker.
   assert.ok(!alpha.contentText.includes("Beta-only"));
   assert.ok(alpha.structured.citations.every((citation) => citation.path === "kb/projects/client-alpha/project.md"));
   assert.match(formatTechnicalPeerHandoff(alpha.structured), /Technical handoff: Client Alpha Rollout/);
+
+  const completed = await resumeProject({ projectId: "completed-project" }, root, ["kb"]);
+  assert.deepEqual(completed.structured.blockersAndQuestions, []);
+  assert.deepEqual(completed.structured.nextThreeActions, []);
 
   await assert.rejects(
     () => resumeProject({ projectId: "missing-project" }, root, ["kb"]),

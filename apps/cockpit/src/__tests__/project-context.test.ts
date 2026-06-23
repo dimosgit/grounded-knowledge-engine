@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildProjectLinkedDocs, buildProjectSummaries } from "../domain/projects";
+import {
+  buildProjectLinkedDocs,
+  buildProjectSummaries,
+  compactProjectText,
+} from "../domain/projects";
 
 function doc(path, title, frontmatter, content) {
   return {
@@ -80,6 +84,7 @@ Legacy remains readable.
     expect(canonical.currentFocus).toBe("Validate the shared project model.");
     expect(canonical.recentChanges).toBe("The Cockpit now consumes the shared parser.");
     expect(canonical.nextActions).toHaveLength(3);
+    expect(canonical.blockers).toEqual([]);
     expect(canonical.openQuestions).toEqual(["Which demo should lead?"]);
     expect(canonical.handoffMarkdown).toContain("Technical handoff: Router Rollout");
     expect(legacy.currentStatus).toBe("Legacy remains readable.");
@@ -89,5 +94,45 @@ Legacy remains readable.
       "kb/projects/router-rollout/project.md",
       "kb/sources/router-rollout/evidence.md",
     ]);
+  });
+
+  it("creates bounded glance summaries and completed semantics", () => {
+    const completed = doc(
+      "kb/projects/completed-demo/project.md",
+      "Completed Demo",
+      {
+        record_type: "project",
+        project_id: "completed-demo",
+        status: "completed",
+        lifecycle: "completed",
+      },
+      `# Completed Demo
+
+## Outcome
+Ship the completed demo and preserve its full handoff context.
+
+## Current focus
+Completed.
+
+## Blockers
+- None recorded.
+
+## Next actions
+- None recorded.
+`,
+    );
+
+    const project = buildProjectSummaries([completed])[0];
+    expect(project.statusBucket).toBe("done");
+    expect(project.blockers).toEqual([]);
+    expect(project.nextActions).toEqual([]);
+    expect(project.glance.startHere.length).toBeLessThanOrEqual(180);
+
+    expect(
+      compactProjectText(
+        "Stand up the public cockpit and attach the final production subdomain after deployment validation.",
+        54,
+      ),
+    ).toBe("Stand up the public cockpit and attach the final…");
   });
 });

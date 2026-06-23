@@ -84,6 +84,7 @@ export function parseProjectData(
     workspaceId: `${frontmatter.workspace_id || frontmatter.workspace || "default"}`.trim(),
     status: `${frontmatter.status || frontmatter.lifecycle || ""}`.trim(),
     owner: `${frontmatter.owner || ""}`.trim(),
+    track: `${frontmatter.track || "general"}`.trim(),
     startedAt: `${frontmatter.started_at || ""}`.trim(),
     updated: `${frontmatter.updated || ""}`.trim(),
     reviewAfter: `${frontmatter.review_after || ""}`.trim(),
@@ -150,6 +151,16 @@ export function sectionItems(section: ProjectSection | undefined): string[] {
     .map((line) => line.trim())
     .map((line) => line.replace(/^[-*]\s+/, "").replace(/^\d+[.)]\s+/, "").replace(/^\[[ xX]\]\s+/, ""))
     .filter((line) => Boolean(line) && !line.startsWith("#"));
+}
+
+export function meaningfulSectionItems(section: ProjectSection | undefined): string[] {
+  return sectionItems(section).filter((item) => !isPlaceholderSectionItem(item));
+}
+
+export function isPlaceholderSectionItem(item: string): boolean {
+  return /^(?:none|no (?:active |critical |current |hard )?blockers?)(?:\b|[.:\u2014-])/i.test(
+    item.trim(),
+  );
 }
 
 export function sectionSummary(section: ProjectSection | undefined): string {

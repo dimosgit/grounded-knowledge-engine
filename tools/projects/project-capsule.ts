@@ -3,6 +3,7 @@ import path from "node:path";
 import { getKbRetriever } from "../grounding/retriever.js";
 import type { IndexedDocument } from "../grounding/types.js";
 import {
+  meaningfulSectionItems,
   parseProjectDocument,
   sectionItems,
   sectionSummary,
@@ -51,12 +52,17 @@ export async function resumeProject(
     sectionSummary(parsed.sections.get("last-meaningful-change")) ||
     currentStatus ||
     "No recent change recorded.";
-  const activeDecisions = sectionItems(parsed.sections.get("active-decisions"));
+  const activeDecisions = meaningfulSectionItems(parsed.sections.get("active-decisions"));
   const blockersAndQuestions = [
-    ...sectionItems(parsed.sections.get("blockers")),
-    ...sectionItems(parsed.sections.get("open-questions")),
+    ...meaningfulSectionItems(parsed.sections.get("blockers")),
+    ...meaningfulSectionItems(parsed.sections.get("open-questions")),
   ];
-  const nextThreeActions = sectionItems(parsed.sections.get("next-actions")).slice(0, 3);
+  const completed = ["completed", "complete", "done", "shipped", "delivered"].includes(
+    parsed.manifest.status.toLowerCase(),
+  );
+  const nextThreeActions = completed
+    ? []
+    : meaningfulSectionItems(parsed.sections.get("next-actions")).slice(0, 3);
   const keyDocuments = unique([
     ...sectionItems(parsed.sections.get("key-documents")),
     ...projectDocs.filter((doc) => doc.relPath !== manifestDoc.relPath).map((doc) => doc.relPath),
