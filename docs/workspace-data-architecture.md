@@ -1,11 +1,11 @@
 # Workspace Data Architecture
 
-**Status:** Normative target architecture. **Last updated:** 2026-06-22.
+**Status:** Normative target architecture. **Last updated:** 2026-06-23.
 
 This document is the shared data contract for:
 
 - [MCP Core Modernization](prompt/2026-06-21-mcp-core-modernization.md)
-- [Project Context API](prompt/2026-06-21-project-context-api.md)
+- [Project Context implementation](../README.md#structured-project-context)
 - [Workspace Vaults and Leakage Guard](prompt/2026-06-21-workspace-vaults-leakage-guard.md)
 - [Remote MCP Gateway](prompt/2026-06-21-remote-mcp-microsoft-copilot.md)
 - [Decision Replay](prompt/2026-06-21-decision-replay.md)

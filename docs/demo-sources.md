@@ -38,3 +38,14 @@ source:
 The notes are paraphrases pinned to the upstream `main` branch as pulled on
 2026-06-17. When refreshing the demo corpus, update the `Ref` / `Date pulled`
 columns above and re-run `npm run eval` to confirm retrieval still passes.
+
+The complete demo can also be regenerated as a standalone canonical workspace
+through the project CLI:
+
+```bash
+npm run export:demo-projects
+npm run project -- validate --repo-root examples/demo-project-workspace
+```
+
+The generated copy lives under `examples/demo-project-workspace/kb`, so it can
+be tested independently without creating duplicate project IDs in this repo.
