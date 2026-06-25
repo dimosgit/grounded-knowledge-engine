@@ -129,7 +129,11 @@ async function extractXlsx(filePath: string): Promise<ExtractResult> {
     const lines: string[] = [`## ${worksheet.name}`, ""];
     const [header, ...body] = rows;
     lines.push(`| ${pad(header).join(" | ")} |`);
-    lines.push(`| ${pad(header).map(() => "---").join(" | ")} |`);
+    lines.push(
+      `| ${pad(header)
+        .map(() => "---")
+        .join(" | ")} |`,
+    );
     for (const r of body) lines.push(`| ${pad(r).join(" | ")} |`);
     if (truncated) {
       lines.push("");

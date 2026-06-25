@@ -104,7 +104,11 @@ async function main(): Promise<void> {
       type: "concept",
       status: "draft",
     });
-    assert.equal(capture.structuredContent?.dryRun, false, "Capture must be a real write, not a dry run.");
+    assert.equal(
+      capture.structuredContent?.dryRun,
+      false,
+      "Capture must be a real write, not a dry run.",
+    );
     assert.equal(capture.structuredContent?.action, "created");
     const capturedPath = capture.structuredContent?.path as string;
     assert.ok(capturedPath, "Capture did not return a path.");
@@ -112,7 +116,11 @@ async function main(): Promise<void> {
     // The note actually landed on disk in the sandbox KB.
     const absCapturedPath = path.join(repoRoot, capturedPath);
     const onDisk = await fs.readFile(absCapturedPath, "utf8");
-    assert.match(onDisk, new RegExp(UNIQUE_TOKEN), "Stored note on disk does not contain the captured fact.");
+    assert.match(
+      onDisk,
+      new RegExp(UNIQUE_TOKEN),
+      "Stored note on disk does not contain the captured fact.",
+    );
 
     // ---- Pillar 3: RE-GROUND — refresh, then prove the stored fact is now retrieved & cited. ----
     const refreshed = await client.callTool("kb.refresh", {});
@@ -137,7 +145,9 @@ async function main(): Promise<void> {
         `Citations: ${JSON.stringify(citationPaths(postAnswer))}`,
     );
 
-    console.log("GKE loop integration test passed (ground -> capture -> persist -> re-ground -> cite).");
+    console.log(
+      "GKE loop integration test passed (ground -> capture -> persist -> re-ground -> cite).",
+    );
   } finally {
     if (child) child.kill("SIGTERM");
     await fs.rm(repoRoot, { recursive: true, force: true });

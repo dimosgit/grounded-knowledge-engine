@@ -64,7 +64,14 @@ export function matchesTrackAndLearningItem(doc, activeTrack, activeItemType) {
   return matchesLearningItem;
 }
 
-export function getInitialDocPath(docs, activeTag, hideMerged, activeTrack, activeItemType, options: any = {}) {
+export function getInitialDocPath(
+  docs,
+  activeTag,
+  hideMerged,
+  activeTrack,
+  activeItemType,
+  options: any = {},
+) {
   const { fallbackToAnyDoc = true } = options;
   const visible = docs.filter((doc) => {
     if (!matchesTrackAndLearningItem(doc, activeTrack, activeItemType)) return false;

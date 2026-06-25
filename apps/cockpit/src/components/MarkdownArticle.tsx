@@ -163,7 +163,8 @@ function MermaidDiagram({ chart }) {
         }
       } catch (cause) {
         if (cancelled) return;
-        const message = cause instanceof Error && cause.message ? cause.message : "Unknown rendering error.";
+        const message =
+          cause instanceof Error && cause.message ? cause.message : "Unknown rendering error.";
         setError(message);
       }
     }
@@ -190,7 +191,12 @@ function MermaidDiagram({ chart }) {
 
   return (
     <div className="markdown-mermaid-block">
-      <div className="markdown-mermaid-diagram" ref={diagramRef} role="img" aria-label="Mermaid diagram" />
+      <div
+        className="markdown-mermaid-diagram"
+        ref={diagramRef}
+        role="img"
+        aria-label="Mermaid diagram"
+      />
     </div>
   );
 }
@@ -208,8 +214,13 @@ export default function MarkdownArticle({
   const headingElementMapRef = useRef(new Map());
   const [tocHeadings, setTocHeadings] = useState([]);
   const wordCount = useMemo(() => getWordCount(content), [content]);
-  const forceWrapCodeBlocks = useMemo(() => /(^|\/)prompts\.md$/i.test(activePath || ""), [activePath]);
-  const showToc = tocHeadings.length >= TOC_MIN_HEADINGS || (tocHeadings.length >= 3 && wordCount >= TOC_MIN_WORDS);
+  const forceWrapCodeBlocks = useMemo(
+    () => /(^|\/)prompts\.md$/i.test(activePath || ""),
+    [activePath],
+  );
+  const showToc =
+    tocHeadings.length >= TOC_MIN_HEADINGS ||
+    (tocHeadings.length >= 3 && wordCount >= TOC_MIN_WORDS);
   const [activeHeadingId, setActiveHeadingId] = useState(null);
 
   useEffect(() => {
@@ -252,14 +263,20 @@ export default function MarkdownArticle({
 
   function scrollToHeading(id) {
     if (!id) return;
-    const target = headingElementMapRef.current.get(id) || articleContentRef.current?.querySelector(`[id="${id}"]`) || null;
+    const target =
+      headingElementMapRef.current.get(id) ||
+      articleContentRef.current?.querySelector(`[id="${id}"]`) ||
+      null;
     if (!target) return;
 
     const scrollRoot = articleContentRef.current?.closest(".markdown");
     if (scrollRoot && scrollRoot.scrollHeight > scrollRoot.clientHeight) {
       const offset = 92;
       const targetTop =
-        target.getBoundingClientRect().top - scrollRoot.getBoundingClientRect().top + scrollRoot.scrollTop - offset;
+        target.getBoundingClientRect().top -
+        scrollRoot.getBoundingClientRect().top +
+        scrollRoot.scrollTop -
+        offset;
       scrollRoot.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
     } else {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -273,7 +290,9 @@ export default function MarkdownArticle({
     const contentRoot = articleContentRef.current;
     if (!contentRoot) return undefined;
 
-    const headingElements = tocHeadings.map((heading) => headingElementMapRef.current.get(heading.id)).filter(Boolean);
+    const headingElements = tocHeadings
+      .map((heading) => headingElementMapRef.current.get(heading.id))
+      .filter(Boolean);
     if (!headingElements.length) return undefined;
 
     const scrollRoot = contentRoot.closest(".markdown");

@@ -6,11 +6,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
 import { negotiateProtocolVersion } from "./protocol.js";
-import {
-  MCP_RESOURCES,
-  MCP_RESOURCE_TEMPLATES,
-  readMcpResource,
-} from "./resources.js";
+import { MCP_RESOURCES, MCP_RESOURCE_TEMPLATES, readMcpResource } from "./resources.js";
 import { startJsonRpcStdioTransport } from "./transport.js";
 import {
   gatherCandidateFiles as gatherKnowledgeFiles,
@@ -22,7 +18,10 @@ import {
   parseFrontmatter,
   parsePositiveInt,
 } from "../grounding/document-core.js";
-import { DEFAULT_SCAN_ROOTS as RETRIEVER_DEFAULT_SCAN_ROOTS, getKbRetriever } from "../grounding/retriever.js";
+import {
+  DEFAULT_SCAN_ROOTS as RETRIEVER_DEFAULT_SCAN_ROOTS,
+  getKbRetriever,
+} from "../grounding/retriever.js";
 import { resumeProject } from "../projects/index.js";
 import type {
   IndexedDocument,
@@ -63,14 +62,22 @@ interface LocalDocument extends IndexedDocument {
 type LogLevel = "off" | "error" | "warn" | "info" | "debug";
 type ResponseFormat = "compact" | "full";
 
-
-const DEFAULT_CACHE_TTL_MS = parsePositiveInt(process.env.KB_MCP_CACHE_TTL_MS, 15000, 1000, 10 * 60 * 1000);
+const DEFAULT_CACHE_TTL_MS = parsePositiveInt(
+  process.env.KB_MCP_CACHE_TTL_MS,
+  15000,
+  1000,
+  10 * 60 * 1000,
+);
 const DEFAULT_SLO_MS = parsePositiveInt(process.env.KB_MCP_SLO_MS, 3000, 50, 120 * 1000);
 const DEFAULT_REQUIRE_CAPTURE = parseBooleanEnv(process.env.KB_MCP_REQUIRE_CAPTURE, true);
 const DEFAULT_ENABLE_WRITES = parseBooleanEnv(process.env.KB_MCP_ENABLE_WRITES, false);
 const DEFAULT_MCP_PROFILE = normalizeMcpProfile(process.env.KB_MCP_PROFILE);
-const DEFAULT_RETRIEVAL_BACKEND = normalizeRetrievalBackend(process.env.KB_MCP_RETRIEVAL_BACKEND || "bm25");
-const DEFAULT_RESPONSE_FORMAT = normalizeResponseFormatValue(process.env.KB_MCP_RESPONSE_FORMAT || "compact");
+const DEFAULT_RETRIEVAL_BACKEND = normalizeRetrievalBackend(
+  process.env.KB_MCP_RETRIEVAL_BACKEND || "bm25",
+);
+const DEFAULT_RESPONSE_FORMAT = normalizeResponseFormatValue(
+  process.env.KB_MCP_RESPONSE_FORMAT || "compact",
+);
 const WRITE_REFRESH_DEBOUNCE_MS = parsePositiveInt(
   process.env.KB_MCP_WRITE_REFRESH_DEBOUNCE_MS,
   75,
@@ -177,8 +184,7 @@ async function main() {
     input: process.stdin,
     output: process.stdout,
     handleRequest: (method, params) => handleRequest(method, params as JsonObject),
-    handleNotification: (method, params) =>
-      handleNotification(method, params as JsonObject),
+    handleNotification: (method, params) => handleNotification(method, params as JsonObject),
     errorCode: toJsonRpcErrorCode,
     errorMessage: safeErrorMessage,
     log: (message) => log("debug", message),
@@ -199,8 +205,7 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
         protocolVersion: negotiateProtocolVersion(params?.protocolVersion),
         capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
-        instructions:
-          `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). Use kb.search for evidence, kb.get_record for direct reads, and kb.answer_and_capture for grounded Q&A. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled; automatic capture is skipped"}.`,
+        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). Use kb.search for evidence, kb.get_record for direct reads, and kb.answer_and_capture for grounded Q&A. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled; automatic capture is skipped"}.`,
       };
     case "ping":
       return {};
@@ -279,7 +284,9 @@ async function handleKbSearch(args: JsonObject): Promise<ToolPayload> {
     lines.push("");
     lines.push("Trace:");
     result.debug.topCandidates.forEach((item, idx) => {
-      lines.push(`${idx + 1}. [${item.score}] ${item.path}:${item.lineNumber} (base ${item.baseScore})`);
+      lines.push(
+        `${idx + 1}. [${item.score}] ${item.path}:${item.lineNumber} (base ${item.baseScore})`,
+      );
     });
   }
 
@@ -309,7 +316,9 @@ async function handleKbGetRecord(args: JsonObject): Promise<ToolPayload> {
       payload.title ? `Title: ${payload.title}` : "",
       "",
       payload.bodyPreview,
-    ].filter((line) => line !== "").join("\n"),
+    ]
+      .filter((line) => line !== "")
+      .join("\n"),
     structured: { query, kind, match: payload },
   };
 }
@@ -322,7 +331,12 @@ async function handleCompatibilityRecordRead(
 ): Promise<ToolPayload> {
   const query = normalizeScalar(rawQuery);
   if (!query) throw new Error(`Missing required argument: ${kind}`);
-  const maxChars = parsePositiveInt(rawMaxChars, kind === "topic" ? 8000 : 5000, kind === "topic" ? 500 : 300, kind === "topic" ? 50000 : 30000);
+  const maxChars = parsePositiveInt(
+    rawMaxChars,
+    kind === "topic" ? 8000 : 5000,
+    kind === "topic" ? 500 : 300,
+    kind === "topic" ? 50000 : 30000,
+  );
   const result = await handleKbGetRecord({ query, kind, maxChars });
   return {
     contentText: result.contentText.replace("# kb.get_record", `# ${toolName}`),
@@ -361,8 +375,12 @@ async function handleKbListModules() {
 
   const ownershipPath = path.join(repoRoot, "kb", "modules", "topic-ownership.json");
   const ownership = await tryReadJson<OwnershipData>(ownershipPath, {});
-  const ownerMap = ownership?.owners && typeof ownership.owners === "object" ? ownership.owners : {};
-  const moduleTracks = ownership?.moduleTracks && typeof ownership.moduleTracks === "object" ? ownership.moduleTracks : {};
+  const ownerMap =
+    ownership?.owners && typeof ownership.owners === "object" ? ownership.owners : {};
+  const moduleTracks =
+    ownership?.moduleTracks && typeof ownership.moduleTracks === "object"
+      ? ownership.moduleTracks
+      : {};
 
   const topicCounts = new Map<string, number>();
   Object.values(ownerMap).forEach((moduleKey) => {
@@ -440,7 +458,9 @@ async function handleKbUpsertNote(args: JsonObject): Promise<ToolPayload> {
   if (result.status) lines.push(`Status: ${result.status}`);
   if (result.type) lines.push(`Type: ${result.type}`);
   if (result.dedupe?.matched) {
-    lines.push(`Dedupe: reused existing note (${result.dedupe.reason}, score=${result.dedupe.score})`);
+    lines.push(
+      `Dedupe: reused existing note (${result.dedupe.reason}, score=${result.dedupe.score})`,
+    );
   }
 
   return {
@@ -508,15 +528,17 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
   if (strategy === "note") {
     const captureStartedAt = performance.now();
     const noteKind = normalizeScalar(args?.noteKind).toLowerCase() || "topic";
-    const inferredModule = normalizeScalar(args?.module) || inferPrimaryModule(args?.question, args?.mode);
+    const inferredModule =
+      normalizeScalar(args?.module) || inferPrimaryModule(args?.question, args?.mode);
     const defaultTitle = inferNoteTitle(args?.question, noteKind);
     const noteTitle = normalizeScalar(args?.noteTitle) || defaultTitle;
-    const noteBody = typeof args?.noteBody === "string" && args.noteBody.trim()
-      ? args.noteBody
-      : buildCapturedNoteBody({
-          question: normalizeScalar(args?.question),
-          grounded: answer,
-        });
+    const noteBody =
+      typeof args?.noteBody === "string" && args.noteBody.trim()
+        ? args.noteBody
+        : buildCapturedNoteBody({
+            question: normalizeScalar(args?.question),
+            grounded: answer,
+          });
     capture = await upsertKbNote({
       kind: noteKind,
       title: noteTitle,
@@ -563,7 +585,9 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
     };
     captureMs = 0;
   } else {
-    throw new Error(`Unsupported captureStrategy '${captureStrategyRaw}'. Use auto, note, open_question, or none.`);
+    throw new Error(
+      `Unsupported captureStrategy '${captureStrategyRaw}'. Use auto, note, open_question, or none.`,
+    );
   }
 
   const lines: string[] = [];
@@ -595,7 +619,9 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
 
   const warnings: string[] = [];
   if (slo.breached) {
-    warnings.push(`SLO breach: total ${slo.totalMs} ms exceeds threshold ${slo.thresholdMs} ms by ${slo.overByMs} ms.`);
+    warnings.push(
+      `SLO breach: total ${slo.totalMs} ms exceeds threshold ${slo.thresholdMs} ms by ${slo.overByMs} ms.`,
+    );
   }
 
   return {
@@ -719,7 +745,9 @@ async function buildGroundedAnswerPayload(args: JsonObject): Promise<ToolPayload
   let answerText;
   const shouldAbstain = strict && !gate.pass;
   if (shouldAbstain) {
-    const reasonText = gate.reasons.length ? gate.reasons.join("; ") : "evidence thresholds not met";
+    const reasonText = gate.reasons.length
+      ? gate.reasons.join("; ")
+      : "evidence thresholds not met";
     answerText =
       "Grounded answer withheld (strict evidence gate):\n" +
       `- Reason: ${reasonText}.\n` +
@@ -799,7 +827,8 @@ async function handleKbRefresh() {
 
 async function runSearch(args: JsonObject): Promise<SearchResult> {
   const backend = normalizeRetrievalBackend(args?.backend);
-  const retriever = backend === "sqlite" ? await getSqliteRetriever(false) : await getRetriever(false);
+  const retriever =
+    backend === "sqlite" ? await getSqliteRetriever(false) : await getRetriever(false);
   return retriever.search(args as SearchArgs);
 }
 
@@ -839,7 +868,8 @@ async function tryBuildFastAnswer({
     findHeadingLine(termDoc.lines, /^##\s+Definition\b/i) ||
     findHeadingLine(termDoc.lines, /^##\s+1-minute explanation\b/i) ||
     1;
-  const shortAnswer = extractFastTermSummary(termDoc) || `${termDoc.title} is a curated Domain term in the local KB.`;
+  const shortAnswer =
+    extractFastTermSummary(termDoc) || `${termDoc.title} is a curated Domain term in the local KB.`;
 
   const answerText = [
     "Fast grounded answer (term cache hit):",
@@ -950,7 +980,8 @@ async function tryBuildFastTopicAnswer({
 
   const synthesisStartedAt = performance.now();
   const citationLine = findHeadingLine(topicDoc.lines, /^#\s+/) || 1;
-  const shortAnswer = extractFastTopicSummary(topicDoc) || `${topicDoc.title} is a curated local KB topic.`;
+  const shortAnswer =
+    extractFastTopicSummary(topicDoc) || `${topicDoc.title} is a curated local KB topic.`;
   const answerText = [
     "Fast grounded answer (topic cache hit):",
     `- ${trimSentence(shortAnswer)}`,
@@ -1033,7 +1064,9 @@ async function tryBuildFastTopicAnswer({
 
 async function findFastTermDocument(term: string): Promise<LocalDocument | null> {
   const docs = await getDocuments(false);
-  const termDocs = docs.filter((doc) => doc.relPath.startsWith("kb/terms/") && doc.relPath.endsWith(".md"));
+  const termDocs = docs.filter(
+    (doc) => doc.relPath.startsWith("kb/terms/") && doc.relPath.endsWith(".md"),
+  );
   if (!termDocs.length) return null;
 
   const target = normalizeTermKey(term);
@@ -1057,7 +1090,9 @@ async function findFastTermDocument(term: string): Promise<LocalDocument | null>
 
 async function findFastTopicDocument(topicQuery: string): Promise<LocalDocument | null> {
   const docs = await getDocuments(false);
-  const topicDocs = docs.filter((doc) => doc.relPath.startsWith("kb/topics/") && doc.relPath.endsWith(".md"));
+  const topicDocs = docs.filter(
+    (doc) => doc.relPath.startsWith("kb/topics/") && doc.relPath.endsWith(".md"),
+  );
   if (!topicDocs.length) return null;
 
   const normalizedQuery = normalizeForMatch(topicQuery);
@@ -1149,7 +1184,9 @@ function extractFastTopicSummary(doc: LocalDocument): string {
   if (!lines.length) return "";
 
   const preferredHeading = lines.findIndex((line) =>
-    /^##\s+(Decision|Definition|Goal|Purpose|1-minute explanation|Current status|Summary)\b/i.test(line),
+    /^##\s+(Decision|Definition|Goal|Purpose|1-minute explanation|Current status|Summary)\b/i.test(
+      line,
+    ),
   );
   const start = preferredHeading >= 0 ? preferredHeading + 1 : 0;
   const bullets: string[] = [];
@@ -1248,17 +1285,23 @@ function assessGrounding(searchResult: SearchResult) {
   const uniqueSources = Number.isFinite(signals.uniqueSources)
     ? signals.uniqueSources
     : new Set(topHits.map((hit) => hit.path)).size;
-  const tokenCoverage = Number.isFinite(signals.tokenCoverage) ? signals.tokenCoverage : estimateTokenCoverage(topHits, queryTokens);
+  const tokenCoverage = Number.isFinite(signals.tokenCoverage)
+    ? signals.tokenCoverage
+    : estimateTokenCoverage(topHits, queryTokens);
   const dominantSourceShare = Number.isFinite(signals.dominantSourceShare)
     ? signals.dominantSourceShare
     : estimateDominantSourceShare(topHits);
 
   const thresholds = buildGateThresholds();
   const reasons: string[] = [];
-  if (hitCount < thresholds.minHits) reasons.push(`evidence hits ${hitCount} < ${thresholds.minHits}`);
-  if (uniqueSources < thresholds.minUniqueSources) reasons.push(`unique sources ${uniqueSources} < ${thresholds.minUniqueSources}`);
-  if (tokenCoverage < thresholds.minTokenCoverage) reasons.push(`token coverage ${tokenCoverage} < ${thresholds.minTokenCoverage}`);
-  if (topScore < thresholds.minTopScore) reasons.push(`top score ${topScore} < ${thresholds.minTopScore}`);
+  if (hitCount < thresholds.minHits)
+    reasons.push(`evidence hits ${hitCount} < ${thresholds.minHits}`);
+  if (uniqueSources < thresholds.minUniqueSources)
+    reasons.push(`unique sources ${uniqueSources} < ${thresholds.minUniqueSources}`);
+  if (tokenCoverage < thresholds.minTokenCoverage)
+    reasons.push(`token coverage ${tokenCoverage} < ${thresholds.minTokenCoverage}`);
+  if (topScore < thresholds.minTopScore)
+    reasons.push(`top score ${topScore} < ${thresholds.minTopScore}`);
   if (dominantSourceShare > thresholds.maxDominantSourceShare) {
     reasons.push(`source dominance ${dominantSourceShare} > ${thresholds.maxDominantSourceShare}`);
   }
@@ -1268,7 +1311,9 @@ function assessGrounding(searchResult: SearchResult) {
   const diversitySignal = Math.min(1, uniqueSources / 3);
   const coverageSignal = queryTokens.length ? Math.min(1, tokenCoverage) : 0.5;
 
-  const score = Number((0.45 * relevanceSignal + 0.3 * coverageSignal + 0.25 * diversitySignal).toFixed(2));
+  const score = Number(
+    (0.45 * relevanceSignal + 0.3 * coverageSignal + 0.25 * diversitySignal).toFixed(2),
+  );
   let confidence;
   if (score >= 0.75) {
     confidence = {
@@ -1380,7 +1425,9 @@ async function findDuplicateNoteCandidate({
 }): Promise<any> {
   const docs = await getDocuments(false);
   const prefix = kind === "term" ? "kb/terms/" : "kb/topics/";
-  const candidates = docs.filter((doc) => doc.relPath.startsWith(prefix) && doc.relPath.endsWith(".md"));
+  const candidates = docs.filter(
+    (doc) => doc.relPath.startsWith(prefix) && doc.relPath.endsWith(".md"),
+  );
   if (!candidates.length) return null;
 
   const titleTokens = tokenizeForSimilarity(title);
@@ -1395,7 +1442,8 @@ async function findDuplicateNoteCandidate({
     const docTitle = doc.title || docBase;
     const titleScore = tokenOverlapScore(titleTokens, tokenizeForSimilarity(docTitle));
     const bodyScore = tokenOverlapScore(bodyTokens, tokenizeForSimilarity(doc.body).slice(0, 140));
-    const sameSlug = slugify(docBase) === slugify(title) || normalizeForSimilarity(docBase) === normalizedTitle;
+    const sameSlug =
+      slugify(docBase) === slugify(title) || normalizeForSimilarity(docBase) === normalizedTitle;
     const score = sameSlug ? 1 : Number((0.72 * titleScore + 0.28 * bodyScore).toFixed(3));
     if (!best || score > best.score) {
       best = {
@@ -1460,26 +1508,28 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
 
   const today = normalizeDateString(options?.updated) || getTodayIsoDate();
   const normalizedTags = normalizeTags(options?.tags);
-  const moduleKey = kind === "topic" ? (normalizeScalar(options?.module) || "general") : "";
-  const inferredTrack = kind === "topic"
-    ? await resolveTrackForModule(moduleKey, normalizeScalar(options?.track) || "domain")
-    : normalizeScalar(options?.track) || "domain";
-  const noteContent = kind === "topic"
-    ? renderTopicNote({
-        title,
-        body,
-        module: moduleKey,
-        track: inferredTrack,
-        type: normalizeScalar(options?.type) || "concept",
-        status: normalizeScalar(options?.status) || "draft",
-        owner: normalizeScalar(options?.owner) || "kb-mcp-server",
-        updated: today,
-        tags: normalizedTags || inferDefaultTags("domain", moduleKey),
-      })
-    : renderTermNote({
-        title,
-        body,
-      });
+  const moduleKey = kind === "topic" ? normalizeScalar(options?.module) || "general" : "";
+  const inferredTrack =
+    kind === "topic"
+      ? await resolveTrackForModule(moduleKey, normalizeScalar(options?.track) || "domain")
+      : normalizeScalar(options?.track) || "domain";
+  const noteContent =
+    kind === "topic"
+      ? renderTopicNote({
+          title,
+          body,
+          module: moduleKey,
+          track: inferredTrack,
+          type: normalizeScalar(options?.type) || "concept",
+          status: normalizeScalar(options?.status) || "draft",
+          owner: normalizeScalar(options?.owner) || "kb-mcp-server",
+          updated: today,
+          tags: normalizedTags || inferDefaultTags("domain", moduleKey),
+        })
+      : renderTermNote({
+          title,
+          body,
+        });
 
   let finalContent = noteContent;
   let action = exists ? "updated" : "created";
@@ -1506,8 +1556,8 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
     title,
     module: moduleKey || null,
     track: inferredTrack || null,
-    type: kind === "topic" ? (normalizeScalar(options?.type) || "concept") : null,
-    status: kind === "topic" ? (normalizeScalar(options?.status) || "draft") : null,
+    type: kind === "topic" ? normalizeScalar(options?.type) || "concept" : null,
+    status: kind === "topic" ? normalizeScalar(options?.status) || "draft" : null,
     tags: normalizedTags || null,
     dedupe: dedupe || { matched: false },
   };
@@ -1645,7 +1695,13 @@ function renderTermNote({ title, body }: { title: string; body: string }): strin
   return `# ${title}\n\n${body.trim()}\n`;
 }
 
-function buildCapturedNoteBody({ question, grounded }: { question: string; grounded: any }): string {
+function buildCapturedNoteBody({
+  question,
+  grounded,
+}: {
+  question: string;
+  grounded: any;
+}): string {
   const answer = typeof grounded?.answer === "string" ? grounded.answer.trim() : "";
   const confidence = grounded?.confidence || {};
   const citations = Array.isArray(grounded?.citations) ? grounded.citations : [];
@@ -1707,7 +1763,10 @@ function normalizeTags(value: unknown): string[] | null {
   }
   const asString = normalizeScalar(value);
   if (!asString) return null;
-  const normalized = asString.split(",").map((item) => singleLine(item)).filter(Boolean);
+  const normalized = asString
+    .split(",")
+    .map((item) => singleLine(item))
+    .filter(Boolean);
   return normalized.length ? normalized : null;
 }
 
@@ -1727,7 +1786,9 @@ function singleLine(value: unknown): string {
 }
 
 function normalizeTermKey(value: unknown): string {
-  return normalizeScalar(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return normalizeScalar(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 function slugify(value: unknown): string {
@@ -1802,7 +1863,9 @@ async function resolveTrackForModule(module: unknown, fallbackTrack: string): Pr
     ownershipCache = {
       loadedAt: now,
       moduleTracks:
-        ownership?.moduleTracks && typeof ownership.moduleTracks === "object" ? ownership.moduleTracks : {},
+        ownership?.moduleTracks && typeof ownership.moduleTracks === "object"
+          ? ownership.moduleTracks
+          : {},
     };
   }
   return normalizeScalar(ownershipCache.moduleTracks[moduleKey]) || fallbackTrack || "domain";
@@ -1853,7 +1916,9 @@ async function loadDocuments(): Promise<LocalDocument[]> {
     }
 
     const isMarkdown = file.relPath.endsWith(".md");
-    const parsed = isMarkdown ? parseFrontmatter(raw) : { frontmatter: {} as Record<string, string>, body: raw };
+    const parsed = isMarkdown
+      ? parseFrontmatter(raw)
+      : { frontmatter: {} as Record<string, string>, body: raw };
     const body = parsed.body || "";
     const frontmatter = parsed.frontmatter || {};
     const lines = body.split(/\r?\n/);
@@ -1881,10 +1946,7 @@ function parseScanRoots(raw: string | undefined, defaults: string[]): string[] {
 }
 
 function normalizeForMatch(value: unknown): string {
-  return normalizeScalar(value)
-    .toLowerCase()
-    .replace(/\\/g, "/")
-    .replace(/\.md$/i, "");
+  return normalizeScalar(value).toLowerCase().replace(/\\/g, "/").replace(/\.md$/i, "");
 }
 
 function normalizeForSimilarity(value: unknown): string {
@@ -2000,8 +2062,10 @@ function truncateOneLine(text: string, maxLength: number): string {
 function parseBooleanEnv(raw: unknown, fallback: boolean): boolean {
   if (typeof raw !== "string") return fallback;
   const normalized = raw.trim().toLowerCase();
-  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on") return true;
-  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off") return false;
+  if (normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on")
+    return true;
+  if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off")
+    return false;
   return fallback;
 }
 
@@ -2112,23 +2176,6 @@ function log(level: LogLevel, message: string): void {
   if (!(level in logOrder)) return;
   if (logOrder[level] > logOrder[logLevel]) return;
   process.stderr.write(`[kb-mcp:${level}] ${message}\n`);
-}
-
-function buildDocStats(docs: LocalDocument[]) {
-  const byTrack: Record<string, number> = {};
-  const bySourceKind: Record<string, number> = {};
-  docs.forEach((doc: LocalDocument) => {
-    const track = doc.track || "(none)";
-    const kind = doc.sourceKind || "(none)";
-    byTrack[track] = (byTrack[track] || 0) + 1;
-    bySourceKind[kind] = (bySourceKind[kind] || 0) + 1;
-  });
-  return {
-    total: docs.length,
-    byTrack,
-    bySourceKind,
-    generatedAt: new Date().toISOString(),
-  };
 }
 
 async function tryReadJson<T = unknown>(filePath: string, fallback: T): Promise<T> {

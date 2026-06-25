@@ -201,7 +201,7 @@ body {
   border-color: #f1f5f9;
 }
 
-.space-y-2> :not([hidden])~ :not([hidden]) {
+.space-y-2 > :not([hidden]) ~ :not([hidden]) {
   margin-top: 0.5rem;
 }
 
@@ -231,7 +231,10 @@ body {
   border-radius: 999px;
   padding: 0.3rem 0.7rem;
   cursor: pointer;
-  transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease;
 }
 
 .hub-shortcut-btn:hover {
@@ -273,7 +276,12 @@ body {
   border-radius: 20px;
   padding: 1.1rem;
   background:
-    linear-gradient(130deg, rgba(15, 127, 121, 0.12) 0%, rgba(15, 127, 121, 0.03) 54%, rgba(223, 111, 45, 0.1) 100%),
+    linear-gradient(
+      130deg,
+      rgba(15, 127, 121, 0.12) 0%,
+      rgba(15, 127, 121, 0.03) 54%,
+      rgba(223, 111, 45, 0.1) 100%
+    ),
     var(--panel-soft);
 }
 
@@ -498,7 +506,10 @@ body {
   display: grid;
   gap: 0.45rem;
   cursor: pointer;
-  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+  transition:
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .hub-track-card:hover,
@@ -624,7 +635,12 @@ body {
   border: 1px solid var(--line);
   border-radius: 14px;
   background:
-    linear-gradient(130deg, rgba(15, 127, 121, 0.08) 0%, rgba(15, 127, 121, 0.03) 45%, rgba(223, 111, 45, 0.09) 100%),
+    linear-gradient(
+      130deg,
+      rgba(15, 127, 121, 0.08) 0%,
+      rgba(15, 127, 121, 0.03) 45%,
+      rgba(223, 111, 45, 0.09) 100%
+    ),
     var(--panel-soft);
   padding: 0.68rem;
 }
@@ -662,7 +678,9 @@ body {
   font-size: 0.95rem;
   padding: 0.68rem 0.8rem;
   background: var(--panel-soft);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .search-box input:focus {
@@ -704,8 +722,7 @@ body {
   border-bottom: 1px solid var(--line);
   display: grid;
   gap: 0.65rem;
-  background:
-    linear-gradient(180deg, rgba(15, 127, 121, 0.03) 0%, rgba(15, 127, 121, 0) 100%);
+  background: linear-gradient(180deg, rgba(15, 127, 121, 0.03) 0%, rgba(15, 127, 121, 0) 100%);
 }
 
 .filter-select-grid {
@@ -738,7 +755,9 @@ body {
   font-weight: 600;
   padding: 0.45rem 0.6rem;
   cursor: pointer;
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .filter-field select:focus {
@@ -812,7 +831,7 @@ body {
   padding: 0.2rem 0.85rem 1rem;
 }
 
-.doc-group+.doc-group {
+.doc-group + .doc-group {
   margin-top: 0.95rem;
 }
 
@@ -838,7 +857,10 @@ body {
   opacity: 0;
   animation: itemEnter 280ms ease forwards;
   animation-delay: calc(var(--stagger-index, 0) * 16ms);
-  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease;
 }
 
 .doc-item:hover {
@@ -1063,7 +1085,12 @@ body {
   border-bottom: 1px solid var(--line);
   padding: 0.9rem 1.4rem 1rem;
   background:
-    linear-gradient(120deg, rgba(15, 127, 121, 0.08) 0%, rgba(15, 127, 121, 0.02) 55%, rgba(223, 111, 45, 0.1) 100%),
+    linear-gradient(
+      120deg,
+      rgba(15, 127, 121, 0.08) 0%,
+      rgba(15, 127, 121, 0.02) 55%,
+      rgba(223, 111, 45, 0.1) 100%
+    ),
     #f8fcfd;
 }
 
@@ -1140,7 +1167,10 @@ body {
   font-weight: 800;
   padding: 0.45rem 0.75rem;
   cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
 .quick-recall-jump:hover {
@@ -1192,7 +1222,12 @@ body {
   border-radius: 16px;
   padding: 0.82rem 0.9rem;
   background:
-    linear-gradient(110deg, rgba(15, 127, 121, 0.12) 0%, rgba(15, 127, 121, 0.03) 58%, rgba(223, 111, 45, 0.12) 100%),
+    linear-gradient(
+      110deg,
+      rgba(15, 127, 121, 0.12) 0%,
+      rgba(15, 127, 121, 0.03) 58%,
+      rgba(223, 111, 45, 0.12) 100%
+    ),
     #fafdfe;
 }
 
@@ -1231,7 +1266,9 @@ body {
   text-decoration: none;
   line-height: 1.35;
   padding: 0.2rem 0.3rem;
-  transition: color 180ms ease, background-color 180ms ease;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease;
 }
 
 .markdown-toc-link:hover {
@@ -1349,7 +1386,10 @@ body {
   line-height: 1;
   padding: 0.4rem 0.65rem;
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .markdown-copy-btn:hover {
@@ -1371,7 +1411,7 @@ body {
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
 }
 
-.markdown :not(pre)>code {
+.markdown :not(pre) > code {
   background: #ecf3f7;
   color: #1f3b4a;
   border-radius: 6px;
@@ -1402,7 +1442,9 @@ body {
   font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   font-size: 0.72em;
   text-decoration: none;
-  transition: opacity 160ms ease, color 160ms ease;
+  transition:
+    opacity 160ms ease,
+    color 160ms ease;
 }
 
 .markdown h2:hover .markdown-heading-anchor,

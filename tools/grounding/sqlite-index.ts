@@ -44,7 +44,82 @@ const MAX_LIMIT = 30;
 const MAX_CONTEXT = 3;
 
 const STOPWORDS = new Set([
-  "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "how", "if", "in", "into", "is", "it", "its", "of", "on", "or", "that", "the", "their", "then", "there", "these", "this", "to", "was", "were", "what", "when", "where", "which", "who", "why", "with", "you", "your", "after", "before", "during", "about", "can", "could", "should", "would", "do", "does", "did", "done", "than", "over", "under", "through", "up", "down", "across", "within", "without", "using", "use", "used", "via", "only", "also", "more", "most", "less", "least", "very", "much", "many", "few", "some", "any",
+  "a",
+  "an",
+  "and",
+  "are",
+  "as",
+  "at",
+  "be",
+  "by",
+  "for",
+  "from",
+  "how",
+  "if",
+  "in",
+  "into",
+  "is",
+  "it",
+  "its",
+  "of",
+  "on",
+  "or",
+  "that",
+  "the",
+  "their",
+  "then",
+  "there",
+  "these",
+  "this",
+  "to",
+  "was",
+  "were",
+  "what",
+  "when",
+  "where",
+  "which",
+  "who",
+  "why",
+  "with",
+  "you",
+  "your",
+  "after",
+  "before",
+  "during",
+  "about",
+  "can",
+  "could",
+  "should",
+  "would",
+  "do",
+  "does",
+  "did",
+  "done",
+  "than",
+  "over",
+  "under",
+  "through",
+  "up",
+  "down",
+  "across",
+  "within",
+  "without",
+  "using",
+  "use",
+  "used",
+  "via",
+  "only",
+  "also",
+  "more",
+  "most",
+  "less",
+  "least",
+  "very",
+  "much",
+  "many",
+  "few",
+  "some",
+  "any",
 ]);
 
 const QUERY_EXPANSIONS: Record<string, string[]> = {
@@ -130,7 +205,11 @@ interface AnchorLine {
 
 export async function getSqliteKbRetriever(options: RetrieverOptions = {}): Promise<KbRetriever> {
   const resolved = resolveOptions(options);
-  if (!resolved.forceRefresh && runtimeCache.retriever && runtimeCache.cacheKey === resolved.cacheKey) {
+  if (
+    !resolved.forceRefresh &&
+    runtimeCache.retriever &&
+    runtimeCache.cacheKey === resolved.cacheKey
+  ) {
     return runtimeCache.retriever;
   }
 
@@ -144,12 +223,17 @@ export async function getSqliteKbRetriever(options: RetrieverOptions = {}): Prom
 }
 
 function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
-  const repoRoot = path.resolve(options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."));
+  const repoRoot = path.resolve(
+    options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
+  );
   const scanRoots = normalizeScanRoots(
     options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS,
     DEFAULT_SCAN_ROOTS,
   );
-  const cachePath = path.resolve(repoRoot, options.cachePath || process.env.KB_MCP_SQLITE_PATH || DEFAULT_SQLITE_INDEX_FILE);
+  const cachePath = path.resolve(
+    repoRoot,
+    options.cachePath || process.env.KB_MCP_SQLITE_PATH || DEFAULT_SQLITE_INDEX_FILE,
+  );
   const queryCacheTtlMs = parsePositiveInt(
     options.queryCacheTtlMs ?? process.env.KB_MCP_QUERY_CACHE_TTL_MS,
     DEFAULT_QUERY_CACHE_TTL_MS,
@@ -201,8 +285,12 @@ async function loadOrBuildDatabase(options: ResolvedRetrieverOptions): Promise<D
 
 function isDatabaseCurrent(db: DatabaseSync, manifestHash: string): boolean {
   try {
-    const version = db.prepare("SELECT value FROM metadata WHERE key = 'index_version'").get()?.value;
-    const storedHash = db.prepare("SELECT value FROM metadata WHERE key = 'manifest_hash'").get()?.value;
+    const version = db
+      .prepare("SELECT value FROM metadata WHERE key = 'index_version'")
+      .get()?.value;
+    const storedHash = db
+      .prepare("SELECT value FROM metadata WHERE key = 'manifest_hash'")
+      .get()?.value;
     return Number(version) === INDEX_VERSION && storedHash === manifestHash;
   } catch {
     return false;
@@ -212,7 +300,6 @@ function isDatabaseCurrent(db: DatabaseSync, manifestHash: string): boolean {
 async function rebuildDatabase(
   db: DatabaseSync,
   {
-    repoRoot,
     files,
     manifestHash,
     scanRoots,
@@ -327,7 +414,9 @@ async function rebuildDatabase(
       (id, document_id, chunk_index, path, title, source_kind, module, track, start_line, end_line, text, token_count, is_archive)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  const insertFts = db.prepare("INSERT INTO fts_chunks(rowid, text, title, path) VALUES (?, ?, ?, ?)");
+  const insertFts = db.prepare(
+    "INSERT INTO fts_chunks(rowid, text, title, path) VALUES (?, ?, ?, ?)",
+  );
   const insertTerm = db.prepare(`
     INSERT OR REPLACE INTO terms (normalized_term, display_title, path, short_answer)
     VALUES (?, ?, ?, ?)
@@ -351,7 +440,9 @@ async function rebuildDatabase(
       }
 
       const isMarkdown = file.relPath.endsWith(".md");
-      const parsed = isMarkdown ? parseFrontmatter(raw) : { frontmatter: {} as Record<string, string>, body: raw };
+      const parsed = isMarkdown
+        ? parseFrontmatter(raw)
+        : { frontmatter: {} as Record<string, string>, body: raw };
       const body = parsed.body || "";
       if (!body.trim()) continue;
 
@@ -390,7 +481,12 @@ async function rebuildDatabase(
           insertAlias.run(normalizeTermKey(title), "term", file.relPath, 1);
         }
       } else if (sourceKind === "kb-topic") {
-        insertAlias.run(normalizeAliasKey(path.basename(file.relPath, ".md")), "topic", file.relPath, 0.96);
+        insertAlias.run(
+          normalizeAliasKey(path.basename(file.relPath, ".md")),
+          "topic",
+          file.relPath,
+          0.96,
+        );
         insertAlias.run(normalizeAliasKey(title), "topic", file.relPath, 0.96);
       }
 
@@ -446,7 +542,12 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
     const mode = inferMode(query, normalizeScalar(args.mode) || "auto");
     const limit = parsePositiveInt(args.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
     const contextRadius = parsePositiveInt(args.context, 1, 0, MAX_CONTEXT);
-    const maxPerPath = parsePositiveInt(args.maxPerPath, Math.max(2, Math.ceil(limit / 2)), 1, limit);
+    const maxPerPath = parsePositiveInt(
+      args.maxPerPath,
+      Math.max(2, Math.ceil(limit / 2)),
+      1,
+      limit,
+    );
     const track = normalizeScalar(args.track);
     const module = normalizeScalar(args.module);
     const includeArchive = Boolean(args.includeArchive);
@@ -497,7 +598,9 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
 
     const ranked: RankedSqliteRow[] = sqlRows
       .map((row: SqliteChunkRow) => rerankRow({ row, query, mode, tokenWeights, debug }))
-      .sort((a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.startLine - b.startLine);
+      .sort(
+        (a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.startLine - b.startLine,
+      );
 
     const hits: SearchHit[] = [];
     const seenHitKeys = new Set<string>();
@@ -585,7 +688,9 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
   }
 
   function getDocuments(): IndexedDocument[] {
-    return db.prepare(`
+    return db
+      .prepare(
+        `
       SELECT
         id,
         path AS relPath,
@@ -599,17 +704,20 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
         is_archive AS isArchive
       FROM documents
       ORDER BY path
-    `).all().map((row) => ({
-      id: Number(row.id || 0),
-      relPath: `${row.relPath || ""}`,
-      title: `${row.title || ""}`,
-      track: `${row.track || ""}`,
-      module: `${row.module || ""}`,
-      sourceKind: `${row.sourceKind || ""}`,
-      frontmatter: {},
-      body: "",
-      isArchive: Boolean(row.isArchive),
-    }));
+    `,
+      )
+      .all()
+      .map((row) => ({
+        id: Number(row.id || 0),
+        relPath: `${row.relPath || ""}`,
+        title: `${row.title || ""}`,
+        track: `${row.track || ""}`,
+        module: `${row.module || ""}`,
+        sourceKind: `${row.sourceKind || ""}`,
+        frontmatter: {},
+        body: "",
+        isArchive: Boolean(row.isArchive),
+      }));
   }
 
   function getStats() {
@@ -663,7 +771,10 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
   };
 }
 
-function runFtsQuery(db: DatabaseSync, { ftsQuery, query, mode, track, module, includeArchive, windowSize }: RunFtsArgs): SqliteChunkRow[] {
+function runFtsQuery(
+  db: DatabaseSync,
+  { ftsQuery, query, mode, track, module, includeArchive, windowSize }: RunFtsArgs,
+): SqliteChunkRow[] {
   const rows: SqliteChunkRow[] = [];
   if (ftsQuery) {
     const filters: string[] = [];
@@ -678,7 +789,10 @@ function runFtsQuery(db: DatabaseSync, { ftsQuery, query, mode, track, module, i
       params.push(module);
     }
     const where = filters.length ? `AND ${filters.join(" AND ")}` : "";
-    rows.push(...db.prepare(`
+    rows.push(
+      ...(db
+        .prepare(
+          `
       SELECT
         c.id,
         c.path,
@@ -697,14 +811,20 @@ function runFtsQuery(db: DatabaseSync, { ftsQuery, query, mode, track, module, i
       WHERE fts_chunks MATCH ? ${where}
       ORDER BY rank
       LIMIT ${Math.max(1, Math.min(500, windowSize))}
-    `).all(...params) as unknown as SqliteChunkRow[]);
+    `,
+        )
+        .all(...params) as unknown as SqliteChunkRow[]),
+    );
   }
 
   if (rows.length) return rows;
   return seedFallbackRows(db, { query, mode, track, module, includeArchive, windowSize });
 }
 
-function seedFallbackRows(db: DatabaseSync, { query, mode, track, module, includeArchive, windowSize }: RunFtsArgs): SqliteChunkRow[] {
+function seedFallbackRows(
+  db: DatabaseSync,
+  { query, mode, track, module, includeArchive, windowSize }: RunFtsArgs,
+): SqliteChunkRow[] {
   const filters = ["LOWER(c.text) LIKE ?"];
   const params = [`%${query.toLowerCase()}%`];
   if (!includeArchive) filters.push("c.is_archive = 0");
@@ -716,7 +836,9 @@ function seedFallbackRows(db: DatabaseSync, { query, mode, track, module, includ
     filters.push("c.module = ?");
     params.push(module);
   }
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT
       c.id,
       c.path,
@@ -733,7 +855,9 @@ function seedFallbackRows(db: DatabaseSync, { query, mode, track, module, includ
     FROM chunks c
     WHERE ${filters.join(" AND ")}
     LIMIT ${Math.max(1, Math.min(500, windowSize))}
-  `).all(...params) as unknown as SqliteChunkRow[];
+  `,
+    )
+    .all(...params) as unknown as SqliteChunkRow[];
   return rows.map((row: SqliteChunkRow) => ({
     ...row,
     rank: mode === "project" && row.sourceKind === "project" ? -5 : row.rank,
@@ -776,7 +900,8 @@ function rerankRow({ row, query, mode, tokenWeights, debug }: RerankRowArgs): Ra
 
   const tokenMatchBoost = Math.min(3.2, matchedTerms.length * 0.45);
   score += tokenMatchBoost;
-  if (debug && tokenMatchBoost) adjustments.push({ reason: "matched_token_count", delta: round(tokenMatchBoost) });
+  if (debug && tokenMatchBoost)
+    adjustments.push({ reason: "matched_token_count", delta: round(tokenMatchBoost) });
 
   if (mode === "domain") {
     if (row.sourceKind === "reference-source") {
@@ -823,7 +948,11 @@ function rerankRow({ row, query, mode, tokenWeights, debug }: RerankRowArgs): Ra
 function countBy(db: DatabaseSync, column: string): Record<string, number> {
   const out: Record<string, number> = {};
   const safeColumn = column === "source_kind" ? "source_kind" : "track";
-  for (const row of db.prepare(`SELECT COALESCE(${safeColumn}, '(none)') AS key, COUNT(*) AS count FROM chunks GROUP BY key`).all()) {
+  for (const row of db
+    .prepare(
+      `SELECT COALESCE(${safeColumn}, '(none)') AS key, COUNT(*) AS count FROM chunks GROUP BY key`,
+    )
+    .all()) {
     const typedRow = row as { key: string; count: number };
     out[typedRow.key] = typedRow.count;
   }
@@ -867,7 +996,11 @@ function sourceShares(hits: SearchHit[]): number[] {
   return [...counts.values()].map((count) => count / hits.length);
 }
 
-function chooseAnchorLine(chunk: SqliteChunkRow | RankedSqliteRow, query: string, tokenWeights: QueryWeights): AnchorLine {
+function chooseAnchorLine(
+  chunk: SqliteChunkRow | RankedSqliteRow,
+  query: string,
+  tokenWeights: QueryWeights,
+): AnchorLine {
   const lines = `${chunk.text || ""}`.split(/\r?\n/);
   const queryLower = query.toLowerCase();
   const tokens = [...tokenWeights.keys()];
@@ -892,7 +1025,11 @@ function chooseAnchorLine(chunk: SqliteChunkRow | RankedSqliteRow, query: string
   };
 }
 
-function buildChunkContext(chunk: SqliteChunkRow | RankedSqliteRow, anchorLineOffset: number, radius: number): SearchContextRow[] {
+function buildChunkContext(
+  chunk: SqliteChunkRow | RankedSqliteRow,
+  anchorLineOffset: number,
+  radius: number,
+): SearchContextRow[] {
   const lines = `${chunk.text || ""}`.split(/\r?\n/);
   const start = Math.max(0, anchorLineOffset - radius);
   const end = Math.min(lines.length - 1, anchorLineOffset + radius);
@@ -927,7 +1064,7 @@ function trimWindow(text: string, index: number, length: number, maxChars: numbe
   const pivot = index + Math.floor(length / 2);
   const half = Math.floor(maxChars / 2);
   let start = Math.max(0, pivot - half);
-  let end = Math.min(text.length, start + maxChars);
+  const end = Math.min(text.length, start + maxChars);
   if (end - start < maxChars) start = Math.max(0, end - maxChars);
   let snippet = text.slice(start, end).trim();
   if (start > 0) snippet = `...${snippet}`;
@@ -1057,13 +1194,17 @@ function extractFastTermSummary(body: string): string {
 }
 
 function inferMode(query: string, explicitMode: string): SearchMode {
-  if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic") return explicitMode;
+  if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic")
+    return explicitMode;
   const q = query.toLowerCase();
   if (/\bproject\b|\btask\s*\d+\b/.test(q)) return "project";
   return "generic";
 }
 
-function trimQueryCache(cache: Map<string, { createdAt: number; value: SearchResult }>, maxEntries: number): void {
+function trimQueryCache(
+  cache: Map<string, { createdAt: number; value: SearchResult }>,
+  maxEntries: number,
+): void {
   while (cache.size > maxEntries) {
     const oldestKey = cache.keys().next().value;
     if (!oldestKey) break;
@@ -1091,11 +1232,16 @@ function cloneSearchResult(result: SearchResult): SearchResult {
 }
 
 function normalizeTermKey(value: unknown): string {
-  return normalizeScalar(value).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return normalizeScalar(value)
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
 }
 
 function normalizeAliasKey(value: unknown): string {
-  return normalizeScalar(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return normalizeScalar(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function singleLine(value: unknown): string {

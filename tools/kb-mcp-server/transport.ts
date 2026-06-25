@@ -160,12 +160,7 @@ export function writeResult(output: Writable, id: JsonRpcId, result: unknown): v
   writeMessage(output, { jsonrpc: "2.0", id, result });
 }
 
-export function writeError(
-  output: Writable,
-  id: JsonRpcId,
-  code: number,
-  message: string,
-): void {
+export function writeError(output: Writable, id: JsonRpcId, code: number, message: string): void {
   writeMessage(output, { jsonrpc: "2.0", id, error: { code, message } });
 }
 

@@ -29,7 +29,10 @@ function testDeriveTitle(): void {
   assert.equal(deriveTitle("x.md", "# Real Title\n\nbody"), "Real Title");
   assert.equal(deriveTitle("x.md", "## Sub Title\n\nbody"), "Sub Title");
   // No markup -> short first line (mammoth extractRawText case).
-  assert.equal(deriveTitle("x.docx", "Integration Decision Record\nmore text"), "Integration Decision Record");
+  assert.equal(
+    deriveTitle("x.docx", "Integration Decision Record\nmore text"),
+    "Integration Decision Record",
+  );
   // First line too long -> filename fallback, title-cased.
   const longFirst = "x".repeat(200) + "\nbody";
   assert.equal(deriveTitle("my_source-file.pdf", longFirst), "My Source File");
@@ -87,7 +90,11 @@ function testSlugify(): void {
 
 function testNormalizeDocumentChunkingAndProvenance(): void {
   const big = `## A\n${"a".repeat(60)}\n## B\n${"b".repeat(60)}\n## C\n${"c".repeat(60)}`;
-  const result = normalizeDocument(big, { sourceFile: "big.md", maxChars: 80, ingestDate: "2026-06-20" });
+  const result = normalizeDocument(big, {
+    sourceFile: "big.md",
+    maxChars: 80,
+    ingestDate: "2026-06-20",
+  });
   assert.ok(result.notes.length > 1, "long doc should produce multiple notes");
   // Multi-part titles and provenance present on every chunk.
   assert.ok(result.notes[0].title.endsWith("(part 1)"));
@@ -95,7 +102,10 @@ function testNormalizeDocumentChunkingAndProvenance(): void {
     assert.ok(note.body.includes("> Source: `big.md` — ingested 2026-06-20"));
   }
   // Single short doc -> one note, no "(part N)" suffix.
-  const single = normalizeDocument("# Title\n\nbody", { sourceFile: "s.md", ingestDate: "2026-06-20" });
+  const single = normalizeDocument("# Title\n\nbody", {
+    sourceFile: "s.md",
+    ingestDate: "2026-06-20",
+  });
   assert.equal(single.notes.length, 1);
   assert.equal(single.notes[0].title, "Title");
 }
