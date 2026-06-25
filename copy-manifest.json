@@ -42,12 +42,7 @@
         "tsconfig.json",
         "tsconfig.*.json"
       ],
-      "exclude": [
-        "content/**",
-        "dist/**",
-        "node_modules/**",
-        "src/components/*DeepDivePage.tsx"
-      ],
+      "exclude": ["content/**", "dist/**", "node_modules/**", "src/components/*DeepDivePage.tsx"],
       "reason": "Optional UI viewer over the engine. Scrubbed: deep-dive page + client modes removed, sourceFolders externalized via KB_PREVIEW_SOURCE_FOLDERS, chrome rebranded to Operator Cockpit, tests re-grounded on the demo corpus. typecheck/test/build green; passes the scrub gate."
     },
     {

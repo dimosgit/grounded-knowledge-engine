@@ -37,5 +37,7 @@ export function matchesSearchFields(fields, query) {
   const tokens = normalizedNeedle.split(" ").filter((token) => token.length > 1);
   if (!tokens.length) return false;
 
-  return tokens.every((token) => normalizedHaystack.includes(token) || compactHaystack.includes(token));
+  return tokens.every(
+    (token) => normalizedHaystack.includes(token) || compactHaystack.includes(token),
+  );
 }

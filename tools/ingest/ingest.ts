@@ -40,11 +40,13 @@ const SKIP_DIRS = new Set([".git", "node_modules", "dist", ".cache", "content"])
 
 /** Slugify a relative source path (extension included) into a unique note basename. */
 export function slugifySource(relToRoot: string): string {
-  return relToRoot
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 100) || "document";
+  return (
+    relToRoot
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 100) || "document"
+  );
 }
 
 async function collectFiles(root: string): Promise<string[]> {
@@ -95,7 +97,9 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
     return summary;
   }
 
-  log(`Found ${files.length} document(s) to ingest from ${root}${options.dryRun ? " [dry-run]" : ""}.`);
+  log(
+    `Found ${files.length} document(s) to ingest from ${root}${options.dryRun ? " [dry-run]" : ""}.`,
+  );
 
   // Build all notes first (extraction can warn / skip) before touching the KB.
   type PendingNote = { title: string; body: string; sourceRel: string; path: string };
@@ -111,16 +115,27 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
         summary.skipped.push(`${rel} (no extractable text)`);
         continue;
       }
-      const normalized = normalizeDocument(extracted.text, { sourceFile: rel, scrub: options.scrub, maxChars: options.maxChars });
+      const normalized = normalizeDocument(extracted.text, {
+        sourceFile: rel,
+        scrub: options.scrub,
+        maxChars: options.maxChars,
+      });
       summary.redactions += normalized.redactions;
       for (const note of normalized.notes) {
         // Deterministic, source-derived path so distinct files never collide
         // (e.g. report.pdf vs report.docx) and re-ingesting is idempotent.
         const suffix = note.chunkCount > 1 ? `-part-${note.chunkIndex + 1}` : "";
-        pending.push({ title: note.title, body: note.body, sourceRel: rel, path: `kb/topics/${slug}${suffix}.md` });
+        pending.push({
+          title: note.title,
+          body: note.body,
+          sourceRel: rel,
+          path: `kb/topics/${slug}${suffix}.md`,
+        });
       }
       summary.filesProcessed += 1;
-      log(`  • ${rel} → ${normalized.notes.length} note(s)${detectFormat(file) ? ` [${detectFormat(file)}]` : ""}`);
+      log(
+        `  • ${rel} → ${normalized.notes.length} note(s)${detectFormat(file) ? ` [${detectFormat(file)}]` : ""}`,
+      );
     } catch (error) {
       summary.failures.push(`${rel}: ${(error as Error).message}`);
       log(`  ✗ ${rel}: ${(error as Error).message}`);
@@ -161,7 +176,9 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
       }
       summary.notesWritten += 1;
       const sc = result.structuredContent;
-      log(`  ✓ ${sc?.action ?? "captured"}${options.dryRun ? " (dry-run)" : ""}: ${sc?.path ?? note.title}`);
+      log(
+        `  ✓ ${sc?.action ?? "captured"}${options.dryRun ? " (dry-run)" : ""}: ${sc?.path ?? note.title}`,
+      );
     }
 
     if (!options.dryRun && summary.notesWritten > 0) {
@@ -201,9 +218,16 @@ function printSummary(summary: IngestSummary): void {
   console.log(`  Files processed: ${summary.filesProcessed}`);
   console.log(`  Notes captured:  ${summary.notesWritten}`);
   console.log(`  Secrets redacted: ${summary.redactions}`);
-  if (summary.skipped.length) console.log(`  Skipped: ${summary.skipped.length}\n    - ${summary.skipped.join("\n    - ")}`);
-  if (summary.warnings.length) console.log(`  Warnings: ${summary.warnings.length}\n    - ${summary.warnings.join("\n    - ")}`);
-  if (summary.failures.length) console.log(`  Failures: ${summary.failures.length}\n    - ${summary.failures.join("\n    - ")}`);
+  if (summary.skipped.length)
+    console.log(`  Skipped: ${summary.skipped.length}\n    - ${summary.skipped.join("\n    - ")}`);
+  if (summary.warnings.length)
+    console.log(
+      `  Warnings: ${summary.warnings.length}\n    - ${summary.warnings.join("\n    - ")}`,
+    );
+  if (summary.failures.length)
+    console.log(
+      `  Failures: ${summary.failures.length}\n    - ${summary.failures.join("\n    - ")}`,
+    );
 }
 
 // Only run as a CLI when invoked directly (not when imported by tests).

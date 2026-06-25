@@ -5,12 +5,13 @@ import { OperatorFrame } from "../components/OperatorFrame";
 
 const MarkdownArticle = lazy(() => import("../components/MarkdownArticle"));
 
-function QuickRecallCard({
-  quickRecall,
-  digestQuickView,
-}) {
-  const atGlance = quickRecall?.atGlance?.length ? quickRecall.atGlance : digestQuickView?.weekAtGlance || [];
-  const nextSteps = quickRecall?.nextSteps?.length ? quickRecall.nextSteps : digestQuickView?.nextSteps || [];
+function QuickRecallCard({ quickRecall, digestQuickView }) {
+  const atGlance = quickRecall?.atGlance?.length
+    ? quickRecall.atGlance
+    : digestQuickView?.weekAtGlance || [];
+  const nextSteps = quickRecall?.nextSteps?.length
+    ? quickRecall.nextSteps
+    : digestQuickView?.nextSteps || [];
 
   if (!atGlance.length && !nextSteps.length) return null;
 
@@ -113,14 +114,20 @@ export function LibraryView({
   getDocGuidance,
   resolveMarkdownDocPath,
   resolveMarkdownAssetPath,
-  isExternalResource,
   currentYear,
 }) {
   return (
     <OperatorFrame
       activeView="library"
       title="Knowledge Base"
-      commandBar={<CommandBar items={docs} isOpen={commandBarOpen} onOpenChange={onCommandBarOpenChange} onSelect={onCommandSelect} />}
+      commandBar={
+        <CommandBar
+          items={docs}
+          isOpen={commandBarOpen}
+          onOpenChange={onCommandBarOpenChange}
+          onSelect={onCommandSelect}
+        />
+      }
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
@@ -143,10 +150,22 @@ export function LibraryView({
             <div className="curation-card">
               <p>Curation Status</p>
               <div className="curation-stats">
-                <span><em>Modules</em><strong>{curationStats.module}</strong></span>
-                <span><em>Clients</em><strong>{curationStats.client}</strong></span>
-                <span><em>Canonical</em><strong>{curationStats.canonical}</strong></span>
-                <span><em>Merged stubs</em><strong>{curationStats.merged}</strong></span>
+                <span>
+                  <em>Modules</em>
+                  <strong>{curationStats.module}</strong>
+                </span>
+                <span>
+                  <em>Clients</em>
+                  <strong>{curationStats.client}</strong>
+                </span>
+                <span>
+                  <em>Canonical</em>
+                  <strong>{curationStats.canonical}</strong>
+                </span>
+                <span>
+                  <em>Merged stubs</em>
+                  <strong>{curationStats.merged}</strong>
+                </span>
               </div>
             </div>
           </header>
@@ -188,7 +207,11 @@ export function LibraryView({
                   {learningItemOrder.map((itemType) => {
                     const count = libraryItemCounts[itemType] || 0;
                     return (
-                      <option key={itemType} value={itemType} disabled={itemType !== "all" && count === 0}>
+                      <option
+                        key={itemType}
+                        value={itemType}
+                        disabled={itemType !== "all" && count === 0}
+                      >
                         {learningItemLabels[itemType]} ({count})
                       </option>
                     );
@@ -236,7 +259,8 @@ export function LibraryView({
                   {items.map((doc, index) => {
                     const isActive = activeDoc?.path === doc.path;
                     const showStatusBadge =
-                      query.trim().length > 0 || (activeTag !== "modules" && activeTag !== "clients");
+                      query.trim().length > 0 ||
+                      (activeTag !== "modules" && activeTag !== "clients");
                     return (
                       <button
                         key={doc.path}
@@ -248,7 +272,9 @@ export function LibraryView({
                         <div className="doc-item-top">
                           <strong>{renderHighlighted(doc.title, query)}</strong>
                           {showStatusBadge && (
-                            <em className={`doc-badge ${doc.docType}`}>{getDocBadge(doc.docType)}</em>
+                            <em className={`doc-badge ${doc.docType}`}>
+                              {getDocBadge(doc.docType)}
+                            </em>
                           )}
                         </div>
                         <span>{renderHighlighted(doc.path, query)}</span>
@@ -288,7 +314,11 @@ export function LibraryView({
                                 {crumb.label}
                               </button>
                             ) : (
-                              <span className={`breadcrumb-label${crumb.current ? " is-current" : ""}`}>{crumb.label}</span>
+                              <span
+                                className={`breadcrumb-label${crumb.current ? " is-current" : ""}`}
+                              >
+                                {crumb.label}
+                              </span>
                             )}
                             {showSeparator && (
                               <span className="breadcrumb-separator" aria-hidden="true">
@@ -301,7 +331,9 @@ export function LibraryView({
                     </nav>
                     <div className="content-title-meta">
                       <p>Path: {activeDoc.path}</p>
-                      <em className={`doc-badge ${activeDoc.docType}`}>{getDocBadge(activeDoc.docType)}</em>
+                      <em className={`doc-badge ${activeDoc.docType}`}>
+                        {getDocBadge(activeDoc.docType)}
+                      </em>
                       <em className="doc-badge metric">{displayTrackLabel}</em>
                       {activeDocMetrics && (
                         <>
@@ -314,15 +346,15 @@ export function LibraryView({
                   </div>
                   <div className="view-actions">
                     {activeModuleDoc && activeModuleDoc.path !== activeDoc.path && (
-                      <button className="action-btn" onClick={() => onOpenDoc(activeModuleDoc.path)} type="button">
+                      <button
+                        className="action-btn"
+                        onClick={() => onOpenDoc(activeModuleDoc.path)}
+                        type="button"
+                      >
                         Back to Module
                       </button>
                     )}
-                    <button
-                      className="action-btn"
-                      onClick={onToggleReadingMode}
-                      type="button"
-                    >
+                    <button className="action-btn" onClick={onToggleReadingMode} type="button">
                       {isReadingMode ? "Exit Reading Mode" : "Reading Mode"}
                     </button>
                     <button className="action-btn" onClick={() => window.print()} type="button">
@@ -339,11 +371,15 @@ export function LibraryView({
                     <h1>{activeDoc.title}</h1>
                     <p>{getDocGuidance(activeDoc.docType)}</p>
                     <div className="reader-meta-row">
-                      <em className={`doc-badge ${activeDoc.docType}`}>{getDocBadge(activeDoc.docType)}</em>
+                      <em className={`doc-badge ${activeDoc.docType}`}>
+                        {getDocBadge(activeDoc.docType)}
+                      </em>
                       <em className="doc-badge metric">{displayTrackLabel}</em>
                       {activeDocMetrics && (
                         <>
-                          <em className="doc-badge metric">{activeDocMetrics.readMinutes} min read</em>
+                          <em className="doc-badge metric">
+                            {activeDocMetrics.readMinutes} min read
+                          </em>
                           <em className="doc-badge metric">{activeDocMetrics.headings} headings</em>
                           <em className="doc-badge metric">{activeDocMetrics.words} words</em>
                         </>
@@ -385,9 +421,7 @@ export function LibraryView({
             )}
           </div>
           <footer className="app-footer">
-            <p>
-              Operator Cockpit · {currentYear} · a UI layer over the grounded knowledge engine.
-            </p>
+            <p>Operator Cockpit · {currentYear} · a UI layer over the grounded knowledge engine.</p>
           </footer>
         </section>
       </div>

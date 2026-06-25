@@ -76,8 +76,18 @@ The uniqueparitytoken appears in this evidence line.
   const sqliteDocs = sqlite.getDocuments().map(documentIdentity);
   assert.deepEqual(sqliteDocs, bm25Docs);
 
-  const bm25Result = bm25.search({ query: "uniqueparitytoken", mode: "generic", limit: 3, context: 1 });
-  const sqliteResult = sqlite.search({ query: "uniqueparitytoken", mode: "generic", limit: 3, context: 1 });
+  const bm25Result = bm25.search({
+    query: "uniqueparitytoken",
+    mode: "generic",
+    limit: 3,
+    context: 1,
+  });
+  const sqliteResult = sqlite.search({
+    query: "uniqueparitytoken",
+    mode: "generic",
+    limit: 3,
+    context: 1,
+  });
   assert.equal(bm25Result.hits[0]?.path, "kb/topics/alpha.md");
   assert.equal(sqliteResult.hits[0]?.path, "kb/topics/alpha.md");
   assert.equal(sqliteResult.hits[0]?.lineNumber, bm25Result.hits[0]?.lineNumber);

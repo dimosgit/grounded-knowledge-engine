@@ -116,7 +116,10 @@ Details.`;
     expect(screen.getByRole("navigation", { name: "On this page" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Setup" })).toHaveAttribute("href", "#setup");
     expect(screen.getByRole("link", { name: "Data Model" })).toHaveAttribute("href", "#data-model");
-    expect(screen.getByRole("link", { name: "Service Layer" })).toHaveAttribute("href", "#service-layer");
+    expect(screen.getByRole("link", { name: "Service Layer" })).toHaveAttribute(
+      "href",
+      "#service-layer",
+    );
     expect(screen.getByRole("link", { name: "Deployment" })).toHaveAttribute("href", "#deployment");
   });
 
@@ -156,7 +159,11 @@ Details.`;
 
     Object.defineProperty(markdownRoot, "clientHeight", { value: 600, configurable: true });
     Object.defineProperty(markdownRoot, "scrollHeight", { value: 2200, configurable: true });
-    Object.defineProperty(markdownRoot, "scrollTop", { value: 0, writable: true, configurable: true });
+    Object.defineProperty(markdownRoot, "scrollTop", {
+      value: 0,
+      writable: true,
+      configurable: true,
+    });
     markdownRoot.scrollTo = vi.fn();
 
     fireEvent.click(screen.getByRole("link", { name: "Deployment" }));
@@ -167,7 +174,9 @@ Details.`;
     render(
       <MarkdownArticle
         activePath="kb/topics/short-note.md"
-        content={"# Short Note\n\n## First\nA short paragraph.\n\n## Second\nAnother short paragraph."}
+        content={
+          "# Short Note\n\n## First\nA short paragraph.\n\n## Second\nAnother short paragraph."
+        }
         docs={[]}
         onOpenDoc={() => {}}
         resolveMarkdownDocPath={resolveMarkdownDocPath}
@@ -227,7 +236,7 @@ Details.`;
     for (const tocLink of tocLinks) {
       const href = tocLink.getAttribute("href") || "";
       const id = href.replace(/^#/, "");
-      const heading = container.querySelector(`[id=\"${id}\"]`);
+      const heading = container.querySelector(`[id="${id}"]`);
       expect(heading).toBeTruthy();
     }
   });
@@ -271,7 +280,9 @@ Details.`;
     const { container } = render(
       <MarkdownArticle
         activePath="prompts.md"
-        content={"```text\nThis is a very long prompt line that should wrap inside the viewport instead of forcing horizontal overflow.\n```"}
+        content={
+          "```text\nThis is a very long prompt line that should wrap inside the viewport instead of forcing horizontal overflow.\n```"
+        }
         docs={[]}
         onOpenDoc={() => {}}
         resolveMarkdownDocPath={resolveMarkdownDocPath}
@@ -287,7 +298,9 @@ Details.`;
     const { container } = render(
       <MarkdownArticle
         activePath="prompts.md"
-        content={"```bash\ncd \"/path/to/grounded-knowledge-engine\" && npx tsx \"$(pwd)/tools/kb-mcp-server/server.ts\"\n```"}
+        content={
+          '```bash\ncd "/path/to/grounded-knowledge-engine" && npx tsx "$(pwd)/tools/kb-mcp-server/server.ts"\n```'
+        }
         docs={[]}
         onOpenDoc={() => {}}
         resolveMarkdownDocPath={resolveMarkdownDocPath}

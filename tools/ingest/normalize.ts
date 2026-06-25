@@ -35,16 +35,21 @@ export function deriveTitle(filePath: string, text: string): string {
   }
   // Extractors like mammoth's extractRawText drop heading markup, so a short
   // first line is usually the document's real title.
-  const firstLine = text.split("\n").map((l) => l.trim()).find((l) => l.length > 0);
+  const firstLine = text
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0);
   if (firstLine && firstLine.length >= 2 && firstLine.length <= 80) {
     return firstLine.slice(0, 120);
   }
   const base = path.basename(filePath, path.extname(filePath));
-  return base
-    .replace(/[_\-.]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (c) => c.toUpperCase()) || "Untitled Document";
+  return (
+    base
+      .replace(/[_\-.]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/\b\w/g, (c) => c.toUpperCase()) || "Untitled Document"
+  );
 }
 
 // Reasonably specific secret patterns — specific enough to avoid shredding
@@ -54,7 +59,7 @@ const SECRET_PATTERNS: RegExp[] = [
   /\bAKIA[0-9A-Z]{16}\b/g, // AWS access key id
   /\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g, // JWT
   /\bBearer\s+[A-Za-z0-9._-]{16,}\b/gi,
-  /\b(?:api[_-]?key|secret|token|password|passwd|pwd)\b\s*[:=]\s*["']?[A-Za-z0-9/_+\-]{12,}["']?/gi,
+  /\b(?:api[_-]?key|secret|token|password|passwd|pwd)\b\s*[:=]\s*["']?[A-Za-z0-9/_+-]{12,}["']?/gi,
 ];
 
 export function scrubSecrets(text: string): { text: string; redactions: number } {
