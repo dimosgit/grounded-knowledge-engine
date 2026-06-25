@@ -76,7 +76,10 @@ export function useGraphInteractions(focusId) {
   }
 
   function endGraphPointer(event) {
-    if (graphDragState?.pointerId === event.pointerId && event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+    if (
+      graphDragState?.pointerId === event.pointerId &&
+      event.currentTarget.hasPointerCapture?.(event.pointerId)
+    ) {
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     }
     setGraphDragState(null);

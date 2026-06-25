@@ -19,7 +19,11 @@ export function buildTracks(docs) {
       existing.count += 1;
       existing.learningItemCounts.all += 1;
       existing.learningItemCounts[doc.learningItemType] += 1;
-      if (!trackDisplay[doc.track] && doc.trackLabel && doc.trackLabel !== toPrettyLabel(doc.track)) {
+      if (
+        !trackDisplay[doc.track] &&
+        doc.trackLabel &&
+        doc.trackLabel !== toPrettyLabel(doc.track)
+      ) {
         existing.label = doc.trackLabel;
       }
       continue;
@@ -42,7 +46,8 @@ export function buildTracks(docs) {
 
 export function getSelectedTrackKey(tracks, activeTrack) {
   if (!tracks.length) return "all";
-  if (activeTrack !== "all" && tracks.some((track) => track.key === activeTrack)) return activeTrack;
+  if (activeTrack !== "all" && tracks.some((track) => track.key === activeTrack))
+    return activeTrack;
   return tracks[0].key;
 }
 

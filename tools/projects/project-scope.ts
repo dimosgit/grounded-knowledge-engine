@@ -1,7 +1,10 @@
 import type { IndexedDocument } from "../grounding/types.js";
 import { normalizeProjectId } from "./project-manifest.js";
 
-export function resolveProjectDocument(docs: IndexedDocument[], requestedProjectId: string): IndexedDocument | null {
+export function resolveProjectDocument(
+  docs: IndexedDocument[],
+  requestedProjectId: string,
+): IndexedDocument | null {
   const projectId = normalizeProjectId(requestedProjectId);
   const candidates = docs
     .filter((doc) => isProjectRecord(doc))
@@ -26,11 +29,15 @@ export function isDocumentInProject(
     sourceRoots.some((root) =>
       equivalentRoots(root).some(
         (candidateRoot) =>
-          doc.relPath === candidateRoot || doc.relPath.startsWith(`${candidateRoot.replace(/\/+$/, "")}/`),
+          doc.relPath === candidateRoot ||
+          doc.relPath.startsWith(`${candidateRoot.replace(/\/+$/, "")}/`),
       ),
     )
-  ) return true;
-  return explicitPaths.some((linkedPath) => pathsReferToSameDocument(manifestPath, linkedPath, doc.relPath));
+  )
+    return true;
+  return explicitPaths.some((linkedPath) =>
+    pathsReferToSameDocument(manifestPath, linkedPath, doc.relPath),
+  );
 }
 
 function isProjectRecord(doc: IndexedDocument): boolean {
@@ -40,7 +47,9 @@ function isProjectRecord(doc: IndexedDocument): boolean {
 }
 
 function getDocumentProjectId(doc: IndexedDocument): string {
-  const canonicalPathMatch = doc.relPath.match(/(?:^|\/)(?:demo-kb|kb)\/projects\/([^/]+)\/project\.md$/);
+  const canonicalPathMatch = doc.relPath.match(
+    /(?:^|\/)(?:demo-kb|kb)\/projects\/([^/]+)\/project\.md$/,
+  );
   return normalizeProjectId(
     doc.frontmatter?.project_id ||
       canonicalPathMatch?.[1] ||
@@ -59,10 +68,17 @@ function projectRecordScore(doc: IndexedDocument): number {
   return score;
 }
 
-function pathsReferToSameDocument(manifestPath: string, linkedPath: string, candidatePath: string): boolean {
+function pathsReferToSameDocument(
+  manifestPath: string,
+  linkedPath: string,
+  candidatePath: string,
+): boolean {
   const fromManifest = manifestPath.split("/").slice(0, -1);
   const resolved = normalizePosixPath([...fromManifest, ...linkedPath.split("/")]);
-  return equivalentPaths(linkedPath).includes(candidatePath) || equivalentPaths(resolved).includes(candidatePath);
+  return (
+    equivalentPaths(linkedPath).includes(candidatePath) ||
+    equivalentPaths(resolved).includes(candidatePath)
+  );
 }
 
 function normalizePosixPath(parts: string[]): string {

@@ -7,8 +7,7 @@ export function buildHubModuleSummary(docs) {
   const hasActions = (doc) => getMarkdownSection(doc.content, "Next 3 actions").trim().length > 0;
   const isProject = (doc) => (doc.frontmatter?.type || "").trim() === "project";
   const projectDoc =
-    docs.find((doc) => isProject(doc) && hasActions(doc)) ||
-    docs.find((doc) => hasActions(doc));
+    docs.find((doc) => isProject(doc) && hasActions(doc)) || docs.find((doc) => hasActions(doc));
   if (!projectDoc) return null;
 
   return {

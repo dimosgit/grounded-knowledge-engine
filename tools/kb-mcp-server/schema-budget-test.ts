@@ -19,8 +19,14 @@ function assertCatalog(profile: McpProfile, writesEnabled: boolean): void {
   const tools = build(profile, writesEnabled);
   const budget = CATALOG_BUDGETS[profile];
   const serialized = JSON.stringify(tools);
-  assert.ok(tools.length <= budget.maxTools, `${profile} tool count ${tools.length} exceeds ${budget.maxTools}`);
-  assert.ok(serialized.length <= budget.maxCharacters, `${profile} catalog ${serialized.length} chars exceeds ${budget.maxCharacters}`);
+  assert.ok(
+    tools.length <= budget.maxTools,
+    `${profile} tool count ${tools.length} exceeds ${budget.maxTools}`,
+  );
+  assert.ok(
+    serialized.length <= budget.maxCharacters,
+    `${profile} catalog ${serialized.length} chars exceeds ${budget.maxCharacters}`,
+  );
 
   const names = tools.map((tool) => tool.name);
   assert.equal(new Set(names).size, names.length, `${profile} contains duplicate tool names`);
@@ -37,7 +43,12 @@ function assertCatalog(profile: McpProfile, writesEnabled: boolean): void {
     assert.ok(!names.includes("kb.checkpoint_project"));
   }
   if (profile === "core") {
-    assert.deepEqual(names, ["kb.search", "kb.get_record", "kb.answer_and_capture", "kb.resume_project"]);
+    assert.deepEqual(names, [
+      "kb.search",
+      "kb.get_record",
+      "kb.answer_and_capture",
+      "kb.resume_project",
+    ]);
   }
   if (profile === "full") {
     assert.ok(names.includes("kb.get_topic"));
@@ -66,7 +77,9 @@ async function assertProtocolVersion(version: string): Promise<void> {
       listed.tools.map((tool: { name: string }) => tool.name),
       ["kb.search", "kb.get_record", "kb.answer_and_capture", "kb.resume_project"],
     );
-    const answerTool = listed.tools.find((tool: { name: string }) => tool.name === "kb.answer_and_capture");
+    const answerTool = listed.tools.find(
+      (tool: { name: string }) => tool.name === "kb.answer_and_capture",
+    );
     assert.equal(answerTool.annotations?.readOnlyHint, true);
 
     const answered = await client.callTool("kb.answer_and_capture", {
@@ -110,7 +123,9 @@ await assertProtocolVersion("2025-06-18");
       clientInfo: { name: "unsupported-version-test", version: "0.1.0" },
     });
     assert.equal(initialized.protocolVersion, DEFAULT_PROTOCOL_VERSION);
-    assert.ok((SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(initialized.protocolVersion));
+    assert.ok(
+      (SUPPORTED_PROTOCOL_VERSIONS as readonly string[]).includes(initialized.protocolVersion),
+    );
   } finally {
     child.kill("SIGTERM");
   }

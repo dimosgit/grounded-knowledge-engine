@@ -84,7 +84,10 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
             path: project.path,
             manifest: project.parsed.manifest,
             sections: Object.fromEntries(
-              [...project.parsed.sections.entries()].map(([key, section]) => [key, section.content]),
+              [...project.parsed.sections.entries()].map(([key, section]) => [
+                key,
+                section.content,
+              ]),
             ),
           },
           null,
@@ -180,7 +183,9 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     });
     if (json) console.log(JSON.stringify(result, null, 2));
     else {
-      console.log(`${result.dryRun ? "Would link" : "Linked"} ${sourcePath} to ${result.projectId}`);
+      console.log(
+        `${result.dryRun ? "Would link" : "Linked"} ${sourcePath} to ${result.projectId}`,
+      );
       if (result.dryRun) console.log(`\n${result.content}`);
     }
     return 0;

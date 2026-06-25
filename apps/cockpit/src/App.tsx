@@ -88,7 +88,9 @@ export default function App() {
   const docs = useMemo(() => buildDocs(markdownModules), []);
   const currentYear = new Date().getFullYear();
   const initialHashPath = getHashPath();
-  const initialDocFromHash = initialHashPath ? docs.find((doc) => doc.path === initialHashPath) || null : null;
+  const initialDocFromHash = initialHashPath
+    ? docs.find((doc) => doc.path === initialHashPath) || null
+    : null;
   const initialRoute = getAppRoute();
   const [query, setQuery] = useState("");
   const [activeTrack, setActiveTrack] = useState(initialDocFromHash?.track || DEFAULT_ACTIVE_TRACK);
@@ -112,7 +114,13 @@ export default function App() {
   const [graphQuery, setGraphQuery] = useState("");
   const [activePath, setActivePath] = useState(() => {
     if (initialDocFromHash) return initialDocFromHash.path;
-    return getInitialDocPath(docs, DEFAULT_ACTIVE_TAG, DEFAULT_HIDE_MERGED, DEFAULT_ACTIVE_TRACK, DEFAULT_ACTIVE_ITEM);
+    return getInitialDocPath(
+      docs,
+      DEFAULT_ACTIVE_TAG,
+      DEFAULT_HIDE_MERGED,
+      DEFAULT_ACTIVE_TRACK,
+      DEFAULT_ACTIVE_ITEM,
+    );
   });
   const recentPaths = useRecentPaths(activePath);
   useRouteSync({
@@ -129,7 +137,10 @@ export default function App() {
 
   const tracks = useMemo(() => buildTracks(docs), [docs]);
 
-  const selectedTrackKey = useMemo(() => getSelectedTrackKey(tracks, activeTrack), [tracks, activeTrack]);
+  const selectedTrackKey = useMemo(
+    () => getSelectedTrackKey(tracks, activeTrack),
+    [tracks, activeTrack],
+  );
 
   const selectedTrack = tracks.find((track) => track.key === selectedTrackKey) || null;
 
@@ -146,7 +157,10 @@ export default function App() {
     setHideMerged(false);
   }, [activeItemType, hideMerged]);
 
-  const scopedDocs = useMemo(() => getScopedDocs(docs, activeTrack, activeItemType), [docs, activeTrack, activeItemType]);
+  const scopedDocs = useMemo(
+    () => getScopedDocs(docs, activeTrack, activeItemType),
+    [docs, activeTrack, activeItemType],
+  );
 
   const tagCounts = useMemo(() => buildTagCounts(scopedDocs), [scopedDocs]);
 
@@ -158,7 +172,10 @@ export default function App() {
     setActiveTag("all");
   }, [activeTag, visibleTags]);
 
-  const libraryItemCounts = useMemo(() => buildLibraryItemCounts(docs, activeTrack), [docs, activeTrack]);
+  const libraryItemCounts = useMemo(
+    () => buildLibraryItemCounts(docs, activeTrack),
+    [docs, activeTrack],
+  );
 
   useEffect(() => {
     if (activeItemType === "all") return;
@@ -179,16 +196,25 @@ export default function App() {
     if (!docs.length) return;
     if (viewMode !== "library") return;
     if (docs.some((doc) => doc.path === activePath)) return;
-    const fallbackPath = getInitialDocPath(docs, activeTag, hideMerged, activeTrack, activeItemType, {
-      fallbackToAnyDoc: false,
-    });
+    const fallbackPath = getInitialDocPath(
+      docs,
+      activeTag,
+      hideMerged,
+      activeTrack,
+      activeItemType,
+      {
+        fallbackToAnyDoc: false,
+      },
+    );
     if (!fallbackPath) return;
     setActivePath(fallbackPath);
     setHashPath(fallbackPath);
   }, [docs, viewMode, activePath, activeTag, hideMerged, activeTrack, activeItemType]);
 
   const activeDoc = docs.find((doc) => doc.path === activePath) || docs[0] || null;
-  const activeDocInFilter = activeDoc ? filteredDocs.some((doc) => doc.path === activeDoc.path) : false;
+  const activeDocInFilter = activeDoc
+    ? filteredDocs.some((doc) => doc.path === activeDoc.path)
+    : false;
   const activeDocMetrics = activeDoc ? getDocMetrics(activeDoc.content) : null;
   const activeModuleDoc = useMemo(() => {
     if (!activeDoc) return null;
@@ -212,7 +238,10 @@ export default function App() {
 
   const trackFilterOptions = useMemo(() => buildTrackFilterOptions(docs, tracks), [docs, tracks]);
 
-  const displayTrackLabel = useMemo(() => getDisplayTrackLabel(tracks, activeTrack), [activeTrack, tracks]);
+  const displayTrackLabel = useMemo(
+    () => getDisplayTrackLabel(tracks, activeTrack),
+    [activeTrack, tracks],
+  );
 
   function openDoc(path, options: any = {}) {
     const sourcePath = options.sourcePath || activePath;
@@ -259,11 +288,12 @@ export default function App() {
     const nextTrack = options.trackKey || activeTrack;
     const nextItemType = options.itemType || activeItemType;
     const shouldHideMerged = nextItemType === "archive" ? false : hideMerged;
-    const targetTrack = nextTrack === "all" ? null : tracks.find((track) => track.key === nextTrack) || null;
+    const targetTrack =
+      nextTrack === "all" ? null : tracks.find((track) => track.key === nextTrack) || null;
     const requestedItemHasDocs =
       nextItemType === "all" ||
       nextTrack === "all" ||
-      ((targetTrack?.learningItemCounts?.[nextItemType] || 0) > 0);
+      (targetTrack?.learningItemCounts?.[nextItemType] || 0) > 0;
 
     if (!requestedItemHasDocs) {
       return;
@@ -347,13 +377,19 @@ export default function App() {
 
   const openQuestionsCount = useMemo(() => countOpenQuestions(docs), [docs]);
 
-  const recentDocs = useMemo(() => buildRecentDocs(docs, recentPaths, RECENT_ACTIVITY_COUNT), [docs, recentPaths]);
+  const recentDocs = useMemo(
+    () => buildRecentDocs(docs, recentPaths, RECENT_ACTIVITY_COUNT),
+    [docs, recentPaths],
+  );
 
   const projectSummaries = useMemo(
     () => buildProjectSummaries(docs, lifecycleOverrides),
     [docs, lifecycleOverrides],
   );
-  const activeProject = useMemo(() => getActiveProject(projectSummaries, selectedProjectId), [projectSummaries, selectedProjectId]);
+  const activeProject = useMemo(
+    () => getActiveProject(projectSummaries, selectedProjectId),
+    [projectSummaries, selectedProjectId],
+  );
   const projectColumns = useMemo(() => buildProjectColumns(projectSummaries), [projectSummaries]);
   const moveProject = async (projectId, bucket) => {
     const project = projectSummaries.find((item) => item.id === projectId);
@@ -383,7 +419,10 @@ export default function App() {
     () => filterMajorGraphFocusOptions(docs, projectSummaries, tracks, graphQuery),
     [docs, graphQuery, projectSummaries, tracks],
   );
-  const contextGraph = useMemo(() => buildMajorContextGraph(docs, projectSummaries, tracks, selectedGraphPath), [docs, projectSummaries, tracks, selectedGraphPath]);
+  const contextGraph = useMemo(
+    () => buildMajorContextGraph(docs, projectSummaries, tracks, selectedGraphPath),
+    [docs, projectSummaries, tracks, selectedGraphPath],
+  );
   const graphFocusOption = useMemo(() => {
     return getMajorGraphFocusOption(docs, projectSummaries, tracks, contextGraph.focusId);
   }, [docs, projectSummaries, tracks, contextGraph.focusId]);
@@ -393,7 +432,10 @@ export default function App() {
     setSelectedGraphPath(contextGraph.focusId);
     setHashGraph(contextGraph.focusId);
   }, [viewMode, contextGraph.focusId, selectedGraphPath]);
-  const projectContextGraph = useMemo(() => buildContextGraph(activeProject?.sourceDoc || null, docs), [activeProject, docs]);
+  const projectContextGraph = useMemo(
+    () => buildContextGraph(activeProject?.sourceDoc || null, docs),
+    [activeProject, docs],
+  );
   const activeProjectLinkedDocs = useMemo(
     () => buildProjectLinkedDocs(activeProject, projectContextGraph, docs),
     [activeProject, docs, projectContextGraph],
@@ -550,7 +592,6 @@ export default function App() {
       getDocGuidance={getDocGuidance}
       resolveMarkdownDocPath={resolveMarkdownDocPath}
       resolveMarkdownAssetPath={resolveMarkdownAssetPath}
-      isExternalResource={isExternalResource}
       currentYear={currentYear}
     />
   );

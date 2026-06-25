@@ -4,12 +4,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { getKbRetriever } from "./retriever.js";
-import type {
-  RetrievalBackend,
-  RetrieverOptions,
-  SearchHit,
-  SearchResult,
-} from "./types.js";
+import type { RetrievalBackend, RetrieverOptions, SearchHit, SearchResult } from "./types.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -359,9 +354,10 @@ async function main() {
   }
 
   const loaded = await loadCases(args.file);
-  const retriever = args.backend === "sqlite"
-    ? await getSqliteRetriever({ forceRefresh: args.refresh })
-    : await getKbRetriever({ forceRefresh: args.refresh });
+  const retriever =
+    args.backend === "sqlite"
+      ? await getSqliteRetriever({ forceRefresh: args.refresh })
+      : await getKbRetriever({ forceRefresh: args.refresh });
 
   const caseResults: EvalCaseResult[] = [];
   const allLatencies: number[] = [];
@@ -416,7 +412,8 @@ async function main() {
 
     const relevantAtK = countRelevantAtK(hits, testCase.expectedPathPatterns, args.k);
     const precisionAtK = relevantAtK / args.k;
-    const expectedCoverageAtK = relevantAtK / Math.max(1, Math.min(testCase.expectedPathPatterns.length, args.k));
+    const expectedCoverageAtK =
+      relevantAtK / Math.max(1, Math.min(testCase.expectedPathPatterns.length, args.k));
     const ndcg = ndcgAtK(hits, testCase.expectedPathPatterns, args.k);
 
     precisionAtKValues.push(precisionAtK);
@@ -514,14 +511,20 @@ async function main() {
     console.log(`Hard-negative clean rate@${args.k}: ${summary.metrics.hardNegative.cleanRateAtK}`);
   }
   console.log(`Unresolved cases: ${summary.metrics.unresolvedCases}`);
-  console.log(`Latency mean/p50/p95: ${summary.metrics.latencyMs.mean}/${summary.metrics.latencyMs.p50}/${summary.metrics.latencyMs.p95} ms`);
-  console.log(`Cache hit rate: ${summary.metrics.cache.hitRate} (${summary.metrics.cache.hits}/${summary.metrics.cache.hits + summary.metrics.cache.misses})`);
+  console.log(
+    `Latency mean/p50/p95: ${summary.metrics.latencyMs.mean}/${summary.metrics.latencyMs.p50}/${summary.metrics.latencyMs.p95} ms`,
+  );
+  console.log(
+    `Cache hit rate: ${summary.metrics.cache.hitRate} (${summary.metrics.cache.hits}/${summary.metrics.cache.hits + summary.metrics.cache.misses})`,
+  );
   console.log("");
   console.log("Per-case results:");
   for (const item of summary.cases) {
     const rankLabel = item.rank === null ? "miss" : `rank ${item.rank}`;
     const forbiddenLabel = item.forbiddenAtK ? `forbidden@${args.k}` : "forbidden-clean";
-    console.log(`- ${item.id}: ${rankLabel}, ${forbiddenLabel}, top=${item.topPath || "(none)"}, latency=${item.latencyMs} ms`);
+    console.log(
+      `- ${item.id}: ${rankLabel}, ${forbiddenLabel}, top=${item.topPath || "(none)"}, latency=${item.latencyMs} ms`,
+    );
   }
 }
 

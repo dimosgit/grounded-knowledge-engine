@@ -30,7 +30,14 @@ export function ProjectBoardView({
     <OperatorFrame
       activeView="projects"
       title="Project Board"
-      commandBar={<CommandBar items={docs} isOpen={commandBarOpen} onOpenChange={onCommandBarOpenChange} onSelect={onCommandSelect} />}
+      commandBar={
+        <CommandBar
+          items={docs}
+          isOpen={commandBarOpen}
+          onOpenChange={onCommandBarOpenChange}
+          onSelect={onCommandSelect}
+        />
+      }
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
@@ -81,10 +88,17 @@ export function ProjectBoardView({
               </div>
               <div className="space-y-4">
                 {projectColumns[column.key].map((project) => (
-                  <ProjectCard key={project.id} project={project} onOpen={onOpenProject} onMove={onMoveProject} />
+                  <ProjectCard
+                    key={project.id}
+                    project={project}
+                    onOpen={onOpenProject}
+                    onMove={onMoveProject}
+                  />
                 ))}
                 {!projectColumns[column.key].length && (
-                  <div className="rounded border border-dashed border-border-subtle p-5 text-body-md text-on-surface-variant">No items in this lane.</div>
+                  <div className="rounded border border-dashed border-border-subtle p-5 text-body-md text-on-surface-variant">
+                    No items in this lane.
+                  </div>
                 )}
               </div>
             </section>

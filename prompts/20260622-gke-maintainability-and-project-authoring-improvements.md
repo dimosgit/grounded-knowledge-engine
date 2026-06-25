@@ -235,10 +235,10 @@ Recommended priority:
 - [x] New or extracted core modules compile with strict TypeScript settings.
 - [x] Initialization tests cover every supported MCP protocol version and at least one unsupported version.
 - [x] Existing `npm run test:gke` and Cockpit tests continue to pass.
-- [ ] CI runs linting and formatting checks.
-- [ ] Documentation clearly distinguishes current project support from planned checkpoint and workspace functionality.
-- [ ] The Cockpit production build no longer emits the observed Vite deprecation warning.
-- [ ] Initial project/library views do not eagerly load the full Mermaid diagram bundle.
+- [x] CI runs linting and formatting checks.
+- [x] Documentation clearly distinguishes current project support from planned checkpoint and workspace functionality.
+- [x] The Cockpit production build no longer emits the observed Vite deprecation warning.
+- [x] Initial project/library views do not eagerly load the full Mermaid diagram bundle.
 
 ## 9. Dependencies and Constraints
 

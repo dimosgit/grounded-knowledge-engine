@@ -135,6 +135,10 @@ recommended structure for sensitive multi-client use.
 
 ## Workspace boundary
 
+**Implementation status:** the engine runs against a single workspace today (one
+repository root resolved from `KB_MCP_REPO_ROOT`). Multiple isolated workspace
+vaults and the cross-workspace leakage guard are planned, not yet implemented.
+
 A workspace represents one trust domain, such as:
 
 - Personal projects.
@@ -373,6 +377,9 @@ Rules:
 
 ## Decision record
 
+**Implementation status:** this is the normative target format. Decision-replay
+capture and review are planned, not yet implemented.
+
 Path:
 
 ```text
@@ -434,6 +441,9 @@ Rules:
 5. `project_id` is optional only for truly workspace-wide decisions.
 
 ## Source record
+
+**Implementation status:** implemented. Document ingestion (PDF, DOCX, XLSX,
+Markdown, text) creates and indexes source records with provenance.
 
 Path:
 
