@@ -24,6 +24,37 @@
   box-sizing: border-box;
 }
 
+/* Themed scrollbars across the whole cockpit so overflow areas — notably the
+   Project Board's horizontal scroll — match the dark surface instead of the
+   bright OS default. Uses the same palette as the Library panes below; more
+   specific rules there still win where they apply. */
+* {
+  scrollbar-color: #1e293b transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 8px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #2a3548;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 html,
 body,
 #root {
