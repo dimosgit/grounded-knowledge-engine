@@ -49,6 +49,15 @@ export function ProjectBoardView({
         <p className="mt-2 max-w-2xl text-body-md text-on-surface-variant">
           Track active work, upcoming moves, and blocked project contexts across the knowledge base.
         </p>
+        {import.meta.env.PROD && (
+          <p className="mt-3 inline-flex max-w-2xl items-start gap-2 rounded-md border border-border-subtle bg-surface-container-low/65 px-3 py-2 text-body-md text-on-surface-variant">
+            <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-status-waiting" />
+            <span>
+              Demo mode — drag a card to explore the board, but lane changes stay in this browser
+              session only. Run the cockpit locally to persist moves back to the project Markdown.
+            </span>
+          </p>
+        )}
       </div>
       <div className="overflow-x-auto px-4 py-8 md:px-8">
         <div className="mx-auto grid min-w-[1180px] max-w-[1840px] grid-cols-4 gap-5">
