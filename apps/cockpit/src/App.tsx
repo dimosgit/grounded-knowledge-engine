@@ -397,6 +397,14 @@ export default function App() {
     const lifecycle = BUCKET_LIFECYCLE[bucket] ?? "";
     // Optimistic move; the dev write-back + content re-sync makes it durable.
     setLifecycleOverrides((current) => ({ ...current, [projectId]: lifecycle }));
+    // The lane write-back is a dev-only Vite middleware (see vite.config.ts).
+    // In the static build (e.g. the hosted demo) that endpoint does not exist,
+    // and the SPA fallback would answer the POST with index.html and a
+    // misleading 200 — so the move would look persisted but silently isn't.
+    // Keep the optimistic in-session move and skip the request outside dev; the
+    // Project Board surfaces a "demo mode" notice explaining moves are
+    // session-only there.
+    if (!import.meta.env.DEV) return;
     try {
       const response = await fetch("/__board/lifecycle", {
         method: "POST",
