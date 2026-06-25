@@ -1,29 +1,17 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { runProjectCli } from "./cli.js";
-import {
-  parseProjectDocument,
-  parseProjectFrontmatter,
-  sectionItems,
-} from "./project-manifest.js";
+import { parseProjectDocument, parseProjectFrontmatter, sectionItems } from "./project-manifest.js";
 
 const toolDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(toolDirectory, "../..");
-const destination = path.resolve(
-  repoRoot,
-  process.argv[2] || "examples/demo-project-workspace",
-);
+const destination = path.resolve(repoRoot, process.argv[2] || "examples/demo-project-workspace");
 const relativeDestination = path.relative(repoRoot, destination).replaceAll(path.sep, "/");
 
-if (
-  !relativeDestination ||
-  relativeDestination === ".." ||
-  relativeDestination.startsWith("../")
-) {
+if (!relativeDestination || relativeDestination === ".." || relativeDestination.startsWith("../")) {
   throw new Error("Demo export destination must stay inside the repository.");
 }
 
@@ -144,9 +132,7 @@ same demo without creating duplicate project IDs in the main repository.
 
   if (await exists(destination)) {
     if (!(await exists(path.join(destination, ".gke-demo-export")))) {
-      throw new Error(
-        `Refusing to replace non-generated destination: ${relativeDestination}`,
-      );
+      throw new Error(`Refusing to replace non-generated destination: ${relativeDestination}`);
     }
     await fs.rm(destination, { recursive: true });
   }
@@ -212,10 +198,7 @@ function repeatOption(option: string, values: string[]): string[] {
   return values.flatMap((value) => [option, value]);
 }
 
-function sectionContent(
-  parsed: ReturnType<typeof parseProjectDocument>,
-  key: string,
-): string {
+function sectionContent(parsed: ReturnType<typeof parseProjectDocument>, key: string): string {
   return parsed.sections.get(key)?.content || "";
 }
 

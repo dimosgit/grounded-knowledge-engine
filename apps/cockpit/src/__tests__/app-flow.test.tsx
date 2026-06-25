@@ -19,7 +19,9 @@ describe("cockpit major flows", () => {
     render(<App />);
     await openLearningLibrary(user);
 
-    const search = screen.getAllByPlaceholderText("Search all docs (modules, topics, terms, digests)...")[0];
+    const search = screen.getAllByPlaceholderText(
+      "Search all docs (modules, topics, terms, digests)...",
+    )[0];
     await user.type(search, "architecture");
 
     expect(
@@ -32,7 +34,9 @@ describe("cockpit major flows", () => {
     render(<App />);
     await openLearningLibrary(user);
 
-    const search = screen.getAllByPlaceholderText("Search all docs (modules, topics, terms, digests)...")[0];
+    const search = screen.getAllByPlaceholderText(
+      "Search all docs (modules, topics, terms, digests)...",
+    )[0];
     await user.type(search, "json-rpc");
 
     expect(
@@ -69,7 +73,9 @@ describe("cockpit major flows", () => {
     expect(await screen.findByRole("heading", { name: /Router Rollout/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "At a glance" })).toBeInTheDocument();
     expect(screen.getByText("58% complete")).toBeInTheDocument();
-    expect(screen.queryByText(/Not measured — add a weighted task checklist/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Not measured — add a weighted task checklist/i),
+    ).not.toBeInTheDocument();
 
     const contextToggle = screen.getByText("Project context").closest("summary");
     expect(contextToggle).toBeInTheDocument();
@@ -79,22 +85,24 @@ describe("cockpit major flows", () => {
 
   test("context graph supports zoom reset and node repositioning", async () => {
     const originalRect = HTMLElement.prototype.getBoundingClientRect;
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function getGraphRect() {
-      if (this.matches?.("[data-graph-world]")) {
-        return {
-          x: 0,
-          y: 0,
-          left: 0,
-          top: 0,
-          right: 1000,
-          bottom: 800,
-          width: 1000,
-          height: 800,
-          toJSON: () => {},
-        };
-      }
-      return originalRect.call(this);
-    });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function getGraphRect() {
+        if (this.matches?.("[data-graph-world]")) {
+          return {
+            x: 0,
+            y: 0,
+            left: 0,
+            top: 0,
+            right: 1000,
+            bottom: 800,
+            width: 1000,
+            height: 800,
+            toJSON: () => {},
+          };
+        }
+        return originalRect.call(this);
+      },
+    );
 
     window.location.hash = "#/graph";
     render(<App />);

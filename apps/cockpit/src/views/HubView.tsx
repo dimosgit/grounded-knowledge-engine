@@ -33,7 +33,14 @@ export function HubView({
     <OperatorFrame
       activeView="hub"
       title="Knowledge Base"
-      commandBar={<CommandBar items={docs} isOpen={commandBarOpen} onOpenChange={onCommandBarOpenChange} onSelect={onCommandSelect} />}
+      commandBar={
+        <CommandBar
+          items={docs}
+          isOpen={commandBarOpen}
+          onOpenChange={onCommandBarOpenChange}
+          onSelect={onCommandSelect}
+        />
+      }
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
@@ -45,7 +52,8 @@ export function HubView({
           <div>
             <h1 className="font-display text-display-lg text-on-surface">Mission Control</h1>
             <p className="mt-2 text-body-md text-on-surface-variant">
-              System operations running normally. {openQuestionsCount} unresolved items and {projectCount} project contexts indexed.
+              System operations running normally. {openQuestionsCount} unresolved items and{" "}
+              {projectCount} project contexts indexed.
             </p>
           </div>
           <button
@@ -68,11 +76,19 @@ export function HubView({
                     <span className="h-2 w-2 rounded-full bg-track-demo" />
                     {activeProject?.trackLabel || "Knowledge Base"}
                   </span>
-                  <h2 className="font-display text-headline-md text-on-surface">{activeProject?.title || activeModule?.title || "Learning OS"}</h2>
+                  <h2 className="font-display text-headline-md text-on-surface">
+                    {activeProject?.title || activeModule?.title || "Learning OS"}
+                  </h2>
                 </div>
                 <div className="font-mono text-code-sm uppercase text-on-surface-variant">
-                  <div>{activeProject?.updated ? `Updated ${activeProject.updated}` : "Live KB"}</div>
-                  <div className={activeProject?.blockers?.length ? "text-status-blocked" : "text-status-done"}>
+                  <div>
+                    {activeProject?.updated ? `Updated ${activeProject.updated}` : "Live KB"}
+                  </div>
+                  <div
+                    className={
+                      activeProject?.blockers?.length ? "text-status-blocked" : "text-status-done"
+                    }
+                  >
                     {activeProject?.blockers?.length ? "Needs attention" : "Operational"}
                   </div>
                 </div>
@@ -83,19 +99,31 @@ export function HubView({
                     <Target size={16} />
                     Next Task
                   </h3>
-                  <p className="text-body-md text-on-surface">{activeProject?.nextActions?.[0] || activeModule?.actions?.[0] || "Open a project context to continue."}</p>
+                  <p className="text-body-md text-on-surface">
+                    {activeProject?.nextActions?.[0] ||
+                      activeModule?.actions?.[0] ||
+                      "Open a project context to continue."}
+                  </p>
                 </div>
                 <div className="rounded border border-status-blocked/30 bg-status-blocked/10 p-4">
                   <h3 className="mb-2 flex items-center gap-2 text-label-caps uppercase text-status-blocked">
                     <AlertTriangle size={16} />
                     Active Blocker
                   </h3>
-                  <p className="text-body-md text-on-surface">{activeProject?.blockers?.[0] || "No active blocker detected."}</p>
+                  <p className="text-body-md text-on-surface">
+                    {activeProject?.blockers?.[0] || "No active blocker detected."}
+                  </p>
                 </div>
               </div>
               <div className="mt-6 flex items-center justify-between border-t border-border-subtle pt-4">
-                <span className="text-metadata text-on-surface-variant">{docs.length} documents indexed</span>
-                <button className="flex items-center gap-2 text-label-caps uppercase text-primary" type="button" onClick={onProjects}>
+                <span className="text-metadata text-on-surface-variant">
+                  {docs.length} documents indexed
+                </span>
+                <button
+                  className="flex items-center gap-2 text-label-caps uppercase text-primary"
+                  type="button"
+                  onClick={onProjects}
+                >
                   Open Board
                   <ArrowRight size={16} />
                 </button>
@@ -110,11 +138,18 @@ export function HubView({
             </h2>
             <div className="space-y-3">
               {openQuestionItems.slice(0, 4).map((item) => (
-                <button key={item.id} type="button" className="block w-full rounded border border-border-subtle bg-surface p-3 text-left text-body-md text-on-surface-variant hover:border-primary hover:text-on-surface" onClick={() => onOpenDoc(item.path)}>
+                <button
+                  key={item.id}
+                  type="button"
+                  className="block w-full rounded border border-border-subtle bg-surface p-3 text-left text-body-md text-on-surface-variant hover:border-primary hover:text-on-surface"
+                  onClick={() => onOpenDoc(item.path)}
+                >
                   {item.label}
                 </button>
               ))}
-              {!openQuestionItems.length && <p className="text-body-md text-on-surface-variant">No open questions found.</p>}
+              {!openQuestionItems.length && (
+                <p className="text-body-md text-on-surface-variant">No open questions found.</p>
+              )}
             </div>
           </article>
         </section>
@@ -134,9 +169,13 @@ export function HubView({
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="font-display text-headline-sm text-on-surface">{track.label}</h3>
-                    <span className="rounded bg-surface-container-high px-2 py-1 font-mono text-code-sm text-primary">{track.count}</span>
+                    <span className="rounded bg-surface-container-high px-2 py-1 font-mono text-code-sm text-primary">
+                      {track.count}
+                    </span>
                   </div>
-                  <p className="line-clamp-2 text-body-md text-on-surface-variant">{track.description}</p>
+                  <p className="line-clamp-2 text-body-md text-on-surface-variant">
+                    {track.description}
+                  </p>
                 </button>
               );
             })}
@@ -146,25 +185,31 @@ export function HubView({
         <section aria-label="Learning item types">
           <h2 className="mb-4 font-display text-headline-sm">Deep Dive by Category</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
-            {learningItemOrder.filter((itemType) => itemType !== "all").map((itemType) => {
-              const count = selectedTrack?.learningItemCounts[itemType] || 0;
-              const isDisabled = count === 0;
-              return (
-                <button
-                  key={itemType}
-                  className={`rounded-lg border p-4 text-left ${isDisabled ? "cursor-not-allowed border-border-subtle bg-surface opacity-45" : "border-border-subtle bg-surface-container hover:border-primary"}`}
-                  onClick={() => onEnterLibrary({ trackKey: selectedTrackKey, itemType })}
-                  type="button"
-                  disabled={isDisabled}
-                >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <h3 className="font-display text-headline-sm text-on-surface">{learningItemLabels[itemType]}</h3>
-                    <span className="font-mono text-code-sm text-primary">{count}</span>
-                  </div>
-                  <p className="line-clamp-2 text-metadata text-on-surface-variant">{learningItemDescriptions[itemType]}</p>
-                </button>
-              );
-            })}
+            {learningItemOrder
+              .filter((itemType) => itemType !== "all")
+              .map((itemType) => {
+                const count = selectedTrack?.learningItemCounts[itemType] || 0;
+                const isDisabled = count === 0;
+                return (
+                  <button
+                    key={itemType}
+                    className={`rounded-lg border p-4 text-left ${isDisabled ? "cursor-not-allowed border-border-subtle bg-surface opacity-45" : "border-border-subtle bg-surface-container hover:border-primary"}`}
+                    onClick={() => onEnterLibrary({ trackKey: selectedTrackKey, itemType })}
+                    type="button"
+                    disabled={isDisabled}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="font-display text-headline-sm text-on-surface">
+                        {learningItemLabels[itemType]}
+                      </h3>
+                      <span className="font-mono text-code-sm text-primary">{count}</span>
+                    </div>
+                    <p className="line-clamp-2 text-metadata text-on-surface-variant">
+                      {learningItemDescriptions[itemType]}
+                    </p>
+                  </button>
+                );
+              })}
           </div>
         </section>
 
@@ -172,16 +217,27 @@ export function HubView({
           <h2 className="mb-4 font-display text-headline-sm">Recent Context</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {recentDocs.map((doc) => (
-              <button key={doc.path} type="button" className="rounded-lg border border-border-subtle bg-surface-container p-4 text-left hover:border-primary" onClick={() => onOpenDoc(doc.path)}>
+              <button
+                key={doc.path}
+                type="button"
+                className="rounded-lg border border-border-subtle bg-surface-container p-4 text-left hover:border-primary"
+                onClick={() => onOpenDoc(doc.path)}
+              >
                 <div className="mb-3 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
                   <FileText size={14} />
                   {getDocBadge(doc.docType)}
                 </div>
-                <h3 className="mb-3 line-clamp-2 text-body-md font-semibold text-on-surface">{doc.title}</h3>
-                <p className="truncate font-mono text-code-sm text-on-surface-variant">{doc.path}</p>
+                <h3 className="mb-3 line-clamp-2 text-body-md font-semibold text-on-surface">
+                  {doc.title}
+                </h3>
+                <p className="truncate font-mono text-code-sm text-on-surface-variant">
+                  {doc.path}
+                </p>
               </button>
             ))}
-            {!recentDocs.length && <p className="text-body-md text-on-surface-variant">No recent activity yet.</p>}
+            {!recentDocs.length && (
+              <p className="text-body-md text-on-surface-variant">No recent activity yet.</p>
+            )}
           </div>
         </section>
       </div>

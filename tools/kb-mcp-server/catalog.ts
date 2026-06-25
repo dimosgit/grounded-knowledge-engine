@@ -146,14 +146,20 @@ function searchTool(options: CatalogOptions): ToolDefinition {
   return {
     name: "kb.search",
     title: "Search Grounded Knowledge",
-    description: "Search the active local knowledge base and return ranked evidence with citations.",
+    description:
+      "Search the active local knowledge base and return ranked evidence with citations.",
     annotations: annotations.read,
     inputSchema: {
       type: "object",
       additionalProperties: false,
       properties: {
         query: { type: "string", minLength: 2, description: "Search query" },
-        limit: { type: "integer", minimum: 1, maximum: options.maxLimit, description: `Maximum hits; default ${options.defaultLimit}` },
+        limit: {
+          type: "integer",
+          minimum: 1,
+          maximum: options.maxLimit,
+          description: `Maximum hits; default ${options.defaultLimit}`,
+        },
         context: { type: "integer", minimum: 0, maximum: options.maxContext },
         mode: { type: "string", enum: ["auto", "domain", "project", "generic"] },
         track: { type: "string" },
@@ -181,7 +187,10 @@ function getRecordTool(): ToolDefinition {
       additionalProperties: false,
       properties: {
         query: { type: "string", minLength: 1 },
-        kind: { type: "string", enum: ["any", "topic", "term", "module", "project", "decision", "source"] },
+        kind: {
+          type: "string",
+          enum: ["any", "topic", "term", "module", "project", "decision", "source"],
+        },
         maxChars: { type: "integer", minimum: 300, maximum: 50000 },
       },
       required: ["query"],
@@ -209,7 +218,12 @@ function answerAndCaptureTool(options: CatalogOptions): ToolDefinition {
         module: { type: "string" },
         includeArchive: { type: "boolean" },
         strict: { type: "boolean" },
-        sloMs: { type: "integer", minimum: 50, maximum: 120000, description: `Default ${options.defaultSloMs}` },
+        sloMs: {
+          type: "integer",
+          minimum: 50,
+          maximum: 120000,
+          description: `Default ${options.defaultSloMs}`,
+        },
         responseMode: { type: "string", enum: ["auto", "fast", "curate"] },
         backend: { type: "string", enum: ["bm25", "sqlite"] },
         responseFormat: { type: "string", enum: ["compact", "full"] },
@@ -244,7 +258,11 @@ function compatibilityGetter(name: "kb.get_topic" | "kb.get_term"): ToolDefiniti
       additionalProperties: false,
       properties: {
         [argument]: { type: "string", minLength: 1 },
-        maxChars: { type: "integer", minimum: isTopic ? 500 : 300, maximum: isTopic ? 50000 : 30000 },
+        maxChars: {
+          type: "integer",
+          minimum: isTopic ? 500 : 300,
+          maximum: isTopic ? 50000 : 30000,
+        },
       },
       required: [argument],
     },
@@ -421,7 +439,12 @@ export function normalizeMcpProfile(value: unknown): McpProfile {
 }
 
 export function buildToolCatalog(options: CatalogOptions): ToolDefinition[] {
-  const core = [searchTool(options), getRecordTool(), answerAndCaptureTool(options), resumeProjectTool()];
+  const core = [
+    searchTool(options),
+    getRecordTool(),
+    answerAndCaptureTool(options),
+    resumeProjectTool(),
+  ];
   return options.profile === "full" ? [...core, ...fullTools(options)] : core;
 }
 

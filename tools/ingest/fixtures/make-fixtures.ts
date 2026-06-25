@@ -38,7 +38,10 @@ async function makeDocx(outPath: string): Promise<void> {
     sections: [
       {
         children: [
-          new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun("Integration Decision Record")] }),
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            children: [new TextRun("Integration Decision Record")],
+          }),
           new Paragraph(
             `Decision ${FIXTURE_TOKENS.docx}: the team agreed to route order replication through the middleware queue rather than a direct point-to-point call, to preserve clean-core boundaries.`,
           ),
@@ -54,7 +57,12 @@ async function makeXlsx(outPath: string): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Cutover Tasks");
   sheet.addRow(["Task", "Owner", "Status", "Note"]);
-  sheet.addRow(["Provision sandbox key", "Platform", "Blocked", `Tracked as ${FIXTURE_TOKENS.xlsx}`]);
+  sheet.addRow([
+    "Provision sandbox key",
+    "Platform",
+    "Blocked",
+    `Tracked as ${FIXTURE_TOKENS.xlsx}`,
+  ]);
   sheet.addRow(["Smoke test replication", "Integration", "Pending", "Depends on the key above"]);
   await workbook.xlsx.writeFile(outPath);
 }

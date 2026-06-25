@@ -1,0 +1,9 @@
+node_modules/
+dist/
+content/
+.cache/
+apps/cockpit/dist/
+apps/cockpit/content/
+examples/
+package-lock.json
+*.log
