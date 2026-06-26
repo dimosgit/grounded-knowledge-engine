@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import path from "node:path";
 import process from "node:process";
@@ -2219,7 +2220,29 @@ function jsonRpcToolError(message: string) {
   };
 }
 
-main().catch((error) => {
-  log("error", safeErrorMessage(error));
-  process.exit(1);
-});
+// Reusable dispatch surface so alternate transports (e.g. the loopback
+// Streamable HTTP bridge in server-http.ts) can drive the exact same handlers
+// as the stdio server, guaranteeing transport parity.
+export { handleRequest, handleNotification };
+
+/**
+ * Only auto-start the stdio transport when this module is the process entry
+ * point. realpathSync normalizes symlinked paths (e.g. /tmp vs /private/tmp)
+ * so the comparison holds under tsx/node and when imported as a library.
+ */
+function isDirectEntry(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === __filename;
+  } catch {
+    return false;
+  }
+}
+
+if (isDirectEntry()) {
+  main().catch((error) => {
+    log("error", safeErrorMessage(error));
+    process.exit(1);
+  });
+}
