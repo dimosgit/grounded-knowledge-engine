@@ -8,6 +8,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Intentional public maintainer metadata, such as gke.dimouzunov.com, is allowed.
+# This gate focuses on client/private-workspace leakage and release-blocking terms.
 PATTERN='[redacted]'
 
 # 1) Content scan over SHIPPABLE files only. Drive the file list from git
