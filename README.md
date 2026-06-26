@@ -9,11 +9,14 @@ across Claude Code, Codex, Gemini CLI, and other MCP clients.
 
 Your files remain the source of truth. The retrieval index is disposable, the
 MCP server runs locally, and the optional Operator Cockpit previews the same
-project state that agents consume.
+project state that agents consume. The public Cockpit preview is planned for
+[`gke.dimouzunov.com`](https://gke.dimouzunov.com) with the sanitized demo
+workspace only.
 
 > **Status:** grounded retrieval, capture, document ingestion, the provider-neutral
-> MCP server, Project Context, and the local React Cockpit are implemented and
-> tested. GKE is not a hosted SaaS and does not require deployment.
+> MCP server, Project Context, and the React Cockpit are implemented and tested.
+> GKE is not a hosted SaaS; the hosted Cockpit is a static public preview over
+> demo content, not a hosted knowledge engine.
 
 ## What is implemented
 
@@ -24,7 +27,7 @@ project state that agents consume.
 | **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                     |
 | **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations. |
 | **One MCP server**           | Claude Code, Codex, and Gemini CLI use the same local `kb` server and knowledge base.                                                       |
-| **Operator Cockpit**         | A local React preview provides the knowledge library, project board, structured project detail, handoff copying, and context graph.         |
+| **Operator Cockpit**         | A React preview provides the knowledge library, project board, structured project detail, handoff copying, and context graph. The public preview uses sanitized demo content only. |
 | **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.               |
 
 ## The compounding loop
@@ -268,6 +271,12 @@ main workspace.
 
 ## Operator Cockpit
 
+The public frontend preview will be available at
+[`gke.dimouzunov.com`](https://gke.dimouzunov.com). It is a static Vercel build
+of `apps/cockpit` over the repository's sanitized demo knowledge base; it does
+not expose the local MCP server, indexes, write tools, or private workspace
+files.
+
 Run the local preview:
 
 ```bash
@@ -323,7 +332,7 @@ see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
 | [`tools/projects`](tools/projects)           | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting. |
 | [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts.     |
 | [`tools/ingest`](tools/ingest)               | Local document extraction and capture adapters.                                                         |
-| [`apps/cockpit`](apps/cockpit)               | Optional local React preview over the same Markdown and shared project model.                           |
+| [`apps/cockpit`](apps/cockpit)               | Optional React preview over the same Markdown and shared project model; hosted as a static demo at `gke.dimouzunov.com`. |
 | `demo-kb/` and `kb/`                         | Canonical plain-file knowledge and project state.                                                       |
 
 See [`docs/architecture.md`](docs/architecture.md) for the engine diagram and
@@ -353,6 +362,8 @@ the Cockpit, and secret/filename sanitization.
 ## Boundaries
 
 - GKE is local-first: files and the MCP process stay on your machine.
+- The public frontend preview is static and demo-only; it does not host user
+  workspaces or the MCP process.
 - The Markdown files are canonical; indexes and preview content are derived.
 - The project scope is explicit and deterministic.
 - GKE is not a hosted SaaS, Jira replacement, or general document-management

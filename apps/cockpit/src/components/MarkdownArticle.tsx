@@ -13,6 +13,22 @@ function isExternalLink(href) {
   return /^https?:\/\//i.test(href);
 }
 
+function getSafeLinkHref(href) {
+  if (typeof href !== "string") return "";
+  const trimmed = href.trim();
+  if (!trimmed) return "";
+  if (
+    trimmed.startsWith("#") ||
+    trimmed.startsWith("/") ||
+    /^https?:\/\//i.test(trimmed) ||
+    /^mailto:/i.test(trimmed)
+  ) {
+    return trimmed;
+  }
+  if (/^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return "";
+  return trimmed;
+}
+
 function cleanHeadingText(value) {
   if (!value) return "";
   return value
@@ -150,7 +166,7 @@ function MermaidDiagram({ chart }) {
         mermaid.initialize({
           startOnLoad: false,
           theme: "neutral",
-          securityLevel: "loose",
+          securityLevel: "strict",
           suppressErrorRendering: true,
         });
 
@@ -445,11 +461,12 @@ export default function MarkdownArticle({
           h5: (props) => renderHeading(5, props),
           h6: (props) => renderHeading(6, props),
           a: ({ href, children, ...props }) => {
-            if (typeof href === "string" && href.startsWith("#")) {
-              const targetId = href.slice(1).trim();
+            const safeHref = getSafeLinkHref(href);
+            if (safeHref.startsWith("#")) {
+              const targetId = safeHref.slice(1).trim();
               return (
                 <a
-                  href={href}
+                  href={safeHref}
                   onClick={(event) => {
                     if (!targetId) return;
                     event.preventDefault();
@@ -480,10 +497,14 @@ export default function MarkdownArticle({
               );
             }
 
-            const external = isExternalLink(href);
+            if (!safeHref) {
+              return <span {...props}>{children}</span>;
+            }
+
+            const external = isExternalLink(safeHref);
             return (
               <a
-                href={href}
+                href={safeHref}
                 target={external ? "_blank" : undefined}
                 rel={external ? "noreferrer noopener" : undefined}
                 {...props}
