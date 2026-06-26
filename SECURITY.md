@@ -13,7 +13,9 @@ steps and the affected version/commit.
 ## Scope
 
 This is a local-first tool: your documents, the derived index, and the MCP server all
-run on your machine. The most security-relevant areas are:
+run on your machine. The public `gke.dimouzunov.com` Cockpit is a static demo
+frontend over sanitized repository content; it does not expose user workspaces,
+the MCP server, or write tools. The most security-relevant areas are:
 
 - the MCP server's stdio handling (`tools/kb-mcp-server`),
 - the setup script that writes machine-local config (`npm run setup:claude`),

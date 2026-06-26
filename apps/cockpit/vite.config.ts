@@ -100,8 +100,11 @@ export default defineConfig({
     chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
-        manualChunks: {
-          markdown: ["react-markdown", "remark-gfm"],
+        manualChunks(id: string) {
+          if (id.includes("react-markdown") || id.includes("remark-gfm")) {
+            return "markdown";
+          }
+          return undefined;
         },
       },
     },

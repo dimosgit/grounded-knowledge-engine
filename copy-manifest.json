@@ -1,13 +1,13 @@
 {
   "_decisions": {
     "repo": "grounded-knowledge-engine",
-    "visibility": "private until release gate is green",
+    "visibility": "public once release gate is green",
     "license": "MIT",
     "node": ">=22.5",
-    "demoSourceProject": "TBD - must be license-checked before import",
+    "demoSourceProject": "MIT-licensed Model Context Protocol docs plus synthetic project records",
     "uiPlacement": "apps/cockpit",
-    "liveDemoHost": "TBD - static frontend host",
-    "skills": "defer to v0.2 unless one generic skill is scrubbed and loop-tested"
+    "liveDemoHost": "https://gke.dimouzunov.com",
+    "skills": "generic grounded-knowledge-workflow skill is scrubbed and included"
   },
   "copy": [
     {
@@ -31,7 +31,7 @@
     },
     {
       "enabled": true,
-      "src": "kb-preview",
+      "src": "apps/cockpit",
       "dest": "apps/cockpit",
       "include": [
         "src/**",
@@ -43,7 +43,7 @@
         "tsconfig.*.json"
       ],
       "exclude": ["content/**", "dist/**", "node_modules/**", "src/components/*DeepDivePage.tsx"],
-      "reason": "Optional UI viewer over the engine. Scrubbed: deep-dive page + client modes removed, sourceFolders externalized via KB_PREVIEW_SOURCE_FOLDERS, chrome rebranded to Operator Cockpit, tests re-grounded on the demo corpus. typecheck/test/build green; passes the scrub gate."
+      "reason": "Optional static UI viewer over the engine. The public preview at gke.dimouzunov.com ships sanitized demo content only; private workspaces, generated content, dist, and node_modules stay excluded."
     },
     {
       "enabled": true,
@@ -57,7 +57,7 @@
     ".env",
     "*.env",
     "*-private*.md",
-    "kb",
+    "private-kb",
     "source-docs",
     "output",
     ".cache",
