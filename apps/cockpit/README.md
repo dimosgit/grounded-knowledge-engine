@@ -1,11 +1,14 @@
 # Operator Cockpit
 
-`cockpit` is the local web UI layer over the grounded knowledge engine.
+`cockpit` is the web UI layer over the grounded knowledge engine. The public
+preview is planned for [`gke.dimouzunov.com`](https://gke.dimouzunov.com).
 
 It is not a separate CMS. The app reads Markdown from the repository's knowledge
 base, derives navigation / project / graph data from that Markdown, and presents
 it as a dark "Operator Cockpit". The engine (CLI + MCP server) is the product;
 this app is an optional way to browse the same notes the engine grounds against.
+The hosted preview is a static build over sanitized demo content only; it does
+not expose a remote MCP server, private workspaces, or write access.
 
 ## What The App Does
 
@@ -22,6 +25,7 @@ this app is an optional way to browse the same notes the engine grounds against.
 
 ## Routes
 
+- Preview root: `https://gke.dimouzunov.com`
 - `#/hub`: Mission Control dashboard.
 - `#/doc/:encodedPath`: Knowledge Base reader for a Markdown file.
 - `#/projects`: Project Board.

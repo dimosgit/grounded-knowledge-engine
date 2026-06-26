@@ -74,13 +74,14 @@ flowchart TB
 | **CLI** (`tools/grounding`) | Deterministic index / retrieve / evaluate. Scriptable, CI-able, no agent. | Universal |
 | **Project core** (`tools/projects`) | Canonical project parsing, strict membership, cited capsules, and handoff formatting. | CLI/MCP/browser-safe shared model |
 | **MCP server** (`tools/kb-mcp-server`) | Four-tool core catalog plus logical resources over a standard local protocol. | Any MCP client |
-| **Cockpit** (`apps/cockpit`) | Optional local browser preview over the same Markdown and project parser. | Local web UI |
+| **Cockpit** (`apps/cockpit`) | Optional browser preview over the same Markdown and project parser. The public preview is a static demo build, not a hosted engine. | Local web UI / static public preview |
 | **Index** (BM25 · SQLite) | Derived retrieval data. Disposable — rebuilt from the docs. | Regenerable |
 | **KB** (Markdown) | Your notes. The single source of truth. | Plain files |
 
 ## Design choices
 
-- **Local-first.** Docs, index, and MCP server all run on your machine; nothing is hosted.
+- **Local-first.** Docs, index, and MCP server all run on your machine. The
+  hosted Cockpit preview is static demo content only, not a remote MCP service.
 - **Derived data is disposable.** The SQLite index is a cache of the Markdown, never the
   other way around — delete it and `--refresh` rebuilds it.
 - **Shared core, multiple surfaces.** CLI, MCP, and Cockpit reuse deterministic
