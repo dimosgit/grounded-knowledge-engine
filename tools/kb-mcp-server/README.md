@@ -3,6 +3,11 @@
 Provider-neutral local MCP server over the repository's configured Markdown
 knowledge roots.
 
+Runs over **stdio** by default (`npm run dev:mcp`). An optional read-only
+**loopback HTTP bridge** (`npm run dev:mcp:http`) exposes the same tools for
+remote agents (Copilot Studio / M365 declarative agents) via a short-lived
+authenticated tunnel — see [docs/integrations/remote-mcp-tunnel.md](../../docs/integrations/remote-mcp-tunnel.md).
+
 ## Profiles
 
 The default `core` profile exposes four semantic tools:
@@ -137,6 +142,7 @@ filesystem paths.
 ```bash
 npm run test:mcp:catalog  # profiles, schemas, annotations, and budgets
 npm run test:mcp:transport # framing, notifications, invalid JSON, and RPC errors
+npm run test:mcp:http     # loopback HTTP bridge: parity, auth, write-denial, limits
 npm run test:projects     # strict project resolution, isolation, resource parity
 npm run smoke:mcp         # discovery, resources, search, capture, reuse, resume
 npm run test:loop         # ground → capture → re-ground → cite
