@@ -20,15 +20,15 @@ workspace only.
 
 ## What is implemented
 
-| Capability                   | Current behavior                                                                                                                            |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Grounded retrieval**       | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations.                                                               |
-| **Durable capture**          | Useful answers become Markdown notes; unresolved questions can be recorded instead of guessed.                                              |
-| **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                     |
-| **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations. |
-| **One MCP server**           | Claude Code, Codex, and Gemini CLI use the same local `kb` server and knowledge base.                                                       |
+| Capability                   | Current behavior                                                                                                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Grounded retrieval**       | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations.                                                                                                      |
+| **Durable capture**          | Useful answers become Markdown notes; unresolved questions can be recorded instead of guessed.                                                                                     |
+| **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                                                            |
+| **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations.                                        |
+| **One MCP server**           | Claude Code, Codex, and Gemini CLI use the same local `kb` server and knowledge base.                                                                                              |
 | **Operator Cockpit**         | A React preview provides the knowledge library, project board, structured project detail, handoff copying, and context graph. The public preview uses sanitized demo content only. |
-| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.               |
+| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                                      |
 
 ## The compounding loop
 
@@ -326,14 +326,14 @@ see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
 
 ## Architecture
 
-| Layer                                        | Responsibility                                                                                          |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| [`tools/grounding`](tools/grounding)         | Deterministic indexing, retrieval, grounded synthesis, and evaluation.                                  |
-| [`tools/projects`](tools/projects)           | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting. |
-| [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts.     |
-| [`tools/ingest`](tools/ingest)               | Local document extraction and capture adapters.                                                         |
+| Layer                                        | Responsibility                                                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [`tools/grounding`](tools/grounding)         | Deterministic indexing, retrieval, grounded synthesis, and evaluation.                                                   |
+| [`tools/projects`](tools/projects)           | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting.                  |
+| [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts.                      |
+| [`tools/ingest`](tools/ingest)               | Local document extraction and capture adapters.                                                                          |
 | [`apps/cockpit`](apps/cockpit)               | Optional React preview over the same Markdown and shared project model; hosted as a static demo at `gke.dimouzunov.com`. |
-| `demo-kb/` and `kb/`                         | Canonical plain-file knowledge and project state.                                                       |
+| `demo-kb/` and `kb/`                         | Canonical plain-file knowledge and project state.                                                                        |
 
 See [`docs/architecture.md`](docs/architecture.md) for the engine diagram and
 [`docs/workspace-data-architecture.md`](docs/workspace-data-architecture.md) for
