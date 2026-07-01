@@ -164,7 +164,9 @@ async function testMarkItDownAutoFallsBackToNativeExtractor(): Promise<void> {
     assert.equal(result.format, "docx");
     assert.ok(result.text.includes(FIXTURE_TOKENS.docx));
     assert.ok(result.warnings.some((warning) => warning.includes("MarkItDown CLI not found")));
-    assert.ok(result.warnings.some((warning) => warning.includes("fell back to native docx extractor")));
+    assert.ok(
+      result.warnings.some((warning) => warning.includes("fell back to native docx extractor")),
+    );
   } finally {
     if (previousConverter === undefined) delete process.env.GKE_INGEST_CONVERTER;
     else process.env.GKE_INGEST_CONVERTER = previousConverter;

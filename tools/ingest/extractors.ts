@@ -84,7 +84,9 @@ export async function extractText(filePath: string): Promise<ExtractResult> {
         throw new Error(markItDownErrorMessage(filePath, error));
       }
       const native = await extractNative(filePath, format);
-      native.warnings.unshift(`MarkItDown conversion failed; fell back to native ${format} extractor.`);
+      native.warnings.unshift(
+        `MarkItDown conversion failed; fell back to native ${format} extractor.`,
+      );
       native.warnings.unshift(markItDownErrorMessage(filePath, error));
       return native;
     }
@@ -116,9 +118,15 @@ async function extractNative(filePath: string, format: SupportedFormat): Promise
   }
 }
 
-async function extractWithMarkItDown(filePath: string, format: SupportedFormat): Promise<ExtractResult> {
+async function extractWithMarkItDown(
+  filePath: string,
+  format: SupportedFormat,
+): Promise<ExtractResult> {
   const command = process.env.GKE_MARKITDOWN_BIN || "markitdown";
-  const timeout = Number.parseInt(process.env.GKE_MARKITDOWN_TIMEOUT_MS || `${MARKITDOWN_TIMEOUT_MS}`, 10);
+  const timeout = Number.parseInt(
+    process.env.GKE_MARKITDOWN_TIMEOUT_MS || `${MARKITDOWN_TIMEOUT_MS}`,
+    10,
+  );
 
   return new Promise((resolve, reject) => {
     execFile(
