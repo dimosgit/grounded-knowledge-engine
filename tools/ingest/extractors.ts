@@ -1,16 +1,32 @@
 /**
  * Document extractors: turn a binary/text file into plain Markdown-ish text.
  *
- * Everything here is local — no network, no external API — to honor the
- * engine's grounded, local-first positioning. Each extractor returns the text
- * plus any warnings (e.g. a PDF with no text layer that needs OCR).
+ * Everything here is local — no external API — to honor the engine's grounded,
+ * local-first positioning. Rich documents prefer the optional MarkItDown CLI
+ * when available, with native Node fallbacks for PDF/DOCX/XLSX. Each extractor
+ * returns the text plus any warnings (e.g. a PDF with no text layer that needs OCR).
  */
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execFile } from "node:child_process";
 import mammoth from "mammoth";
 import ExcelJS from "exceljs";
 
-export type SupportedFormat = "pdf" | "docx" | "xlsx" | "markdown" | "text";
+export type SupportedFormat =
+  | "pdf"
+  | "docx"
+  | "xlsx"
+  | "pptx"
+  | "html"
+  | "csv"
+  | "json"
+  | "xml"
+  | "zip"
+  | "epub"
+  | "markdown"
+  | "text";
+
+export type IngestConverter = "auto" | "native" | "markitdown";
 
 export interface ExtractResult {
   format: SupportedFormat;
@@ -23,11 +39,24 @@ const EXTENSION_MAP: Record<string, SupportedFormat> = {
   ".docx": "docx",
   ".xlsx": "xlsx",
   ".xls": "xlsx",
+  ".pptx": "pptx",
+  ".html": "html",
+  ".htm": "html",
+  ".csv": "csv",
+  ".json": "json",
+  ".xml": "xml",
+  ".zip": "zip",
+  ".epub": "epub",
   ".md": "markdown",
   ".markdown": "markdown",
   ".txt": "text",
   ".text": "text",
 };
+
+const NATIVE_FORMATS = new Set<SupportedFormat>(["pdf", "docx", "xlsx", "markdown", "text"]);
+const PLAIN_FORMATS = new Set<SupportedFormat>(["markdown", "text"]);
+const MARKITDOWN_TIMEOUT_MS = 60_000;
+const MARKITDOWN_MAX_BUFFER = 50 * 1024 * 1024;
 
 // Caps so a giant workbook does not explode into retrieval noise.
 const MAX_SHEETS = 50;
@@ -46,6 +75,30 @@ export function isSupported(filePath: string): boolean {
 export async function extractText(filePath: string): Promise<ExtractResult> {
   const format = detectFormat(filePath);
   if (!format) throw new Error(`Unsupported file type: ${filePath}`);
+  const converter = getIngestConverter();
+  if (!PLAIN_FORMATS.has(format) && converter !== "native") {
+    try {
+      return await extractWithMarkItDown(filePath, format);
+    } catch (error) {
+      if (converter === "markitdown" || !NATIVE_FORMATS.has(format)) {
+        throw new Error(markItDownErrorMessage(filePath, error));
+      }
+      const native = await extractNative(filePath, format);
+      native.warnings.unshift(`MarkItDown conversion failed; fell back to native ${format} extractor.`);
+      native.warnings.unshift(markItDownErrorMessage(filePath, error));
+      return native;
+    }
+  }
+  return extractNative(filePath, format);
+}
+
+function getIngestConverter(): IngestConverter {
+  const raw = (process.env.GKE_INGEST_CONVERTER || "auto").toLowerCase();
+  if (raw === "auto" || raw === "native" || raw === "markitdown") return raw;
+  throw new Error(`Invalid GKE_INGEST_CONVERTER '${raw}'. Use auto, native, or markitdown.`);
+}
+
+async function extractNative(filePath: string, format: SupportedFormat): Promise<ExtractResult> {
   switch (format) {
     case "pdf":
       return extractPdf(filePath);
@@ -56,7 +109,51 @@ export async function extractText(filePath: string): Promise<ExtractResult> {
     case "markdown":
     case "text":
       return extractPlainText(filePath, format);
+    default:
+      throw new Error(
+        `${format} requires MarkItDown. Install the Python CLI and use GKE_INGEST_CONVERTER=auto or markitdown.`,
+      );
   }
+}
+
+async function extractWithMarkItDown(filePath: string, format: SupportedFormat): Promise<ExtractResult> {
+  const command = process.env.GKE_MARKITDOWN_BIN || "markitdown";
+  const timeout = Number.parseInt(process.env.GKE_MARKITDOWN_TIMEOUT_MS || `${MARKITDOWN_TIMEOUT_MS}`, 10);
+
+  return new Promise((resolve, reject) => {
+    execFile(
+      command,
+      [filePath],
+      {
+        timeout: Number.isFinite(timeout) ? timeout : MARKITDOWN_TIMEOUT_MS,
+        maxBuffer: MARKITDOWN_MAX_BUFFER,
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        const text = stdout.trim();
+        const warnings = stderr.trim() ? [`MarkItDown: ${stderr.trim()}`] : [];
+        if (!text) {
+          reject(new Error("MarkItDown returned no extractable Markdown."));
+          return;
+        }
+        resolve({ format, text, warnings });
+      },
+    );
+  });
+}
+
+function markItDownErrorMessage(filePath: string, error: unknown): string {
+  const err = error as NodeJS.ErrnoException & { signal?: string };
+  if (err.code === "ENOENT") {
+    return `MarkItDown CLI not found while converting ${filePath}. Install it with: python -m pip install 'markitdown[all]'`;
+  }
+  if (err.signal === "SIGTERM") {
+    return `MarkItDown conversion timed out for ${filePath}.`;
+  }
+  return `MarkItDown conversion failed for ${filePath}: ${err.message || String(error)}`;
 }
 
 async function extractPdf(filePath: string): Promise<ExtractResult> {
