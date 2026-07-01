@@ -44,6 +44,7 @@ function runIngestCli(repoRoot: string): Promise<number> {
       {
         env: {
           ...process.env,
+          GKE_INGEST_CONVERTER: "native",
           KB_MCP_REPO_ROOT: repoRoot,
           KB_MCP_SCAN_ROOTS: "kb",
           KB_MCP_LOG_LEVEL: "error",
