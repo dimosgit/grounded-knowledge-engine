@@ -1,11 +1,12 @@
 # Document Ingestion Plan — Grounded Knowledge Engine
 
-**Status:** Implemented (v1 + v1.1). **Owner:** GKE. **Last updated:** 2026-06-20.
+**Status:** Implemented (v1 + v1.1, MarkItDown-enhanced). **Owner:** GKE. **Last updated:** 2026-07-01.
 
 > Both phases shipped. v1 = the documented chat path
 > ([`ingest-recipe.md`](ingest-recipe.md) + README). v1.1 = the local CLI
-> (`npm run ingest`) with PDF/DOCX/XLSX extraction in `tools/ingest/`, covered by
-> `npm run test:ingest`. This document remains the design reference.
+> (`npm run ingest`) with MarkItDown-backed rich document conversion plus native
+> PDF/DOCX/XLSX fallbacks in `tools/ingest/`, covered by `npm run test:ingest`.
+> This document remains the design reference.
 
 ## Why this exists
 
@@ -102,14 +103,19 @@ local, no external API calls.
 folder and runs the pipeline on every supported file. Mirrors the existing
 `tools/`-script pattern (`smoke-test.ts`, `evaluate-retrieval.ts`).
 
-**Format support is the headline feature.** First-class extractors:
+**Format support is the headline feature.** The current implementation prefers
+the local Microsoft MarkItDown CLI for rich documents in `GKE_INGEST_CONVERTER=auto`
+mode, then falls back to native Node extractors for PDF/DOCX/XLSX when needed.
+`GKE_INGEST_CONVERTER=native` keeps the old path, while
+`GKE_INGEST_CONVERTER=markitdown` makes MarkItDown mandatory.
 
-| Format | Extension | Node library (local, no API) | Notes |
+| Format | Extension | Converter | Notes |
 |---|---|---|---|
-| PDF | `.pdf` | `pdfjs-dist` (or `pdf-parse`) | Text-layer PDFs work directly. Scanned/image PDFs need OCR (see risks). |
-| Word | `.docx` | `mammoth` | Converts to clean Markdown/HTML preserving headings & lists. |
-| Excel | `.xlsx`, `.xls` | `exceljs` (or `xlsx`/SheetJS) | Emit each sheet as a Markdown table; keep sheet names as headings. |
-| PowerPoint | `.pptx` | `pptx-text-parser` / unzip+XML | Slide text per slide. Stretch goal. |
+| PDF | `.pdf` | MarkItDown; native `unpdf` fallback | Text-layer PDFs work directly. Scanned/image PDFs need OCR (see risks). |
+| Word | `.docx` | MarkItDown; native `mammoth.extractRawText` fallback | MarkItDown can preserve richer Markdown structure; native fallback prioritizes reliability. |
+| Excel | `.xlsx`, `.xls` | MarkItDown; native `exceljs` fallback | Native fallback emits each sheet as a Markdown table and keeps sheet names as headings. |
+| PowerPoint | `.pptx` | MarkItDown | Slide extraction is now covered by the shared converter instead of a custom parser. |
+| Web/data/archive/ebook | `.html`, `.csv`, `.json`, `.xml`, `.zip`, `.epub` | MarkItDown | Supported when the MarkItDown CLI is installed. |
 | Markdown / text | `.md`, `.txt` | built-in | Pass-through; minimal normalization. |
 
 **Pipeline specifics for v1.1:**
@@ -164,6 +170,8 @@ folder and runs the pipeline on every supported file. Mirrors the existing
       → `kb.upsert_note` → `kb.refresh` (`tools/ingest/ingest.ts`).
 - [x] v1.1: PDF / DOCX / XLSX extractors wired (`unpdf`, `mammoth`, `exceljs` in
       `tools/ingest/extractors.ts`).
+- [x] v1.1+: MarkItDown converter mode wired for rich document formats
+      (`auto`/`native`/`markitdown` via `GKE_INGEST_CONVERTER`).
 - [x] v1.1: provenance (source filename + ingest date) embedded in note body, and
       deterministic source-derived note paths so distinct files never collide.
 - [x] v1.1: secret/key scrub stage on by default (`--no-scrub` to disable).
@@ -175,6 +183,5 @@ Notes vs. the original plan:
 - Provenance lives in the note **body** (a `> Source: …` line), not frontmatter,
   because `kb.upsert_note` renders a fixed frontmatter schema (no arbitrary
   fields). Same effect, no server change.
-- DOCX uses `mammoth.extractRawText` (raw text) rather than its experimental
-  Markdown converter, for reliability; heading-structure preservation is a
-  possible future refinement.
+- DOCX native fallback uses `mammoth.extractRawText` (raw text) for reliability;
+  MarkItDown is preferred when installed for richer Markdown conversion.

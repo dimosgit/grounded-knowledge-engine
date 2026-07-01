@@ -4,18 +4,33 @@
  * branches the end-to-end test (test:ingest) does not exercise: format
  * detection, title derivation, chunking, secret scrubbing, and path slugging.
  *
- * No file I/O, no server. Run with: `npm run test:ingest:unit`.
+ * Uses only temp-file I/O for the MarkItDown shim; no server.
+ * Run with: `npm run test:ingest:unit`.
  */
 import assert from "node:assert/strict";
-import { detectFormat, isSupported } from "./extractors.js";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { detectFormat, extractText, isSupported } from "./extractors.js";
 import { deriveTitle, scrubSecrets, chunkText, normalizeDocument } from "./normalize.js";
 import { slugifySource } from "./ingest.js";
+import { FIXTURE_TOKENS } from "./fixtures/tokens.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function testDetectFormat(): void {
   assert.equal(detectFormat("/a/b/report.pdf"), "pdf");
   assert.equal(detectFormat("notes.DOCX"), "docx"); // case-insensitive
   assert.equal(detectFormat("data.xlsx"), "xlsx");
   assert.equal(detectFormat("legacy.xls"), "xlsx");
+  assert.equal(detectFormat("deck.pptx"), "pptx");
+  assert.equal(detectFormat("page.html"), "html");
+  assert.equal(detectFormat("data.csv"), "csv");
+  assert.equal(detectFormat("payload.json"), "json");
+  assert.equal(detectFormat("feed.xml"), "xml");
+  assert.equal(detectFormat("archive.zip"), "zip");
+  assert.equal(detectFormat("book.epub"), "epub");
   assert.equal(detectFormat("readme.md"), "markdown");
   assert.equal(detectFormat("log.txt"), "text");
   assert.equal(detectFormat("image.png"), null);
@@ -110,6 +125,54 @@ function testNormalizeDocumentChunkingAndProvenance(): void {
   assert.equal(single.notes[0].title, "Title");
 }
 
+async function testMarkItDownConverter(): Promise<void> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "gke-markitdown-"));
+  const previousConverter = process.env.GKE_INGEST_CONVERTER;
+  const previousBin = process.env.GKE_MARKITDOWN_BIN;
+  try {
+    const bin = path.join(dir, "markitdown");
+    const source = path.join(dir, "slides.pptx");
+    await fs.writeFile(
+      bin,
+      "#!/usr/bin/env node\nconsole.log('# Converted Deck\\n\\n- MARKITDOWNTOKEN9005')\n",
+      { mode: 0o755 },
+    );
+    await fs.writeFile(source, "placeholder", "utf8");
+    process.env.GKE_INGEST_CONVERTER = "markitdown";
+    process.env.GKE_MARKITDOWN_BIN = bin;
+
+    const result = await extractText(source);
+    assert.equal(result.format, "pptx");
+    assert.ok(result.text.includes("MARKITDOWNTOKEN9005"));
+  } finally {
+    if (previousConverter === undefined) delete process.env.GKE_INGEST_CONVERTER;
+    else process.env.GKE_INGEST_CONVERTER = previousConverter;
+    if (previousBin === undefined) delete process.env.GKE_MARKITDOWN_BIN;
+    else process.env.GKE_MARKITDOWN_BIN = previousBin;
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function testMarkItDownAutoFallsBackToNativeExtractor(): Promise<void> {
+  const previousConverter = process.env.GKE_INGEST_CONVERTER;
+  const previousBin = process.env.GKE_MARKITDOWN_BIN;
+  try {
+    process.env.GKE_INGEST_CONVERTER = "auto";
+    process.env.GKE_MARKITDOWN_BIN = path.join(os.tmpdir(), "missing-markitdown-bin");
+
+    const result = await extractText(path.join(__dirname, "fixtures", "sample.docx"));
+    assert.equal(result.format, "docx");
+    assert.ok(result.text.includes(FIXTURE_TOKENS.docx));
+    assert.ok(result.warnings.some((warning) => warning.includes("MarkItDown CLI not found")));
+    assert.ok(result.warnings.some((warning) => warning.includes("fell back to native docx extractor")));
+  } finally {
+    if (previousConverter === undefined) delete process.env.GKE_INGEST_CONVERTER;
+    else process.env.GKE_INGEST_CONVERTER = previousConverter;
+    if (previousBin === undefined) delete process.env.GKE_MARKITDOWN_BIN;
+    else process.env.GKE_MARKITDOWN_BIN = previousBin;
+  }
+}
+
 const tests = [
   testDetectFormat,
   testDeriveTitle,
@@ -117,12 +180,14 @@ const tests = [
   testChunkText,
   testSlugify,
   testNormalizeDocumentChunkingAndProvenance,
+  testMarkItDownConverter,
+  testMarkItDownAutoFallsBackToNativeExtractor,
 ];
 
 let failed = 0;
 for (const test of tests) {
   try {
-    test();
+    await test();
     console.log(`  ✓ ${test.name}`);
   } catch (error) {
     failed += 1;

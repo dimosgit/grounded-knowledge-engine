@@ -301,9 +301,12 @@ details.
 
 ## Ingest real documents
 
-Feed a folder containing PDF, DOCX, XLSX, Markdown, or text files:
+Feed a folder containing rich documents, Markdown, or text files. Install
+Microsoft MarkItDown for broader conversion coverage:
 
 ```bash
+python -m pip install 'markitdown[all]'
+
 npm run ingest -- ./inbox
 npm run ingest -- ./inbox --dry-run
 npm run ingest -- ./inbox --module general --no-scrub
@@ -315,10 +318,17 @@ The fully local pipeline is:
 detect → extract → normalize → scrub → capture → index
 ```
 
+Supported formats: `.pdf`, `.docx`, `.xlsx`/`.xls`, `.pptx`, `.html`, `.csv`,
+`.json`, `.xml`, `.zip`, `.epub`, `.md`, `.txt`. In the default
+`GKE_INGEST_CONVERTER=auto` mode, rich files use the local MarkItDown CLI when
+available; PDF/DOCX/XLSX fall back to native Node extractors. Use
+`GKE_INGEST_CONVERTER=native` for the old native-only path or
+`GKE_INGEST_CONVERTER=markitdown` to require MarkItDown.
+
 Each source receives a deterministic path, making re-ingestion idempotent and
 preventing same-named files from colliding. Secret-like values are scrubbed by
-default. Image-only PDFs are detected and skipped because OCR is outside the
-current scope.
+default. Image-only PDFs are detected and skipped in native mode because OCR is
+outside the current scope.
 
 Agents can also capture an attached document through the connected MCP server;
 see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
