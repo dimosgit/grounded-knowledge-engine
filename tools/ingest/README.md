@@ -1,8 +1,8 @@
 # tools/ingest — document ingestion
 
-Turns documents (PDF, DOCX, XLSX, Markdown, text) into KB topic notes under
-`kb/`, so the grounding engine and the cockpit graph pick them up unchanged.
-Fully local — no network, no external API.
+Turns documents (PDF, DOCX, XLSX, PPTX, HTML, CSV, JSON, XML, ZIP, EPUB,
+Markdown, and text) into KB topic notes under `kb/`, so the grounding engine and
+the cockpit graph pick them up unchanged. Fully local — no external API.
 
 For the user-facing guide and the design rationale, see the README's
 [`## Ingesting documents`](../../README.md) section and
@@ -26,6 +26,24 @@ npm run ingest -- <folder> [--module <key>] [--dry-run] [--no-scrub] [--max-char
 The CLI runs its own KB MCP server child with writes enabled (unless
 `--dry-run`), captures each note via `kb.upsert_note`, then calls `kb.refresh`.
 
+### Converter selection
+
+Rich documents use Microsoft MarkItDown when the local CLI is available. The
+native Node extractors remain in place for deterministic tests and as fallback
+for PDF/DOCX/XLSX.
+
+```bash
+python -m pip install 'markitdown[all]'
+
+GKE_INGEST_CONVERTER=auto npm run ingest -- ./inbox        # default
+GKE_INGEST_CONVERTER=native npm run ingest -- ./inbox      # old Node path
+GKE_INGEST_CONVERTER=markitdown npm run ingest -- ./inbox  # require MarkItDown
+GKE_MARKITDOWN_BIN=/path/to/markitdown npm run ingest -- ./inbox
+```
+
+`GKE_MARKITDOWN_TIMEOUT_MS` defaults to `60000`. Markdown and plain text always
+use the native pass-through path.
+
 ## Pipeline
 
 ```text
@@ -39,7 +57,7 @@ detect  →  extract  →  normalize  →  capture  →  index
 
 | File | Responsibility |
 |---|---|
-| `extractors.ts` | `detectFormat`, `extractText`. PDF via `unpdf`, DOCX via `mammoth` (raw text), XLSX via `exceljs` (sheets → Markdown tables), pass-through for md/txt. Returns text + warnings (e.g. scanned PDF with no text layer). |
+| `extractors.ts` | `detectFormat`, `extractText`. MarkItDown is preferred for rich documents in `auto` mode; PDF/DOCX/XLSX fall back to `unpdf`, `mammoth` raw text, and `exceljs` sheet-to-Markdown extraction. Markdown/text are pass-through. Returns text + warnings (e.g. scanned PDF with no text layer). |
 | `normalize.ts` | `deriveTitle` (heading → short first line → filename), `scrubSecrets` (AWS keys, JWTs, bearer tokens, private-key blocks, `key=secret` assignments), `chunkText` (split on `##` boundaries / size, hard-split over-long lines), `normalizeDocument` (orchestrates + prepends a `> Source: …` provenance line). |
 | `ingest.ts` | CLI: walk folder, run the pipeline, assign deterministic source-derived note paths (`<slug>.md`, `<slug>-part-N.md`) so distinct files never collide and re-ingest is idempotent, write via the MCP server, print a summary. Exports `runIngest`, `slugifySource`. |
 | `fixtures/` | `tokens.ts` (unique tokens per format) + `make-fixtures.ts` (generates the committed `sample.*` binaries). Regenerate with `npm run ingest:fixtures`. |
@@ -60,9 +78,14 @@ temp-dir sandbox, so it never writes to the real `kb/`.
 
 - **Provenance lives in the note body**, not frontmatter, because
   `kb.upsert_note` renders a fixed frontmatter schema.
-- **DOCX uses raw-text extraction** (`mammoth.extractRawText`) for reliability;
-  heading-structure preservation is a possible future refinement.
+- **MarkItDown is optional but preferred** for rich documents because it gives a
+  consistent Markdown conversion layer across Office, web, archive, and ebook
+  inputs. It runs with the current process privileges, so only ingest documents
+  you trust.
+- **Native extractors stay available** for PDF/DOCX/XLSX via
+  `GKE_INGEST_CONVERTER=native`, and as fallback when `auto` cannot run
+  MarkItDown.
 - **Scanned, image-only PDFs** are detected and skipped with a warning — OCR is
   out of scope.
-- **Adding a format:** extend `EXTENSION_MAP` + add an extractor in
-  `extractors.ts`; the rest of the pipeline needs no changes.
+- **Adding a format:** extend `EXTENSION_MAP`; if MarkItDown supports it, the
+  rest of the pipeline usually needs no changes.
