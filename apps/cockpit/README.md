@@ -1,7 +1,7 @@
 # Operator Cockpit
 
 `cockpit` is the web UI layer over the grounded knowledge engine. The public
-preview is planned for [`gke.dimouzunov.com`](https://gke.dimouzunov.com).
+preview is live at [`gke.dimouzunov.com`](https://gke.dimouzunov.com).
 
 It is not a separate CMS. The app reads Markdown from the repository's knowledge
 base, derives navigation / project / graph data from that Markdown, and presents
@@ -42,6 +42,7 @@ npm run dev
 ```
 
 `npm run dev` starts two processes:
+
 - `watch:content`: watches source Markdown and syncs it into `apps/cockpit/content`
 - `vite`: serves the React app
 
@@ -68,7 +69,7 @@ KB_PREVIEW_SOURCE_FOLDERS="demo-kb:kb,kb:kb" npm run sync:content
 The synced copy lives under `apps/cockpit/content` and is read by Vite through:
 
 ```js
-import.meta.glob("../content/**/*.md", { query: "?raw", import: "default", eager: true })
+import.meta.glob("../content/**/*.md", { query: "?raw", import: "default", eager: true });
 ```
 
 ## Scripts
@@ -84,6 +85,7 @@ npm run typecheck
 ```
 
 Notes:
+
 - `pretest` and `prebuild` automatically run `sync:content`.
 - Do not run `npm run test` and `npm run build` in parallel because both sync content.
 - `build` emits the static app into `apps/cockpit/dist`.
