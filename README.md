@@ -1,5 +1,8 @@
 # Grounded Knowledge Engine
 
+[![CI](https://github.com/dimosgit/grounded-knowledge-engine/actions/workflows/ci.yml/badge.svg)](https://github.com/dimosgit/grounded-knowledge-engine/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 **Local-first, provider-neutral project memory for AI agents.**
 
 Grounded Knowledge Engine (GKE) turns Markdown and real documents into a
@@ -9,7 +12,7 @@ across Claude Code, Codex, Gemini CLI, and other MCP clients.
 
 Your files remain the source of truth. The retrieval index is disposable, the
 MCP server runs locally, and the optional Operator Cockpit previews the same
-project state that agents consume. The public Cockpit preview is planned for
+project state that agents consume. The public Cockpit preview is live at
 [`gke.dimouzunov.com`](https://gke.dimouzunov.com) with the sanitized demo
 workspace only.
 
@@ -271,7 +274,7 @@ main workspace.
 
 ## Operator Cockpit
 
-The public frontend preview will be available at
+The public frontend preview is live at
 [`gke.dimouzunov.com`](https://gke.dimouzunov.com). It is a static Vercel build
 of `apps/cockpit` over the repository's sanitized demo knowledge base; it does
 not expose the local MCP server, indexes, write tools, or private workspace
