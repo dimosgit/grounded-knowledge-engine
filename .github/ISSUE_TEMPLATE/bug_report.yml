@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in the engine, MCP server, ingestion, or Cockpit does not behave as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security issue?** Please do NOT file it here — use
+        [private vulnerability reporting](https://github.com/dimosgit/grounded-knowledge-engine/security/advisories/new) instead.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what actually happened?
+      placeholder: Steps to reproduce, expected behavior, actual behavior.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Retrieval / grounding (tools/grounding)
+        - MCP server (tools/kb-mcp-server)
+        - Project Context / CLI (tools/projects)
+        - Document ingestion (tools/ingest)
+        - Operator Cockpit (apps/cockpit)
+        - Setup scripts / CI
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js version
+      placeholder: e.g. 24.1.0 (`node --version`)
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client (if relevant)
+      placeholder: e.g. Claude Code 2.x, Codex CLI, Gemini CLI
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output or logs
+      description: Command output, stack traces, or MCP frames. Redact anything private.
+      render: shell
