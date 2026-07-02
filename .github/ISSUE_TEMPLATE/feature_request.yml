@@ -1,0 +1,30 @@
+name: Feature request
+description: Propose an improvement or new capability.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that GKE currently makes hard or impossible?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How should it work? Mention which layer it touches (retrieval, MCP surface, projects, ingestion, Cockpit).
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you tried, or why existing tools/profiles do not cover it.
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Scope check
+      options:
+        - label: This fits GKE's boundaries (local-first, files as source of truth, not a hosted SaaS).
+          required: true
