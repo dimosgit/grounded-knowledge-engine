@@ -54,8 +54,8 @@ Use `npm run format` to fix formatting instead of hand-aligning.
 - New MCP tools or schema changes must stay within the catalog budgets enforced
   by `npm run test:mcp:catalog`.
 - The demo knowledge base (`demo-kb/`, `examples/`) must remain sanitized:
-  no real client names, private endpoints, or secrets. `npm run scrub` enforces
-  this and CI fails closed if it cannot run.
+  nothing that identifies real customers, private endpoints, or secrets.
+  `npm run scrub` enforces this and CI fails closed if it cannot run.
 
 ## Commit style
 
