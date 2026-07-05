@@ -313,6 +313,8 @@ python -m pip install 'markitdown[all]'
 npm run ingest -- ./inbox
 npm run ingest -- ./inbox --dry-run
 npm run ingest -- ./inbox --module general --no-scrub
+npm run ingest -- ./inbox --project             # also create a project from the notes
+npm run ingest -- ./inbox --project my-project  # ...with an explicit project name
 ```
 
 The fully local pipeline is:

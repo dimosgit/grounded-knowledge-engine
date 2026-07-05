@@ -2,12 +2,14 @@
 /**
  * Document ingestion CLI for the Grounded Knowledge Engine.
  *
- *   npm run ingest -- <folder> [--module <key>] [--dry-run] [--no-scrub] [--max-chars <n>]
+ *   npm run ingest -- <folder> [--module <key>] [--project [name]] [--dry-run] [--no-scrub] [--max-chars <n>]
  *
  * Walks a folder, extracts text from PDF/DOCX/XLSX/Markdown/text files,
  * normalizes + scrubs it, and captures each document as a KB topic note via the
  * real kb.upsert_note write path (spawning the MCP server). Once a document is a
  * Markdown note in kb/, grounding and the cockpit graph pick it up unchanged.
+ * With --project, the captured notes are also wrapped in a canonical project
+ * record (created if missing) and linked as its key documents.
  *
  * No network, no external API — all extraction is local.
  */
@@ -17,6 +19,8 @@ import { fileURLToPath } from "node:url";
 import { detectFormat, extractText, isSupported } from "./extractors.js";
 import { normalizeDocument } from "./normalize.js";
 import { spawnKbServer } from "../kb-mcp-server/mcp-client.js";
+import { normalizeProjectId } from "../projects/project-manifest.js";
+import { createProject, getProject, linkProjectSource } from "../projects/project-service.js";
 
 export interface IngestOptions {
   folder: string;
@@ -24,6 +28,8 @@ export interface IngestOptions {
   dryRun: boolean;
   scrub: boolean;
   maxChars?: number;
+  /** Project name/ID to create from the ingested notes; "" derives it from the folder name. */
+  project?: string;
   logger?: (line: string) => void;
 }
 
@@ -34,6 +40,8 @@ export interface IngestSummary {
   warnings: string[];
   skipped: string[];
   failures: string[];
+  projectId?: string;
+  projectPath?: string;
 }
 
 const SKIP_DIRS = new Set([".git", "node_modules", "dist", ".cache", "content"]);
@@ -104,6 +112,7 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
   // Build all notes first (extraction can warn / skip) before touching the KB.
   type PendingNote = { title: string; body: string; sourceRel: string; path: string };
   const pending: PendingNote[] = [];
+  const captured: Array<{ title: string; path: string }> = [];
 
   for (const file of files) {
     const rel = path.relative(process.cwd(), file);
@@ -176,9 +185,22 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
       }
       summary.notesWritten += 1;
       const sc = result.structuredContent;
+      captured.push({ title: note.title, path: sc?.path ?? note.path });
       log(
         `  ✓ ${sc?.action ?? "captured"}${options.dryRun ? " (dry-run)" : ""}: ${sc?.path ?? note.title}`,
       );
+    }
+
+    if (options.project !== undefined && captured.length > 0) {
+      const name = options.project || path.basename(root);
+      try {
+        const project = await captureProjectRecord(name, root, captured, options.dryRun, log);
+        summary.projectId = project.projectId;
+        summary.projectPath = project.path;
+      } catch (error) {
+        summary.failures.push(`project '${name}': ${(error as Error).message}`);
+        log(`  ✗ project capture failed: ${(error as Error).message}`);
+      }
     }
 
     if (!options.dryRun && summary.notesWritten > 0) {
@@ -192,6 +214,55 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
   return summary;
 }
 
+/**
+ * Create (or reuse) a canonical project record for an ingest run and link the
+ * captured notes as its key documents. Membership stays explicit: the ingest
+ * folder becomes a source root when it lives inside the workspace, and every
+ * note is linked individually.
+ */
+async function captureProjectRecord(
+  name: string,
+  root: string,
+  notes: Array<{ title: string; path: string }>,
+  dryRun: boolean,
+  log: (line: string) => void,
+): Promise<{ projectId: string; path: string }> {
+  const projectId = normalizeProjectId(name);
+  if (!projectId) throw new Error(`Cannot derive a project ID from '${name}'.`);
+  const repoRoot = process.cwd();
+  const relRoot = path.relative(repoRoot, root).split(path.sep).join("/");
+  const insideWorkspace =
+    Boolean(relRoot) && !relRoot.startsWith("..") && !path.isAbsolute(relRoot);
+
+  let projectPath: string;
+  try {
+    const existing = await getProject(projectId, { repoRoot });
+    projectPath = existing.path;
+    log(`  • project exists: ${projectId} (${projectPath})`);
+  } catch {
+    const created = await createProject({
+      repoRoot,
+      projectId,
+      title: name,
+      sourceRoots: insideWorkspace ? [relRoot] : undefined,
+      createSourceDirectory: !insideWorkspace,
+      dryRun,
+    });
+    projectPath = created.path;
+    log(`  ✓ created${dryRun ? " (dry-run)" : ""} project: ${projectId} (${projectPath})`);
+  }
+
+  if (dryRun) {
+    log(`  • dry-run: skipped linking ${notes.length} note(s) to ${projectId}`);
+  } else {
+    for (const note of notes) {
+      await linkProjectSource({ repoRoot, projectId, sourcePath: note.path, label: note.title });
+      log(`  ✓ linked to ${projectId}: ${note.path}`);
+    }
+  }
+  return { projectId, path: projectPath };
+}
+
 function parseArgs(argv: string[]): IngestOptions {
   const opts: IngestOptions = { folder: "./inbox", module: "general", dryRun: false, scrub: true };
   const positionals: string[] = [];
@@ -201,9 +272,12 @@ function parseArgs(argv: string[]): IngestOptions {
     else if (arg === "--no-scrub") opts.scrub = false;
     else if (arg === "--module") opts.module = argv[++i];
     else if (arg === "--max-chars") opts.maxChars = Number(argv[++i]);
-    else if (arg === "--help" || arg === "-h") {
+    else if (arg === "--project") {
+      const next = argv[i + 1];
+      opts.project = next && !next.startsWith("-") ? argv[++i] : "";
+    } else if (arg === "--help" || arg === "-h") {
       console.log(
-        "Usage: npm run ingest -- <folder> [--module <key>] [--dry-run] [--no-scrub] [--max-chars <n>]",
+        "Usage: npm run ingest -- <folder> [--module <key>] [--project [name]] [--dry-run] [--no-scrub] [--max-chars <n>]",
       );
       process.exit(0);
     } else if (!arg.startsWith("-")) positionals.push(arg);
@@ -218,6 +292,7 @@ function printSummary(summary: IngestSummary): void {
   console.log(`  Files processed: ${summary.filesProcessed}`);
   console.log(`  Notes captured:  ${summary.notesWritten}`);
   console.log(`  Secrets redacted: ${summary.redactions}`);
+  if (summary.projectId) console.log(`  Project: ${summary.projectId} (${summary.projectPath})`);
   if (summary.skipped.length)
     console.log(`  Skipped: ${summary.skipped.length}\n    - ${summary.skipped.join("\n    - ")}`);
   if (summary.warnings.length)
