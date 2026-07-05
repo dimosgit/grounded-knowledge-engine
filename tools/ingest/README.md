@@ -12,19 +12,24 @@ file is for developers working on the ingestion code itself.
 ## Usage
 
 ```bash
-npm run ingest -- <folder> [--module <key>] [--dry-run] [--no-scrub] [--max-chars <n>]
+npm run ingest -- <folder> [--module <key>] [--project [name]] [--dry-run] [--no-scrub] [--max-chars <n>]
 ```
 
 | Flag | Default | Meaning |
 |---|---|---|
 | `<folder>` (positional) | `./inbox` | Folder to scan recursively for supported files. |
 | `--module <key>` | `general` | Module frontmatter key for the captured topic notes. |
+| `--project [name]` | off | Also create a canonical project record (named after the folder when `name` is omitted) and link every captured note as a key document. Reuses the project if it already exists. |
 | `--dry-run` | off | Extract and preview notes without writing to the KB. |
 | `--no-scrub` | off (scrub on) | Disable secret/API-key redaction. |
 | `--max-chars <n>` | `12000` | Chunk threshold; longer documents split into `(part N)` notes. |
 
 The CLI runs its own KB MCP server child with writes enabled (unless
 `--dry-run`), captures each note via `kb.upsert_note`, then calls `kb.refresh`.
+With `--project`, the project record is created through the shared
+`tools/projects` service before the index refresh: the ingest folder becomes a
+`source_roots` entry when it lives inside the workspace, and each note is
+linked explicitly under Key documents — membership stays explicit-only.
 
 ### Converter selection
 
