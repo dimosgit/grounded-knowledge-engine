@@ -72,7 +72,7 @@ describe("cockpit major flows", () => {
 
     expect(await screen.findByRole("heading", { name: /Router Rollout/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "At a glance" })).toBeInTheDocument();
-    expect(screen.getByText("58% complete")).toBeInTheDocument();
+    expect(screen.getByText(/58% complete/)).toBeInTheDocument();
     expect(
       screen.queryByText(/Not measured — add a weighted task checklist/i),
     ).not.toBeInTheDocument();

@@ -108,6 +108,24 @@ export function ProjectCard({ project, onOpen, onMove }) {
         </div>
         <p className="line-clamp-2 text-body-md text-on-surface">{actionLabel}</p>
       </div>
+      {typeof project.progressPercent === "number" && project.taskCounts?.total > 0 && (
+        <div className="mt-3">
+          <div className="h-1 overflow-hidden rounded-full bg-surface-container-high">
+            <div
+              className="h-full rounded-full bg-status-done"
+              style={{
+                width: `${project.statusBucket === "done" ? 100 : project.progressPercent}%`,
+              }}
+            />
+          </div>
+          <div className="mt-1 flex items-center justify-between font-mono text-code-sm text-on-surface-variant">
+            <span>
+              {project.taskCounts.done}/{project.taskCounts.total} tasks
+            </span>
+            <span>{project.statusBucket === "done" ? 100 : project.progressPercent}%</span>
+          </div>
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           className="inline-flex items-center gap-2 rounded border border-outline-variant px-3 py-2 text-label-caps font-semibold uppercase text-on-surface hover:border-primary hover:text-primary"
