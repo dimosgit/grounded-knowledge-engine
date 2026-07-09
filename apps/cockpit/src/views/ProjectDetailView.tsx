@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowDown,
   BarChart3,
   CheckCircle2,
   ClipboardCopy,
@@ -46,6 +47,36 @@ const STATUS_PILL = {
   },
 };
 
+// Task board groups, in display order. The checkbox in the source checklist is
+// the status; 🟡/🔴 circles refine open items into in-progress and gated.
+const TASK_GROUPS = [
+  { status: "inProgress", label: "In progress", dotClassName: "bg-status-waiting" },
+  { status: "todo", label: "Up next", dotClassName: "bg-outline-variant" },
+  { status: "gated", label: "Gated / waiting", dotClassName: "bg-status-blocked" },
+];
+
+function TaskRow({ task, dotClassName, muted = false }) {
+  return (
+    <li className="flex items-start gap-3 px-5 py-2.5">
+      <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClassName}`} aria-hidden="true" />
+      <span
+        className={`min-w-0 flex-1 text-body-md ${
+          muted
+            ? "text-on-surface-variant line-through decoration-on-surface-variant/40"
+            : "text-on-surface"
+        }`}
+      >
+        {task.text}
+      </span>
+      {task.weight && (
+        <span className="mt-0.5 shrink-0 rounded bg-surface-container-high px-1.5 py-0.5 font-mono text-code-sm uppercase text-on-surface-variant">
+          {task.weight}
+        </span>
+      )}
+    </li>
+  );
+}
+
 export function ProjectDetailView({
   docs,
   commandBarOpen,
@@ -61,6 +92,16 @@ export function ProjectDetailView({
   onOpenDoc,
 }) {
   const [handoffCopyState, setHandoffCopyState] = useState("idle");
+  const taskBoardRef = useRef(null);
+  const tasks = activeProject?.tasks || [];
+  const taskCounts = activeProject?.taskCounts || {
+    done: 0,
+    inProgress: 0,
+    gated: 0,
+    todo: 0,
+    total: 0,
+  };
+  const openTaskCount = taskCounts.total - taskCounts.done;
   const hasBlocker = Boolean(activeProject?.glance?.blocker);
   const nextItems = activeProject?.glance?.nextActions?.length
     ? activeProject.glance.nextActions
@@ -68,6 +109,15 @@ export function ProjectDetailView({
   const progressPhase = PROGRESS_PHASE[activeProject?.statusBucket] || PROGRESS_PHASE.reference;
   const progressPercent =
     activeProject?.statusBucket === "done" ? 100 : activeProject?.progressPercent;
+
+  function jumpToTaskBoard() {
+    if (!tasks.length) {
+      if (activeProject?.sourceDocPath) onOpenDoc(activeProject.sourceDocPath);
+      return;
+    }
+    // Instant jump: reliable under rAF throttling and for reduced-motion users.
+    taskBoardRef.current?.scrollIntoView({ block: "start" });
+  }
 
   async function copyHandoff() {
     if (!activeProject?.handoffMarkdown) return;
@@ -170,6 +220,14 @@ export function ProjectDetailView({
                   </li>
                 ))}
               </ul>
+              <button
+                className="mt-3 inline-flex items-center gap-1.5 text-label-caps font-semibold uppercase text-primary hover:underline"
+                type="button"
+                onClick={jumpToTaskBoard}
+              >
+                {tasks.length ? `Full task board (${openTaskCount} open)` : "Open source doc"}
+                <ArrowDown size={14} />
+              </button>
             </article>
             <article
               className={`rounded-lg border p-5 ${
@@ -209,6 +267,7 @@ export function ProjectDetailView({
                     </div>
                     <div className="mt-2 text-metadata text-on-surface-variant">
                       {progressPercent}% complete
+                      {taskCounts.total > 0 ? ` · ${taskCounts.done}/${taskCounts.total} tasks` : ""}
                     </div>
                   </>
                 ) : (
@@ -220,6 +279,74 @@ export function ProjectDetailView({
             </article>
           </div>
         </section>
+
+        {tasks.length > 0 && (
+          <section ref={taskBoardRef} className="scroll-mt-6">
+            <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <h2 className="font-display text-headline-sm text-on-surface">Task board</h2>
+                <p className="mt-1 text-metadata text-on-surface-variant">
+                  {openTaskCount} open · {taskCounts.done} done — parsed live from the checklist
+                  in the source doc
+                </p>
+              </div>
+              <button
+                className="inline-flex items-center gap-2 rounded border border-border-subtle bg-surface-container px-3 py-1.5 text-label-caps font-semibold uppercase text-on-surface hover:border-primary"
+                type="button"
+                onClick={() => onOpenDoc(activeProject.sourceDocPath)}
+              >
+                <FileText size={15} />
+                Edit in source doc
+              </button>
+            </div>
+            <div className="overflow-hidden rounded-lg border border-border-subtle bg-surface-container-low">
+              {TASK_GROUPS.map((group) => {
+                const groupTasks = tasks.filter((task) => task.status === group.status);
+                if (!groupTasks.length) return null;
+                return (
+                  <div key={group.status} className="border-b border-border-subtle last:border-b-0">
+                    <div className="flex items-center gap-2 bg-surface-container px-5 py-2 text-metadata uppercase text-on-surface-variant">
+                      <span className={`h-2 w-2 rounded-full ${group.dotClassName}`} aria-hidden="true" />
+                      {group.label}
+                      <span className="ml-auto font-mono text-code-sm">{groupTasks.length}</span>
+                    </div>
+                    <ul className="divide-y divide-border-subtle/60">
+                      {groupTasks.map((task, index) => (
+                        <TaskRow
+                          key={`${group.status}-${index}`}
+                          task={task}
+                          dotClassName={group.dotClassName}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+              {taskCounts.done > 0 && (
+                <details className="group/done">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 bg-surface-container px-5 py-2 text-metadata uppercase text-on-surface-variant hover:text-on-surface">
+                    <span className="h-2 w-2 rounded-full bg-status-done" aria-hidden="true" />
+                    Completed
+                    <span className="text-code-sm font-normal normal-case group-open/done:hidden">
+                      — show
+                    </span>
+                    <span className="hidden text-code-sm font-normal normal-case group-open/done:inline">
+                      — hide
+                    </span>
+                    <span className="ml-auto font-mono text-code-sm">{taskCounts.done}</span>
+                  </summary>
+                  <ul className="divide-y divide-border-subtle/60">
+                    {tasks
+                      .filter((task) => task.status === "done")
+                      .map((task, index) => (
+                        <TaskRow key={`done-${index}`} task={task} dotClassName="bg-status-done" muted />
+                      ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          </section>
+        )}
 
         <details className="group rounded-lg border border-border-subtle bg-surface-container-low">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 text-body-md font-semibold text-on-surface">
