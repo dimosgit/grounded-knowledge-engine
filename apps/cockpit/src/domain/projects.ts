@@ -68,9 +68,22 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
           ""
         ).toLowerCase(),
       );
+      // Single source of truth for tasks: when the record has a checklist,
+      // "next" is derived from its open items (in progress first, then not
+      // started, in checklist order — checklists are priority-ordered among
+      // open items). The `## Next actions` section is only a fallback for
+      // records without a checklist, so a task update is one checkbox edit.
+      const tasks = parseProjectTasks(doc.content);
+      const derivedNextActions = [
+        ...tasks.filter((task) => task.status === "inProgress"),
+        ...tasks.filter((task) => task.status === "todo"),
+      ].map((task) => task.text);
       const nextActions = completed
         ? []
-        : meaningfulSectionItems(sections.get("next-actions")).slice(0, 5);
+        : (derivedNextActions.length
+            ? derivedNextActions
+            : meaningfulSectionItems(sections.get("next-actions"))
+          ).slice(0, 5);
       const keyDocuments = unique([
         ...sectionItems(sections.get("key-documents")).map(stripMarkdownLink),
         ...explicitPaths.map((item) => resolveLogicalPath(doc.path, item)),
@@ -110,6 +123,8 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
         updated: manifest.updated || normalizeFrontmatterScalar(doc.frontmatter?.updated),
         reviewAfter: manifest.reviewAfter,
         progressPercent: calculateProjectProgress(doc.content),
+        tasks,
+        taskCounts: countProjectTasks(tasks),
         sourceDocPath: doc.path,
         sourceDoc: doc,
         eligiblePaths,
@@ -144,8 +159,71 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
     });
 }
 
+// Status circles used in project checklists (see the Legend line in project
+// records). The checkbox itself is the status ([x] done, [ ] not started); a
+// circle appears only when it adds information the checkbox cannot express:
+// 🟡 in progress · 🔴 gated/waiting. Legacy 🟢/⚪ markers are still parsed.
+const TASK_STATUS_EMOJI: Record<string, string> = {
+  "🟢": "done",
+  "🟡": "inProgress",
+  "🔴": "gated",
+  "⚪": "todo",
+};
+
+// Parses every `- [ ] / - [x]` checklist line in a project doc into a task the
+// UI can render directly. The circle emoji (when present) refines the status;
+// a checked box always means done. The trailing [XS|S|M|L|XL] complexity
+// marker is split out so views can show it as a chip.
+export function parseProjectTasks(content: string) {
+  const taskRegex = /^\s*-\s+\[([ xX])\]\s+(.*)$/;
+  const tasks: Array<{ text: string; status: string; weight: string | null }> = [];
+
+  for (const line of (content || "").split("\n")) {
+    const match = line.match(taskRegex);
+    if (!match) continue;
+    const checked = match[1].trim().toLowerCase() === "x";
+    let text = match[2].trim();
+
+    let status = checked ? "done" : "todo";
+    const emojiMatch = text.match(/^(🟢|🟡|🔴|⚪)\s*/u);
+    if (emojiMatch) {
+      if (!checked) status = TASK_STATUS_EMOJI[emojiMatch[1]] || status;
+      text = text.slice(emojiMatch[0].length);
+    }
+
+    const weightMatch = text.match(/\s*[[(](XS|S|M|L|XL)[\])]$/i);
+    const weight = weightMatch ? weightMatch[1].toUpperCase() : null;
+    if (weightMatch) text = text.slice(0, weightMatch.index).trim();
+
+    tasks.push({ text: stripInlineMarkdown(text), status, weight });
+  }
+  return tasks;
+}
+
+export function countProjectTasks(tasks: Array<{ status: string }>) {
+  const counts = { done: 0, inProgress: 0, gated: 0, todo: 0, total: tasks.length };
+  for (const task of tasks) {
+    if (task.status === "done") counts.done += 1;
+    else if (task.status === "inProgress") counts.inProgress += 1;
+    else if (task.status === "gated") counts.gated += 1;
+    else counts.todo += 1;
+  }
+  return counts;
+}
+
+function stripInlineMarkdown(value: string): string {
+  return value
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
 export function compactProjectText(value: string, maxLength: number): string {
-  const normalized = `${value || ""}`.replace(/\s+/g, " ").trim();
+  // Glance surfaces render plain text, so inline markdown (bold, links, code)
+  // must not leak through as literal asterisks/brackets.
+  const normalized = stripInlineMarkdown(`${value || ""}`.replace(/\s+/g, " ").trim());
   if (normalized.length <= maxLength) return normalized;
   const clipped = normalized.slice(0, Math.max(0, maxLength - 1));
   const lastSpace = clipped.lastIndexOf(" ");

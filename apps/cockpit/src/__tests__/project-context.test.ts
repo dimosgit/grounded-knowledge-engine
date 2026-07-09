@@ -18,6 +18,41 @@ function doc(path, title, frontmatter, content) {
 }
 
 describe("shared project context model", () => {
+  it("derives next actions from the checklist so task status has one source of truth", () => {
+    const withChecklist = doc(
+      "kb/projects/checklist-ssot/project.md",
+      "Checklist SSOT",
+      {
+        record_type: "project",
+        project_id: "checklist-ssot",
+        lifecycle: "active",
+        updated: "2026-07-08",
+      },
+      `# Checklist SSOT
+
+## Current focus
+Checklist is canonical.
+
+## Next actions
+1. STALE — this section must be ignored when a checklist exists.
+
+## Execution checklist
+- [x] Shipped item [S]
+- [ ] Second open item [M]
+- [ ] 🟡 Item actively worked on [L]
+- [ ] 🔴 Gated item — not actionable [S]
+`,
+    );
+
+    const projects = buildProjectSummaries([withChecklist]);
+    const project = projects.find((candidate) => candidate.id === "checklist-ssot");
+
+    // In-progress first, then not-started in checklist order; gated and done
+    // excluded; the stale ## Next actions section ignored entirely.
+    expect(project.nextActions).toEqual(["Item actively worked on", "Second open item"]);
+    expect(project.taskCounts).toEqual({ done: 1, inProgress: 1, gated: 1, todo: 1, total: 4 });
+  });
+
   it("prefers canonical projects while preserving legacy project notes", () => {
     const docs = [
       doc(
