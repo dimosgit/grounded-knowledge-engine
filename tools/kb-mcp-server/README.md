@@ -73,6 +73,18 @@ The same capsule is available as:
 gke://project/{projectId}/context
 ```
 
+Daily attention and project deltas are available without adding another MCP
+tool. `gke review` reports due or overdue project reviews, blockers, open
+questions, and explicitly scoped documents changed since an optional ISO date:
+
+```bash
+gke review --as-of 2026-07-13
+gke review my-project --since 2026-07-01 --json
+```
+
+AI clients can read the current workspace attention report through the
+read-only `gke://workspace/review` resource.
+
 Project creation and validation intentionally live outside MCP. Use the
 human-facing project CLI:
 
@@ -114,6 +126,7 @@ read-only HTTP bridge cannot advertise or execute proposal writes.
 The server advertises:
 
 - `gke://workspace/info`
+- `gke://workspace/review`
 - `gke://record/{path}`
 - `gke://project/{projectId}/context`
 

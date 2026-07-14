@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { normalizeScalar } from "../grounding/document-core.js";
-import { resumeProject } from "../projects/index.js";
+import { resumeProject, reviewWorkspace } from "../projects/index.js";
 
 export const MCP_RESOURCES = [
   {
@@ -10,6 +10,14 @@ export const MCP_RESOURCES = [
     description: "Active repository root and indexed logical scan roots.",
     mimeType: "application/json",
     annotations: { audience: ["user", "assistant"], priority: 0.9 },
+  },
+  {
+    uri: "gke://workspace/review",
+    name: "workspace-review",
+    title: "GKE Workspace Review",
+    description: "Read due project reviews, attention reasons, and changed project documents.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["user", "assistant"], priority: 0.95 },
   },
 ];
 
@@ -72,6 +80,24 @@ export async function readMcpResource(
         },
       ],
     };
+  }
+
+  if (uri === "gke://workspace/review") {
+    try {
+      const result = await reviewWorkspace({}, dependencies.repoRoot, dependencies.scanRoots);
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/markdown",
+            text: result.contentText,
+            annotations: { audience: ["user", "assistant"], priority: 0.95 },
+          },
+        ],
+      };
+    } catch (error) {
+      throw rpcError(-32602, errorMessage(error));
+    }
   }
 
   const projectMatch = uri.match(/^gke:\/\/project\/([^/]+)\/context$/);
