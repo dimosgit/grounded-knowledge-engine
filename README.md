@@ -409,6 +409,7 @@ the wider project/workspace data model and planned consultant features.
 # Engine
 npm run typecheck
 npm run build
+npm run test:retrieval
 npm run test:gke
 npm run scrub
 
@@ -419,9 +420,13 @@ npm run test
 npm run build
 ```
 
-CI verifies type safety, builds, retrieval quality, MCP setup and contracts,
-Project Context isolation, the capture/reuse loop, binary document ingestion,
-the Cockpit, and secret/filename sanitization.
+CI verifies type safety, builds, and an isolated synthetic retrieval suite on
+both BM25 and SQLite. The retrieval gate enforces aggregate and per-category
+floors for exact and vague recall, overlapping project ranking, abstention,
+freshness, multi-track filtering, and citation resolution. It never scans the
+machine-local `kb/`. CI also verifies MCP setup and contracts, Project Context
+isolation, the capture/reuse loop, binary document ingestion, the Cockpit, and
+secret/filename sanitization.
 
 ## Boundaries
 
