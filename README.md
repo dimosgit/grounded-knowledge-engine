@@ -342,8 +342,9 @@ npm install
 npm run dev
 ```
 
-The Cockpit reads `demo-kb` and `kb`, maps both into one logical knowledge
-namespace, and provides:
+The local Cockpit reads `demo-kb` and `kb` and maps both into one logical
+knowledge namespace. Production builds are restricted to the sanitized
+`demo-kb` corpus. The Cockpit provides:
 
 - Mission Control and quick search;
 - a Markdown knowledge library;
@@ -406,7 +407,7 @@ see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
 | [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts.                      |
 | [`tools/ingest`](tools/ingest)               | Local document extraction and capture adapters.                                                                          |
 | [`apps/cockpit`](apps/cockpit)               | Optional React preview over the same Markdown and shared project model; hosted as a static demo at `gke.dimouzunov.com`. |
-| `demo-kb/` and `kb/`                         | Canonical plain-file knowledge and project state.                                                                        |
+| `demo-kb/` and `kb/`                         | Sanitized public demo knowledge and gitignored private local project state, respectively.                                |
 
 See [`docs/architecture.md`](docs/architecture.md) for the engine diagram and
 [`docs/workspace-data-architecture.md`](docs/workspace-data-architecture.md) for

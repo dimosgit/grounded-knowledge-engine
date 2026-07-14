@@ -60,12 +60,12 @@ cd apps/cockpit
 npm run sync:content
 ```
 
-The app indexes synced files from the repository-root knowledge folders. By
-default it syncs `demo-kb/**/*.md` and `kb/**/*.md`, funneling both under a
-single logical `kb/` namespace inside `content/`. Override the source folders
-with the `KB_PREVIEW_SOURCE_FOLDERS` environment variable (a comma-separated
-list of `from:to` pairs, where `:to` is optional and defaults to the source
-name), e.g.:
+For local development, the app indexes synced files from the repository-root
+knowledge folders. By default it syncs `demo-kb/**/*.md` and `kb/**/*.md`,
+funneling both under a single logical `kb/` namespace inside `content/`.
+Override local source folders with the `KB_PREVIEW_SOURCE_FOLDERS` environment
+variable (a comma-separated list of `from:to` pairs, where `:to` is optional
+and defaults to the source name), e.g.:
 
 ```bash
 KB_PREVIEW_SOURCE_FOLDERS="demo-kb:kb,kb:kb" npm run sync:content
@@ -91,16 +91,17 @@ npm run typecheck
 
 Notes:
 
-- `pretest` and `prebuild` automatically run `sync:content`.
+- `pretest` syncs the local preview sources; `prebuild` always syncs only the
+  sanitized `demo-kb` corpus and ignores source-folder overrides.
 - Do not run `npm run test` and `npm run build` in parallel because both sync content.
-- `build` emits the static app into `apps/cockpit/dist`.
+- `build` emits the demo-only static app into `apps/cockpit/dist`.
 
 ## Architecture
 
 The app is split so `App.tsx` remains a thin orchestrator.
 
 ```text
-Markdown source files (demo-kb/, kb/)
+Markdown source files (demo-kb/ plus kb/ for local preview)
   -> scripts/sync-markdown.ts
   -> content/**/*.md
   -> domain/catalog.ts
