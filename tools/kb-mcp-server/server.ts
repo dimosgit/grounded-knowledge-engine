@@ -185,7 +185,7 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
         protocolVersion: negotiateProtocolVersion(params?.protocolVersion),
         capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
-        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). Use kb.search for evidence, kb.get_record for direct reads, and kb.answer_and_capture for grounded Q&A. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled; automatic capture is skipped"}.`,
+        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). For ordinary grounded Q&A, call kb.answer_and_capture exactly once with responseMode=auto and responseFormat=compact. Do not call kb.search or kb.get_record first. After a successful call, return its answer, citations, capture status, tokenUsage, and timings immediately. Do not inspect or manually edit KB/navigation/digest files or run broad checks unless the result reports review/error or the user explicitly asks for maintenance. Use kb.search only for evidence-only requests, kb.get_record only for an explicitly requested record, and kb.resume_project for a named project. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled; automatic capture is skipped"}.`,
       };
     case "ping":
       return {};
