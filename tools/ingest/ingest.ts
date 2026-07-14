@@ -175,6 +175,8 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
         status: "draft",
         tags: ["ingested"],
         owner: "kb-ingest",
+        conflictPolicy: "replace",
+        sourceOperation: "ingest",
         dryRun: options.dryRun,
       });
       if (result.isError) {
@@ -183,8 +185,10 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
         log(`  ✗ capture failed: ${note.title}: ${msg}`);
         continue;
       }
-      summary.notesWritten += 1;
       const sc = result.structuredContent;
+      if (["created", "replaced", "appended"].includes(sc?.action)) {
+        summary.notesWritten += 1;
+      }
       captured.push({ title: note.title, path: sc?.path ?? note.path });
       log(
         `  ✓ ${sc?.action ?? "captured"}${options.dryRun ? " (dry-run)" : ""}: ${sc?.path ?? note.title}`,

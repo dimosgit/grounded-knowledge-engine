@@ -156,6 +156,7 @@ async function copyDemoKnowledge(source: string, target: string): Promise<void> 
       const relative = path.relative(source, candidate).replaceAll(path.sep, "/");
       return (
         path.basename(candidate) !== ".DS_Store" &&
+        !relative.split("/").some((segment) => segment.toLowerCase() === ".gke") &&
         relative !== "projects" &&
         !relative.startsWith("projects/")
       );

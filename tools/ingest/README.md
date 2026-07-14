@@ -26,6 +26,9 @@ npm run ingest -- <folder> [--module <key>] [--project [name]] [--dry-run] [--no
 
 The CLI runs its own KB MCP server child with writes enabled (unless
 `--dry-run`), captures each note via `kb.upsert_note`, then calls `kb.refresh`.
+Deterministic re-ingestion compares the rendered note with the existing target:
+unchanged input is a no-op, while changed existing content enters the capture
+review queue instead of being replaced blindly.
 With `--project`, the project record is created through the shared
 `tools/projects` service before the index refresh: the ingest folder becomes a
 `source_roots` entry when it lives inside the workspace, and each note is

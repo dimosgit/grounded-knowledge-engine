@@ -5,6 +5,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyCaptureProposal } from "../capture/capture-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -207,6 +208,13 @@ try {
     /Path traversal is not allowed/,
   );
   await assert.rejects(
+    () =>
+      request("resources/read", {
+        uri: "gke://record/.gke%2Fcapture-proposals%2Fpending.json",
+      }),
+    /Operational state is not exposed as a knowledge resource/,
+  );
+  await assert.rejects(
     () => request("resources/read", { uri: "gke://unsupported/value" }),
     /Unsupported resource URI/,
   );
@@ -290,6 +298,8 @@ try {
   assert.equal(upsertDryRun.structuredContent?.dryRun, true);
   assert.equal(upsertDryRun.structuredContent?.kind, "topic");
   assert.equal(typeof upsertDryRun.structuredContent?.path, "string");
+  assert.equal(upsertDryRun.structuredContent?.routing?.status, "resolved");
+  assert.equal(upsertDryRun.structuredContent?.routing?.fields?.track?.source, "explicit");
 
   const openQuestionDryRun = await request("tools/call", {
     name: "kb.add_open_question",
@@ -303,6 +313,9 @@ try {
   assert.equal(openQuestionDryRun.structuredContent?.dryRun, true);
   assert.equal(openQuestionDryRun.structuredContent?.status, "open");
 
+  const reviewTarget = "kb/topics/mcp-primitive-decision.md";
+  const beforeReview = await fs.readFile(path.join(smokeRepoRoot, reviewTarget), "utf8");
+  const captureToken = "MCP_CAPTURE_REVIEW_QUEUE_SMOKE";
   const answerAndCaptureNote = await request("tools/call", {
     name: "kb.answer_and_capture",
     arguments: {
@@ -330,6 +343,7 @@ try {
         "",
         "- The MCP source notes distinguish model-controlled tools from application-controlled resources.",
         "- This note is written by the MCP smoke test to prove retain-and-reuse behavior.",
+        `- Verification token: ${captureToken}.`,
       ].join("\n"),
     },
   });
@@ -337,10 +351,23 @@ try {
   assert.equal(answerAndCaptureNote.structuredContent?.strategy, "note");
   assert.equal(answerAndCaptureNote.structuredContent?.capture?.dryRun, false);
   assert.equal(answerAndCaptureNote.structuredContent?.capture?.kind, "topic");
+  assert.equal(answerAndCaptureNote.structuredContent?.capture?.path, reviewTarget);
+  assert.equal(answerAndCaptureNote.structuredContent?.capture?.action, "proposed");
+  assert.equal(answerAndCaptureNote.structuredContent?.capture?.routing?.status, "resolved");
   assert.equal(
-    answerAndCaptureNote.structuredContent?.capture?.path,
-    "kb/topics/mcp-primitive-decision.md",
+    answerAndCaptureNote.structuredContent?.capture?.routing?.fields?.module?.source,
+    "explicit",
   );
+  assert.equal(answerAndCaptureNote.structuredContent?.capture?.proposal?.requiresReview, true);
+  assert.match(
+    answerAndCaptureNote.structuredContent?.capture?.proposal?.path || "",
+    /^\.gke\/capture-proposals\/capture-[a-z0-9-]+\.json$/,
+  );
+  assert.doesNotMatch(
+    JSON.stringify(answerAndCaptureNote.structuredContent?.capture?.proposal),
+    new RegExp(smokeRepoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+  );
+  assert.equal(await fs.readFile(path.join(smokeRepoRoot, reviewTarget), "utf8"), beforeReview);
   assert.equal(typeof answerAndCaptureNote.structuredContent?.timings?.retrievalMs, "number");
   assert.equal(typeof answerAndCaptureNote.structuredContent?.timings?.synthesisMs, "number");
   assert.equal(typeof answerAndCaptureNote.structuredContent?.timings?.captureMs, "number");
@@ -350,6 +377,16 @@ try {
   assert.equal(typeof answerAndCaptureNote.structuredContent?.slo?.breached, "boolean");
   assert.ok(Array.isArray(answerAndCaptureNote.structuredContent?.warnings));
 
+  await applyCaptureProposal({
+    repoRoot: smokeRepoRoot,
+    proposalId: answerAndCaptureNote.structuredContent.capture.proposal.proposalId,
+    action: "replace",
+  });
+  assert.match(
+    await fs.readFile(path.join(smokeRepoRoot, reviewTarget), "utf8"),
+    new RegExp(captureToken),
+  );
+
   await request("tools/call", {
     name: "kb.refresh",
     arguments: {},
@@ -358,7 +395,7 @@ try {
   const retained = await request("tools/call", {
     name: "kb.answer_grounded",
     arguments: {
-      question: "For v0.1, are grounded search and capture exposed as MCP tools or resources?",
+      question: `What is recorded under ${captureToken}?`,
       mode: "generic",
       strict: false,
       responseMode: "curate",
@@ -368,7 +405,7 @@ try {
   });
   const retainedCitationPaths =
     retained.structuredContent?.citations?.map((citation: any) => citation.path) || [];
-  assert.ok(retainedCitationPaths.includes("kb/topics/mcp-primitive-decision.md"));
+  assert.ok(retainedCitationPaths.includes(reviewTarget));
 
   const answerAndCaptureOpen = await request("tools/call", {
     name: "kb.answer_and_capture",

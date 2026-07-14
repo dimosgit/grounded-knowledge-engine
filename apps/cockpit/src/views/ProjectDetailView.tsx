@@ -58,7 +58,10 @@ const TASK_GROUPS = [
 function TaskRow({ task, dotClassName, muted = false }) {
   return (
     <li className="flex items-start gap-3 px-5 py-2.5">
-      <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClassName}`} aria-hidden="true" />
+      <span
+        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClassName}`}
+        aria-hidden="true"
+      />
       <span
         className={`min-w-0 flex-1 text-body-md ${
           muted
@@ -267,7 +270,9 @@ export function ProjectDetailView({
                     </div>
                     <div className="mt-2 text-metadata text-on-surface-variant">
                       {progressPercent}% complete
-                      {taskCounts.total > 0 ? ` · ${taskCounts.done}/${taskCounts.total} tasks` : ""}
+                      {taskCounts.total > 0
+                        ? ` · ${taskCounts.done}/${taskCounts.total} tasks`
+                        : ""}
                     </div>
                   </>
                 ) : (
@@ -286,8 +291,8 @@ export function ProjectDetailView({
               <div>
                 <h2 className="font-display text-headline-sm text-on-surface">Task board</h2>
                 <p className="mt-1 text-metadata text-on-surface-variant">
-                  {openTaskCount} open · {taskCounts.done} done — parsed live from the checklist
-                  in the source doc
+                  {openTaskCount} open · {taskCounts.done} done — parsed live from the checklist in
+                  the source doc
                 </p>
               </div>
               <button
@@ -306,7 +311,10 @@ export function ProjectDetailView({
                 return (
                   <div key={group.status} className="border-b border-border-subtle last:border-b-0">
                     <div className="flex items-center gap-2 bg-surface-container px-5 py-2 text-metadata uppercase text-on-surface-variant">
-                      <span className={`h-2 w-2 rounded-full ${group.dotClassName}`} aria-hidden="true" />
+                      <span
+                        className={`h-2 w-2 rounded-full ${group.dotClassName}`}
+                        aria-hidden="true"
+                      />
                       {group.label}
                       <span className="ml-auto font-mono text-code-sm">{groupTasks.length}</span>
                     </div>
@@ -339,7 +347,12 @@ export function ProjectDetailView({
                     {tasks
                       .filter((task) => task.status === "done")
                       .map((task, index) => (
-                        <TaskRow key={`done-${index}`} task={task} dotClassName="bg-status-done" muted />
+                        <TaskRow
+                          key={`done-${index}`}
+                          task={task}
+                          dotClassName="bg-status-done"
+                          muted
+                        />
                       ))}
                   </ul>
                 </details>

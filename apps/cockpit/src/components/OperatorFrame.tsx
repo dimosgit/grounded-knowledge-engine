@@ -17,6 +17,8 @@ import {
   UserCircle,
   X,
 } from "lucide-react";
+import { CaptureReviewDrawer } from "./CaptureReviewDrawer";
+import { AskDrawer } from "./AskDrawer";
 
 export function OperatorFrame({
   activeView,
@@ -287,6 +289,12 @@ export function OperatorFrame({
             </button>
           </div>
           <div className="flex shrink-0 items-center gap-3 text-primary">
+            {import.meta.env.DEV && (
+              <>
+                <AskDrawer />
+                <CaptureReviewDrawer />
+              </>
+            )}
             <button
               type="button"
               onClick={onCommand}

@@ -23,15 +23,15 @@ workspace only.
 
 ## What is implemented
 
-| Capability                   | Current behavior                                                                                                                                                                   |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Grounded retrieval**       | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations.                                                                                                      |
-| **Durable capture**          | Useful answers become Markdown notes; unresolved questions can be recorded instead of guessed.                                                                                     |
-| **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                                                            |
-| **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations.                                        |
-| **One MCP server**           | Claude Code, Codex, and Gemini CLI use the same local `kb` server and knowledge base.                                                                                              |
-| **Operator Cockpit**         | A React preview provides the knowledge library, project board, structured project detail, handoff copying, and context graph. The public preview uses sanitized demo content only. |
-| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                                      |
+| Capability                   | Current behavior                                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Grounded retrieval**       | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations.                                                                                       |
+| **Durable capture**          | Clear learning is captured immediately; ambiguous routing, duplicates, and destructive replacements enter a conflict-safe local review queue.                       |
+| **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                                             |
+| **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations.                         |
+| **One MCP server**           | Claude Code, Codex, and Gemini CLI use the same local `kb` server and knowledge base.                                                                               |
+| **Operator Cockpit**         | The local React Cockpit adds grounded Ask and capture review to the library, project board, detail, handoff, and graph views. The public preview remains read-only. |
+| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                       |
 
 ## The compounding loop
 
@@ -128,6 +128,51 @@ The intentionally small `core` profile exposes:
 The `full` profile adds advanced retrieval, refresh, explicit write tools, and
 compatibility aliases. Write tools are omitted from discovery unless writes are
 enabled.
+
+### Capture review queue
+
+Capture planning is separated from canonical Markdown mutation:
+
+- a clear new path can still be created immediately;
+- fuzzy duplicate matches are advisory and never redirect the write target;
+- existing-target append or replacement becomes a versioned proposal with a
+  SHA-256 base-content guard;
+- explicit track, module, project, and path context wins; otherwise agreed
+  evidence metadata can route a capture, while conflicting evidence enters
+  review instead of being guessed;
+- pending proposals stay in ignored local operational state under
+  `.gke/capture-proposals/` and are excluded from retrieval and preview/export
+  paths.
+
+Review proposals without expanding the four-tool core MCP catalog:
+
+```bash
+gke capture list
+gke capture show <proposal-id>
+gke capture apply <proposal-id> --action replace
+gke capture reject <proposal-id>
+```
+
+`--dry-run` and `--json` are available on the review commands where relevant.
+The legacy `append` input remains accepted by MCP adapters, but consequential
+existing-target writes now enter review instead of mutating canonical content
+immediately.
+
+While the local Cockpit development server is running, **Ask** returns an
+evidence-gated answer with confidence, citations, and source excerpts. An
+explicit **Capture answer** action reruns grounding server-side, immediately
+writes a clear new note, and sends only ambiguous or conflicting captures to
+**Capture review**. The review drawer shows current/proposed Markdown, routing
+evidence, duplicate candidates, explicit apply actions, and rejection. These
+local adapters are development-only and are not included in the public static
+preview.
+
+Project checklist work has a direct command and does not need to masquerade as
+a knowledge note:
+
+```bash
+gke task add <project-id> "Review the capture route" --size S --status todo
+```
 
 MCP resources expose addressable context without inflating the tool list:
 
