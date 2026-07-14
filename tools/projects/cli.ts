@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import {
+  addProjectTask,
   createProject,
   getProject,
   linkProjectSource,
@@ -171,6 +172,31 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     return 0;
   }
 
+  if (command === "task") {
+    const [subcommand, projectId, ...taskParts] = parsed.positionals;
+    if (subcommand !== "add" || !projectId || !taskParts.length) {
+      throw new Error(
+        "Usage: gke task add <project-id> <text> [--size <XS|S|M|L|XL>] [--status <todo|in-progress|gated|done>]",
+      );
+    }
+    const result = await addProjectTask({
+      repoRoot,
+      projectId,
+      text: taskParts.join(" "),
+      size: first(parsed, "size") as "XS" | "S" | "M" | "L" | "XL" | undefined,
+      status: first(parsed, "status") as "todo" | "in-progress" | "gated" | "done" | undefined,
+      dryRun: has(parsed, "dry-run"),
+    });
+    if (json) console.log(JSON.stringify(result, null, 2));
+    else {
+      console.log(
+        `${result.dryRun ? "Would add" : "Added"} task to project ${result.projectId}: ${result.task.markdown}`,
+      );
+      if (result.dryRun) console.log(`\n${result.content}`);
+    }
+    return 0;
+  }
+
   if (command === "link") {
     const [projectId, sourcePath] = parsed.positionals;
     if (!projectId || !sourcePath) throw new Error("Usage: gke link <project-id> <source-path>");
@@ -271,6 +297,7 @@ function assertKnownOptions(command: string | undefined, options: CliOptions): v
       "key-document",
       "dry-run",
     ],
+    task: ["size", "status", "dry-run"],
     link: ["label", "dry-run"],
     help: [],
     "--help": [],
@@ -293,6 +320,7 @@ Usage:
   gke show <project-id> [--raw|--json]
   gke validate [project-id] [--json]
   gke update <project-id> [options]
+  gke task add <project-id> <text> [--size M] [--status todo]
   gke link <project-id> <source-path> [--label <label>]
 
 Create options:
@@ -328,6 +356,11 @@ Update options:
   --open-question <text>      repeatable; replaces the section
   --next-action <text>        repeatable; replaces the section
   --key-document <text>       repeatable; replaces the section
+
+Task add options:
+  --size <XS|S|M|L|XL>       default: M
+  --status <status>           todo, in-progress, gated, or done; default: todo
+  --dry-run
 
 Global options:
   --repo-root <path>

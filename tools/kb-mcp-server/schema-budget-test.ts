@@ -29,7 +29,16 @@ function assertCatalog(profile: McpProfile, writesEnabled: boolean): void {
   );
 
   const names = tools.map((tool) => tool.name);
+  const proposalCrudNames = [
+    "kb.list_capture_proposals",
+    "kb.get_capture_proposal",
+    "kb.apply_capture_proposal",
+    "kb.reject_capture_proposal",
+  ];
   assert.equal(new Set(names).size, names.length, `${profile} contains duplicate tool names`);
+  for (const name of proposalCrudNames) {
+    assert.ok(!names.includes(name), `${profile} must not advertise proposal CRUD tool ${name}`);
+  }
   for (const tool of tools) {
     assert.ok(tool.title, `${tool.name} is missing title`);
     assert.ok(tool.inputSchema, `${tool.name} is missing inputSchema`);
@@ -43,16 +52,34 @@ function assertCatalog(profile: McpProfile, writesEnabled: boolean): void {
     assert.ok(!names.includes("kb.checkpoint_project"));
   }
   if (profile === "core") {
+    assert.equal(tools.length, 4, "core must remain fixed at four semantic tools");
     assert.deepEqual(names, [
       "kb.search",
       "kb.get_record",
       "kb.answer_and_capture",
       "kb.resume_project",
     ]);
+
+    const answerAndCapture = tools.find((tool) => tool.name === "kb.answer_and_capture") as any;
+    assert.equal(answerAndCapture.inputSchema?.properties?.projectId?.type, "string");
+    const outputProperties = answerAndCapture.outputSchema?.properties;
+    assert.equal(outputProperties?.capture?.type, "object");
+    assert.ok(
+      answerAndCapture.outputSchema?.required?.includes("capture"),
+      "kb.answer_and_capture must require its proposal-compatible capture envelope",
+    );
   }
   if (profile === "full") {
     assert.ok(names.includes("kb.get_topic"));
     assert.ok(names.includes("kb.get_term"));
+    if (writesEnabled) {
+      const upsert = tools.find((tool) => tool.name === "kb.upsert_note") as any;
+      const properties = upsert.inputSchema?.properties;
+      assert.equal(properties?.projectId?.type, "string");
+      assert.deepEqual(properties?.conflictPolicy?.enum, ["error", "append", "replace"]);
+      assert.equal(properties?.baseContentHash?.pattern, "^[a-f0-9]{64}$");
+      assert.deepEqual(properties?.sourceOperation?.enum, ["answer", "ingest", "upsert"]);
+    }
   }
 }
 
