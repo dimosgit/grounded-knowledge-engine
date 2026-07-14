@@ -117,6 +117,9 @@ async function assertProtocolVersion(version: string): Promise<void> {
     });
     assert.equal(answered.isError, undefined);
     assert.equal(answered.structuredContent?.strategy, "none");
+    assert.equal(answered.structuredContent?.answer?.tokenUsage?.kind, "estimate");
+    assert.ok(answered.structuredContent?.answer?.tokenUsage?.totalTokens > 0);
+    assert.match(answered.content?.[0]?.text || "", /Token usage: ~\d+ visible tokens/);
     assert.match(answered.structuredContent?.capture?.reason || "", /writes are disabled/i);
 
     const hiddenWrite = await client.callTool("kb.upsert_note", {

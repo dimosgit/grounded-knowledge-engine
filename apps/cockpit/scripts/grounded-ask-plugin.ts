@@ -164,6 +164,7 @@ function shapeGroundedAnswer(answer: GroundedAnswerResult) {
       module: item.module,
       sourceKind: item.sourceKind,
     })),
+    tokenUsage: answer.tokenUsage,
     timings: answer.timings,
   };
 }

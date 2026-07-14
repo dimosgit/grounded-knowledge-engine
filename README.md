@@ -127,6 +127,8 @@ The intentionally small `core` profile exposes:
 - `kb.search` — ranked local evidence with citations.
 - `kb.get_record` — one indexed record by path, title, slug, or filename.
 - `kb.answer_and_capture` — grounded answer plus capture policy.
+- Grounded answer responses include a labeled visible-text token estimate for
+  the request, evidence, and answer; it is not presented as provider billing.
 - `kb.resume_project` — one compact, cited project capsule.
 
 The `full` profile adds advanced retrieval, refresh, explicit write tools, and

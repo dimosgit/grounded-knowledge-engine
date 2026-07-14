@@ -131,6 +131,15 @@ function groundedAnswer(): GroundedAnswerResult {
     ],
     search: { signals: null, debug: { secret: "debug-secret" } },
     fastPath: { used: false, alreadyCaptured: false },
+    tokenUsage: {
+      kind: "estimate",
+      scope: "gke-visible-text",
+      requestTokens: 6,
+      evidenceTokens: 9,
+      answerTokens: 13,
+      totalTokens: 28,
+      method: "characters-divided-by-4",
+    },
     timings: { retrievalMs: 2, synthesisMs: 1, captureMs: null, totalMs: 3 },
   };
 }
