@@ -24,6 +24,11 @@ Decision Replay is planned separately because it is a new product workflow,
 not one of the three consultant-foundation features:
 [Decision Replay](2026-06-21-decision-replay.md).
 
+Capture integrity and the local operator review loop are also planned
+separately. They strengthen how grounded evidence becomes canonical knowledge
+without expanding the four-tool core MCP surface:
+[Capture Integrity and Operator Workflow Roadmap](../planning/2026-07-13-capture-integrity-and-operator-workflow-roadmap.md).
+
 Before any of them, complete
 [MCP Core Modernization](2026-06-21-mcp-core-modernization.md). It establishes
 the small semantic tool catalog, profiles, typed outputs, safety annotations,

@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { CandidateFile, Frontmatter } from "./types.js";
 
-const SKIP_DIRECTORIES = new Set([".git", "node_modules", "dist", "content", ".cache"]);
+const SKIP_DIRECTORIES = new Set([".git", ".gke", "node_modules", "dist", "content", ".cache"]);
 
 export interface ParsedFrontmatter {
   frontmatter: Frontmatter;
@@ -16,6 +16,7 @@ export async function gatherCandidateFiles(
 ): Promise<CandidateFile[]> {
   const candidates: CandidateFile[] = [];
   for (const root of scanRoots) {
+    if (isOperationalStatePath(root)) continue;
     const absRoot = path.resolve(repoRoot, root);
     let stat;
     try {
@@ -28,6 +29,7 @@ export async function gatherCandidateFiles(
       continue;
     }
     const relPath = toPosix(path.relative(repoRoot, absRoot));
+    if (isOperationalStatePath(relPath)) continue;
     if (!isSearchableTextFile(relPath)) continue;
     candidates.push({ absPath: absRoot, relPath, size: stat.size, mtimeMs: stat.mtimeMs });
   }
@@ -102,6 +104,12 @@ export function isSearchableTextFile(relPath: string): boolean {
   return lower.endsWith(".md") || lower.endsWith(".txt");
 }
 
+export function isOperationalStatePath(relPath: string): boolean {
+  return toPosix(relPath)
+    .split("/")
+    .some((segment) => segment.toLowerCase() === ".gke");
+}
+
 export function normalizeScalar(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.trim().replace(/^['"]|['"]$/g, "");
@@ -132,6 +140,7 @@ async function walk(dir: string, repoRoot: string, out: CandidateFile[]): Promis
   for (const entry of entries) {
     const absPath = path.join(dir, entry.name);
     const relPath = toPosix(path.relative(repoRoot, absPath));
+    if (isOperationalStatePath(relPath)) continue;
     if (entry.isDirectory()) {
       if (SKIP_DIRECTORIES.has(entry.name)) continue;
       await walk(absPath, repoRoot, out);

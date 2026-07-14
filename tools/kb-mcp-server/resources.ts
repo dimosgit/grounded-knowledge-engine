@@ -139,6 +139,9 @@ function sanitizeResourcePath(value: string): string {
   if (normalized.split("/").some((part) => part === ".." || part === "")) {
     throw new Error("Path traversal is not allowed.");
   }
+  if (normalized.split("/").some((part) => part.toLowerCase() === ".gke")) {
+    throw new Error("Operational state is not exposed as a knowledge resource.");
+  }
   return normalized;
 }
 

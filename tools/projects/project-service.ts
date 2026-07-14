@@ -99,6 +99,26 @@ export interface LinkProjectSourceOptions extends ProjectServiceOptions {
   dryRun?: boolean;
 }
 
+export type ProjectTaskSize = "XS" | "S" | "M" | "L" | "XL";
+export type ProjectTaskStatus = "todo" | "in-progress" | "gated" | "done";
+
+export interface AddProjectTaskOptions extends ProjectServiceOptions {
+  projectId: string;
+  text: string;
+  size?: ProjectTaskSize | Lowercase<ProjectTaskSize>;
+  status?: ProjectTaskStatus;
+  dryRun?: boolean;
+}
+
+export interface AddedProjectTask extends UpdatedProject {
+  task: {
+    text: string;
+    size: ProjectTaskSize;
+    status: ProjectTaskStatus;
+    markdown: string;
+  };
+}
+
 export type ProjectSectionKey =
   | "outcome"
   | "current-focus"
@@ -107,7 +127,8 @@ export type ProjectSectionKey =
   | "blockers"
   | "open-questions"
   | "next-actions"
-  | "key-documents";
+  | "key-documents"
+  | "delivery-checklist";
 
 export interface LoadedProject {
   raw: string;
@@ -316,6 +337,59 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
     changed,
     dryRun: Boolean(options.dryRun),
   };
+}
+
+export async function addProjectTask(options: AddProjectTaskOptions): Promise<AddedProjectTask> {
+  const repoRoot = path.resolve(options.repoRoot || process.cwd());
+  const lockPath = options.dryRun
+    ? null
+    : await acquireProjectTaskLock(repoRoot, options.projectId);
+  try {
+    const loaded = await getProject(options.projectId, {
+      repoRoot,
+      scanRoots: options.scanRoots,
+    });
+    const text = requireNonEmpty(options.text, "task text");
+    const size = normalizeTaskSize(options.size || "M");
+    const status = normalizeTaskStatus(options.status || "todo");
+    const duplicateKey = normalizeTaskTextForComparison(text);
+
+    for (const existingTask of extractProjectTaskTexts(loaded.raw)) {
+      if (normalizeTaskTextForComparison(existingTask) === duplicateKey) {
+        throw new Error(`Project task already exists: ${text}`);
+      }
+    }
+
+    const markdown = renderProjectTask(text, size, status);
+    const existingChecklist = loaded.parsed.sections.get("delivery-checklist")?.content || "";
+    const checklistLines = existingChecklist
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter((line) => line.trim() && !/^(?:[-*]\s+)?None recorded\.?$/i.test(line.trim()));
+    checklistLines.push(markdown);
+
+    let content = updateMarkdownSection(
+      loaded.raw,
+      "delivery-checklist",
+      checklistLines.join("\n"),
+    );
+    content = updateFrontmatter(content, { updated: todayIso() });
+    if (!options.dryRun) {
+      const target = await resolveSafeWorkspacePath(repoRoot, loaded.path);
+      await atomicWrite(target, content);
+    }
+
+    return {
+      projectId: loaded.parsed.manifest.projectId,
+      path: loaded.path,
+      content,
+      changed: true,
+      dryRun: Boolean(options.dryRun),
+      task: { text, size, status, markdown },
+    };
+  } finally {
+    if (lockPath) await fs.rm(lockPath, { force: true });
+  }
 }
 
 export async function linkProjectSource(
@@ -592,6 +666,7 @@ function sectionAliases(key: ProjectSectionKey): Set<string> {
     "open-questions": ["open questions"],
     "next-actions": ["next actions", "next 3 actions"],
     "key-documents": ["key documents"],
+    "delivery-checklist": ["delivery checklist"],
   };
   return new Set(aliases[key]);
 }
@@ -606,6 +681,7 @@ function sectionHeading(key: ProjectSectionKey): string {
     "open-questions": "Open questions",
     "next-actions": "Next actions",
     "key-documents": "Key documents",
+    "delivery-checklist": "Delivery checklist",
   };
   return headings[key];
 }
@@ -617,7 +693,51 @@ function isListSection(key: ProjectSectionKey): boolean {
     "open-questions",
     "next-actions",
     "key-documents",
+    "delivery-checklist",
   ].includes(key);
+}
+
+function normalizeTaskSize(value: string): ProjectTaskSize {
+  const normalized = cleanScalar(value).toUpperCase();
+  if (!(["XS", "S", "M", "L", "XL"] as const).includes(normalized as ProjectTaskSize)) {
+    throw new Error("Task size must be one of: XS, S, M, L, XL.");
+  }
+  return normalized as ProjectTaskSize;
+}
+
+function normalizeTaskStatus(value: string): ProjectTaskStatus {
+  const normalized = cleanScalar(value).toLowerCase();
+  if (
+    !(["todo", "in-progress", "gated", "done"] as const).includes(normalized as ProjectTaskStatus)
+  ) {
+    throw new Error("Task status must be one of: todo, in-progress, gated, done.");
+  }
+  return normalized as ProjectTaskStatus;
+}
+
+function renderProjectTask(text: string, size: ProjectTaskSize, status: ProjectTaskStatus): string {
+  const checkbox = status === "done" ? "[x]" : "[ ]";
+  const marker = status === "in-progress" ? "🟡 " : status === "gated" ? "🔴 " : "";
+  return `- ${checkbox} ${marker}${text} [${size}]`;
+}
+
+function extractProjectTaskTexts(raw: string): string[] {
+  const tasks: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const match = line.match(/^\s*-\s+\[[ xX]\]\s+(.+?)\s*$/);
+    if (!match) continue;
+    tasks.push(
+      match[1]
+        .replace(/^(?:🟢|🟡|🔴|⚪)\s*/u, "")
+        .replace(/\s*[[(](?:XS|S|M|L|XL)[\])]\s*$/i, "")
+        .trim(),
+    );
+  }
+  return tasks;
+}
+
+function normalizeTaskTextForComparison(value: string): string {
+  return cleanScalar(value).toLowerCase().replace(/\s+/g, " ");
 }
 
 async function discoverProjectRecords(
@@ -676,6 +796,35 @@ async function atomicWrite(target: string, content: string): Promise<void> {
     await fs.rm(temporary, { force: true });
     throw error;
   }
+}
+
+async function acquireProjectTaskLock(repoRoot: string, projectIdInput: string): Promise<string> {
+  const projectId = normalizeProjectId(projectIdInput);
+  const lockPath = await resolveSafeWorkspacePath(
+    repoRoot,
+    `.gke/project-task-locks/${projectId}.lock`,
+  );
+  await fs.mkdir(path.dirname(lockPath), { recursive: true });
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      const handle = await fs.open(lockPath, "wx", 0o600);
+      await handle.writeFile(`${process.pid}\n`, "utf8");
+      await handle.close();
+      return lockPath;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const stat = await fs.stat(lockPath).catch((): null => null);
+      if (stat && Date.now() - stat.mtimeMs > 30_000) {
+        await fs.rm(lockPath, { force: true });
+        continue;
+      }
+      if (attempt === 49) {
+        throw new Error(`Project tasks are already being updated: ${projectId}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(`Unable to acquire project task lock: ${projectId}`);
 }
 
 function normalizeWorkspaceRelativePath(value: string): string {
