@@ -65,6 +65,23 @@ describe("cockpit major flows", () => {
     expect(matches.length).toBeGreaterThan(0);
   });
 
+  test("daily attention links to a composed board filter", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "Daily attention" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Open questions: \d+ project contexts/i }));
+
+    expect(await screen.findByRole("heading", { name: "Project Board" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/projects?attention=open-questions");
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Open questions/i })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+  });
+
   test("project detail keeps the first screen compact and progress evidence-based", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/project/router-rollout";

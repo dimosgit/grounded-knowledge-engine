@@ -1,6 +1,15 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
+import {
+  authorizeWorkspaceOperationalRead,
+  authorizeWorkspaceWrite,
+} from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
+import {
+  assertCandidateProposalReady,
+  resolveCandidateProposal,
+} from "../ingest/candidate-state.js";
 import { resolveCaptureRoute } from "./capture-routing.js";
 import {
   CAPTURE_PROPOSAL_SCHEMA_VERSION,
@@ -57,6 +66,7 @@ export class CaptureConflictError extends Error {
 
 export async function planCapture(input: PlanCaptureInput): Promise<CapturePlanResult> {
   const repoRoot = path.resolve(input.repoRoot);
+  const workspace = input.workspace;
   const deterministicPath = resolveCapturePath(input.kind, input.title);
   const routing = await resolveCaptureRoute({
     repoRoot,
@@ -78,13 +88,23 @@ export async function planCapture(input: PlanCaptureInput): Promise<CapturePlanR
     input.title,
     routing.fields.path.value || deterministicPath,
   );
-  const absTarget = await resolveSafeWorkspacePath(repoRoot, proposedPath, true);
+  const absTarget = await resolveSafeWorkspacePath(repoRoot, proposedPath, true, workspace);
   const targetExists = await exists(absTarget);
   const baseContentHash = targetExists ? await sha256File(absTarget) : null;
   const duplicateCandidates = input.requestedPath
     ? []
-    : await findDuplicateCandidates(repoRoot, input.kind, input.title, input.body, proposedPath);
+    : await findDuplicateCandidates(
+        repoRoot,
+        input.kind,
+        input.title,
+        input.body,
+        proposedPath,
+        workspace,
+      );
   const proposedAction = normalizeProposedAction(input.proposedAction, targetExists);
+  if (proposedAction === "delete" && !input.ingestionCandidate) {
+    throw new Error("Delete proposals are reserved for source-ingestion candidates.");
+  }
   const reviewReasons = buildReviewReasons({
     targetExists,
     proposedAction,
@@ -105,13 +125,14 @@ export async function planCapture(input: PlanCaptureInput): Promise<CapturePlanR
     evidenceCitations: normalizeCitations(input.evidenceCitations || []),
     groundedConfidence: input.groundedConfidence || null,
     routing,
+    ...(input.ingestionCandidate ? { ingestionCandidate: input.ingestionCandidate } : {}),
     requiresReview: reviewReasons.length > 0,
     reviewReasons,
   };
 
   let proposalPath: string | null = null;
   if (input.persist !== false && proposal.requiresReview) {
-    proposalPath = await persistCaptureProposal(repoRoot, proposal);
+    proposalPath = await persistCaptureProposal(repoRoot, proposal, workspace);
   }
   return { proposal, proposalPath, targetExists };
 }
@@ -119,12 +140,13 @@ export async function planCapture(input: PlanCaptureInput): Promise<CapturePlanR
 export async function persistCaptureProposal(
   repoRootInput: string,
   proposal: CaptureProposal,
+  workspace?: WorkspaceContext,
 ): Promise<string> {
   const repoRoot = path.resolve(repoRootInput);
   validateCaptureProposal(proposal);
   const relPath = `${PROPOSAL_DIRECTORY}/${proposal.proposalId}.json`;
-  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, true);
-  await ensureSafeDirectory(repoRoot, path.dirname(absPath));
+  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, true, workspace);
+  await ensureSafeDirectory(repoRoot, path.dirname(absPath), workspace);
   const handle = await fs.open(absPath, "wx", 0o600);
   try {
     await handle.writeFile(serializeCaptureProposal(proposal), "utf8");
@@ -134,16 +156,19 @@ export async function persistCaptureProposal(
   return relPath;
 }
 
-export async function listCaptureProposals(repoRootInput: string): Promise<CaptureProposal[]> {
+export async function listCaptureProposals(
+  repoRootInput: string,
+  workspace?: WorkspaceContext,
+): Promise<CaptureProposal[]> {
   const repoRoot = path.resolve(repoRootInput);
-  const directory = await resolveSafeWorkspacePath(repoRoot, PROPOSAL_DIRECTORY, true);
+  const directory = await resolveSafeWorkspacePath(repoRoot, PROPOSAL_DIRECTORY, false, workspace);
   if (!(await exists(directory))) return [];
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const proposals: CaptureProposal[] = [];
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
     const proposalId = entry.name.slice(0, -5);
-    proposals.push(await getCaptureProposal(repoRoot, proposalId));
+    proposals.push(await getCaptureProposal(repoRoot, proposalId, workspace));
   }
   return proposals.sort(
     (a, b) => a.createdAt.localeCompare(b.createdAt) || a.proposalId.localeCompare(b.proposalId),
@@ -152,8 +177,9 @@ export async function listCaptureProposals(repoRootInput: string): Promise<Captu
 
 export async function listCaptureProposalSummaries(
   repoRootInput: string,
+  workspace?: WorkspaceContext,
 ): Promise<CaptureProposalSummary[]> {
-  return (await listCaptureProposals(repoRootInput)).map((proposal) => ({
+  return (await listCaptureProposals(repoRootInput, workspace)).map((proposal) => ({
     proposalId: proposal.proposalId,
     createdAt: proposal.createdAt,
     sourceOperation: proposal.sourceOperation,
@@ -174,11 +200,12 @@ export async function listCaptureProposalSummaries(
 export async function getCaptureProposal(
   repoRootInput: string,
   proposalIdInput: string,
+  workspace?: WorkspaceContext,
 ): Promise<CaptureProposal> {
   const repoRoot = path.resolve(repoRootInput);
   const proposalId = normalizeProposalId(proposalIdInput);
   const relPath = `${PROPOSAL_DIRECTORY}/${proposalId}.json`;
-  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, false);
+  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, false, workspace);
   let raw: string;
   try {
     raw = await fs.readFile(absPath, "utf8");
@@ -204,10 +231,16 @@ export async function getCaptureProposal(
 export async function previewCaptureProposal(
   repoRootInput: string,
   proposalIdInput: string,
+  workspace?: WorkspaceContext,
 ): Promise<CaptureProposalPreview> {
   const repoRoot = path.resolve(repoRootInput);
-  const proposal = await getCaptureProposal(repoRoot, proposalIdInput);
-  const absTarget = await resolveSafeWorkspacePath(repoRoot, proposal.proposedNote.path, true);
+  const proposal = await getCaptureProposal(repoRoot, proposalIdInput, workspace);
+  const absTarget = await resolveSafeWorkspacePath(
+    repoRoot,
+    proposal.proposedNote.path,
+    false,
+    workspace,
+  );
   const targetExists = await exists(absTarget);
   const currentBytes = targetExists ? await fs.readFile(absTarget) : Buffer.alloc(0);
   const currentContentHash = targetExists ? sha256(currentBytes) : null;
@@ -225,8 +258,8 @@ export async function applyCaptureProposal(
   options: ApplyCaptureProposalOptions,
 ): Promise<ApplyCaptureProposalResult> {
   const repoRoot = path.resolve(options.repoRoot);
-  const proposal = await getCaptureProposal(repoRoot, options.proposalId);
-  const lockPath = await acquireProposalLock(repoRoot, proposal.proposalId);
+  const proposal = await getCaptureProposal(repoRoot, options.proposalId, options.workspace);
+  const lockPath = await acquireProposalLock(repoRoot, proposal.proposalId, options.workspace);
   try {
     return await applyCaptureProposalValue(options, repoRoot, proposal);
   } finally {
@@ -241,14 +274,47 @@ async function applyCaptureProposalValue(
 ): Promise<ApplyCaptureProposalResult> {
   const action = options.action || proposal.proposedAction;
   assertActionAllowed(action);
+  if (proposal.ingestionCandidate && options.action && options.action !== proposal.proposedAction) {
+    throw new Error("Ingestion candidate proposals must use their planned action.");
+  }
+  if (action === "delete" && proposal.proposedAction !== "delete") {
+    throw new Error("Delete may only apply an explicit deletion proposal.");
+  }
+  if (proposal.ingestionCandidate) {
+    if (!options.workspace) {
+      throw new Error("Ingestion candidate resolution requires a workspace context.");
+    }
+    await assertCandidateProposalReady(
+      repoRoot,
+      proposal.ingestionCandidate.candidateId,
+      proposal.proposalId,
+      options.workspace,
+    );
+  }
   const targetPath = proposal.proposedNote.path;
-  const absTarget = await resolveSafeWorkspacePath(repoRoot, targetPath, true);
+  const absTarget = await resolveSafeWorkspacePath(repoRoot, targetPath, true, options.workspace);
   const targetExists = await exists(absTarget);
   const currentBytes = targetExists ? await fs.readFile(absTarget) : Buffer.alloc(0);
   const currentContent = currentBytes.toString("utf8");
   const currentHash = targetExists ? sha256(currentBytes) : null;
   const rendered = renderCaptureNote(proposal.proposedNote);
   const renderedHash = sha256(rendered);
+
+  if (action === "delete" && !targetExists && proposal.baseContentHash) {
+    const recovered: ApplyCaptureProposalResult = {
+      proposalId: proposal.proposalId,
+      action: "deleted",
+      path: targetPath,
+      dryRun: Boolean(options.dryRun),
+      contentHash: proposal.baseContentHash,
+    };
+    if (!options.dryRun) {
+      if (options.refresh) await options.refresh();
+      await resolveIngestionCandidate(repoRoot, proposal, "applied", options.workspace);
+      await removeProposalFile(repoRoot, proposal.proposalId, options.workspace);
+    }
+    return recovered;
+  }
 
   if (
     targetExists &&
@@ -264,7 +330,8 @@ async function applyCaptureProposalValue(
     };
     if (!options.dryRun) {
       if (options.refresh) await options.refresh();
-      await removeProposalFile(repoRoot, proposal.proposalId);
+      await resolveIngestionCandidate(repoRoot, proposal, "applied", options.workspace);
+      await removeProposalFile(repoRoot, proposal.proposalId, options.workspace);
     }
     return recovered;
   }
@@ -285,6 +352,22 @@ async function applyCaptureProposalValue(
     assertMatchingBaseHash(proposal, currentHash, targetExists);
     nextContent = rendered;
     resultAction = "replaced";
+  } else if (action === "delete") {
+    assertMatchingBaseHash(proposal, currentHash, targetExists);
+    const result: ApplyCaptureProposalResult = {
+      proposalId: proposal.proposalId,
+      action: "deleted",
+      path: targetPath,
+      dryRun: Boolean(options.dryRun),
+      contentHash: currentHash as string,
+    };
+    if (options.dryRun) return result;
+    if (options.workspace) await authorizeWorkspaceWrite(options.workspace, absTarget);
+    await fs.rm(absTarget);
+    if (options.refresh) await options.refresh();
+    await resolveIngestionCandidate(repoRoot, proposal, "applied", options.workspace);
+    await removeProposalFile(repoRoot, proposal.proposalId, options.workspace);
+    return result;
   } else {
     if (targetPath !== "kb/open_questions.md") {
       throw new Error("Open-question proposals must target kb/open_questions.md.");
@@ -308,9 +391,10 @@ async function applyCaptureProposalValue(
   };
   if (options.dryRun) return result;
 
-  await atomicWrite(repoRoot, absTarget, normalizedContent, action === "create");
+  await atomicWrite(repoRoot, absTarget, normalizedContent, action === "create", options.workspace);
   if (options.refresh) await options.refresh();
-  await removeProposalFile(repoRoot, proposal.proposalId);
+  await resolveIngestionCandidate(repoRoot, proposal, "applied", options.workspace);
+  await removeProposalFile(repoRoot, proposal.proposalId, options.workspace);
   return result;
 }
 
@@ -318,13 +402,15 @@ export async function rejectCaptureProposal(
   repoRootInput: string,
   proposalIdInput: string,
   dryRun = false,
+  workspace?: WorkspaceContext,
 ): Promise<{ proposalId: string; rejected: boolean; dryRun: boolean }> {
   const repoRoot = path.resolve(repoRootInput);
-  const proposal = await getCaptureProposal(repoRoot, proposalIdInput);
+  const proposal = await getCaptureProposal(repoRoot, proposalIdInput, workspace);
   if (!dryRun) {
-    const lockPath = await acquireProposalLock(repoRoot, proposal.proposalId);
+    const lockPath = await acquireProposalLock(repoRoot, proposal.proposalId, workspace);
     try {
-      await removeProposalFile(repoRoot, proposal.proposalId);
+      await resolveIngestionCandidate(repoRoot, proposal, "rejected", workspace);
+      await removeProposalFile(repoRoot, proposal.proposalId, workspace);
     } finally {
       await fs.rm(lockPath, { force: true });
     }
@@ -335,14 +421,19 @@ export async function rejectCaptureProposal(
 export async function applyUnreviewedCapture(
   repoRootInput: string,
   proposal: CaptureProposal,
-  options: { dryRun?: boolean; refresh?: () => Promise<void> } = {},
+  options: { dryRun?: boolean; refresh?: () => Promise<void>; workspace?: WorkspaceContext } = {},
 ): Promise<ApplyCaptureProposalResult> {
   validateCaptureProposal(proposal);
   if (proposal.requiresReview || proposal.proposedAction !== "create") {
     throw new Error("Only an unreviewed create plan can be applied immediately.");
   }
   const repoRoot = path.resolve(repoRootInput);
-  const absTarget = await resolveSafeWorkspacePath(repoRoot, proposal.proposedNote.path, true);
+  const absTarget = await resolveSafeWorkspacePath(
+    repoRoot,
+    proposal.proposedNote.path,
+    true,
+    options.workspace,
+  );
   if (await exists(absTarget)) {
     throw new CaptureConflictError(`Capture target already exists: ${proposal.proposedNote.path}`);
   }
@@ -355,7 +446,7 @@ export async function applyUnreviewedCapture(
     contentHash: sha256(content),
   };
   if (!options.dryRun) {
-    await atomicWrite(repoRoot, absTarget, content, true);
+    await atomicWrite(repoRoot, absTarget, content, true, options.workspace);
     if (options.refresh) await options.refresh();
   }
   return result;
@@ -364,10 +455,16 @@ export async function applyUnreviewedCapture(
 export async function isCaptureProposalUnchanged(
   repoRootInput: string,
   proposal: CaptureProposal,
+  workspace?: WorkspaceContext,
 ): Promise<boolean> {
   validateCaptureProposal(proposal);
   const repoRoot = path.resolve(repoRootInput);
-  const absTarget = await resolveSafeWorkspacePath(repoRoot, proposal.proposedNote.path, true);
+  const absTarget = await resolveSafeWorkspacePath(
+    repoRoot,
+    proposal.proposedNote.path,
+    true,
+    workspace,
+  );
   if (!(await exists(absTarget))) return false;
   return (await sha256File(absTarget)) === sha256(renderCaptureNote(proposal.proposedNote));
 }
@@ -375,9 +472,10 @@ export async function isCaptureProposalUnchanged(
 export async function hashCaptureTarget(
   repoRootInput: string,
   relPath: string,
+  workspace?: WorkspaceContext,
 ): Promise<string | null> {
   const repoRoot = path.resolve(repoRootInput);
-  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, true);
+  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, false, workspace);
   return (await exists(absPath)) ? sha256File(absPath) : null;
 }
 
@@ -447,6 +545,16 @@ export function validateCaptureProposal(value: unknown): asserts value is Captur
   if (!Array.isArray(proposal.reviewReasons) || typeof proposal.requiresReview !== "boolean") {
     throw new Error("Capture proposal review metadata is invalid.");
   }
+  if (proposal.ingestionCandidate) {
+    const candidate = proposal.ingestionCandidate;
+    if (
+      !/^ingest-[a-z0-9-]{12,120}$/.test(candidate.candidateId || "") ||
+      !/^[a-z0-9][a-z0-9-]{1,110}$/.test(candidate.sourceId || "") ||
+      !["changed", "removed", "conflicting-create"].includes(candidate.changeKind)
+    ) {
+      throw new Error("Capture proposal ingestion candidate metadata is invalid.");
+    }
+  }
 }
 
 function normalizeProposedNote(
@@ -482,7 +590,11 @@ function buildReviewReasons(options: {
   const reasons: string[] = [...options.routingReasons];
   if (options.duplicateCandidates.length) reasons.push("fuzzy-duplicate-candidate");
   if (options.targetExists) reasons.push("existing-target");
-  if (options.proposedAction === "append" || options.proposedAction === "replace") {
+  if (
+    options.proposedAction === "append" ||
+    options.proposedAction === "replace" ||
+    options.proposedAction === "delete"
+  ) {
     reasons.push(`consequential-${options.proposedAction}`);
   }
   return [...new Set(reasons)];
@@ -492,6 +604,9 @@ function normalizeProposedAction(
   action: CaptureAction | undefined,
   targetExists: boolean,
 ): CaptureAction {
+  if (!targetExists && action === "delete") {
+    throw new CaptureConflictError("Cannot propose deletion for a missing capture target.");
+  }
   if (!targetExists && action && action !== "open_question") return "create";
   if (action) {
     assertActionAllowed(action);
@@ -501,7 +616,7 @@ function normalizeProposedAction(
 }
 
 function assertActionAllowed(action: string): asserts action is CaptureAction {
-  if (!["create", "append", "replace", "open_question"].includes(action)) {
+  if (!["create", "append", "replace", "delete", "open_question"].includes(action)) {
     throw new Error(`Unsupported capture action: ${action}`);
   }
 }
@@ -532,9 +647,10 @@ async function findDuplicateCandidates(
   title: string,
   body: string,
   plannedPath: string,
+  workspace?: WorkspaceContext,
 ): Promise<CaptureDuplicateCandidate[]> {
   const relDirectory = kind === "term" ? "kb/terms" : "kb/topics";
-  const directory = await resolveSafeWorkspacePath(repoRoot, relDirectory, true);
+  const directory = await resolveSafeWorkspacePath(repoRoot, relDirectory, true, workspace);
   if (!(await exists(directory))) return [];
   const entries = await fs.readdir(directory, { withFileTypes: true });
   const titleTokens = tokenize(title);
@@ -546,7 +662,7 @@ async function findDuplicateCandidates(
     if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) continue;
     const relPath = `${relDirectory}/${entry.name}`;
     if (normalizeForSimilarity(relPath) === normalizeForSimilarity(plannedPath)) continue;
-    const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, false);
+    const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, false, workspace);
     const raw = await fs.readFile(absPath, "utf8");
     const docTitle = raw.match(/^#\s+(.+)$/m)?.[1]?.trim() || path.basename(entry.name, ".md");
     const docBase = path.basename(entry.name, ".md");
@@ -601,17 +717,20 @@ async function resolveSafeWorkspacePath(
   repoRoot: string,
   relPath: string,
   allowMissing: boolean,
+  workspace?: WorkspaceContext,
 ): Promise<string> {
   const normalized = sanitizeRelativePath(relPath);
   const rootReal = await fs.realpath(repoRoot);
   const absPath = path.resolve(rootReal, normalized);
   assertContained(rootReal, absPath);
   if (await exists(absPath)) {
+    if (workspace) await authorizeWorkspaceOperationalRead(workspace, absPath);
     const targetReal = await fs.realpath(absPath);
     assertContained(rootReal, targetReal);
     return absPath;
   }
   if (!allowMissing) return absPath;
+  if (workspace) await authorizeWorkspaceWrite(workspace, absPath);
   let ancestor = path.dirname(absPath);
   while (!(await exists(ancestor))) {
     const parent = path.dirname(ancestor);
@@ -629,7 +748,12 @@ function assertContained(rootReal: string, candidate: string): void {
   throw new Error("Resolved capture path is outside the workspace root.");
 }
 
-async function ensureSafeDirectory(repoRoot: string, directory: string): Promise<void> {
+async function ensureSafeDirectory(
+  repoRoot: string,
+  directory: string,
+  workspace?: WorkspaceContext,
+): Promise<void> {
+  if (workspace) await authorizeWorkspaceWrite(workspace, directory);
   await fs.mkdir(directory, { recursive: true, mode: 0o700 });
   const rootReal = await fs.realpath(repoRoot);
   const directoryReal = await fs.realpath(directory);
@@ -641,8 +765,10 @@ async function atomicWrite(
   target: string,
   content: string,
   mustNotExist = false,
+  workspace?: WorkspaceContext,
 ): Promise<void> {
-  await ensureSafeDirectory(repoRoot, path.dirname(target));
+  if (workspace) await authorizeWorkspaceWrite(workspace, target);
+  await ensureSafeDirectory(repoRoot, path.dirname(target), workspace);
   const rootReal = await fs.realpath(repoRoot);
   if (await exists(target)) assertContained(rootReal, await fs.realpath(target));
   const tempPath = `${target}.gke-tmp-${process.pid}-${crypto.randomBytes(6).toString("hex")}`;
@@ -671,11 +797,15 @@ async function atomicWrite(
   }
 }
 
-async function acquireProposalLock(repoRoot: string, proposalId: string): Promise<string> {
+async function acquireProposalLock(
+  repoRoot: string,
+  proposalId: string,
+  workspace?: WorkspaceContext,
+): Promise<string> {
   const normalized = normalizeProposalId(proposalId);
   const relPath = `${PROPOSAL_DIRECTORY}/${normalized}.lock`;
-  const lockPath = await resolveSafeWorkspacePath(repoRoot, relPath, true);
-  await ensureSafeDirectory(repoRoot, path.dirname(lockPath));
+  const lockPath = await resolveSafeWorkspacePath(repoRoot, relPath, true, workspace);
+  await ensureSafeDirectory(repoRoot, path.dirname(lockPath), workspace);
   let handle: Awaited<ReturnType<typeof fs.open>>;
   try {
     handle = await fs.open(lockPath, "wx", 0o600);
@@ -693,10 +823,15 @@ async function acquireProposalLock(repoRoot: string, proposalId: string): Promis
   return lockPath;
 }
 
-async function removeProposalFile(repoRoot: string, proposalId: string): Promise<void> {
+async function removeProposalFile(
+  repoRoot: string,
+  proposalId: string,
+  workspace?: WorkspaceContext,
+): Promise<void> {
   const normalized = normalizeProposalId(proposalId);
   const relPath = `${PROPOSAL_DIRECTORY}/${normalized}.json`;
-  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, false);
+  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, false, workspace);
+  if (workspace) await authorizeWorkspaceWrite(workspace, absPath);
   await fs.rm(absPath);
 }
 
@@ -742,6 +877,23 @@ async function sha256File(filePath: string): Promise<string> {
 
 function ensureTrailingNewline(value: string): string {
   return value.endsWith("\n") ? value : `${value}\n`;
+}
+
+async function resolveIngestionCandidate(
+  repoRoot: string,
+  proposal: CaptureProposal,
+  resolution: "applied" | "rejected",
+  workspace?: WorkspaceContext,
+): Promise<void> {
+  if (!proposal.ingestionCandidate) return;
+  if (!workspace) throw new Error("Ingestion candidate resolution requires a workspace context.");
+  await resolveCandidateProposal(
+    repoRoot,
+    proposal.ingestionCandidate.candidateId,
+    proposal.proposalId,
+    resolution,
+    workspace,
+  );
 }
 
 function slugify(value: string): string {

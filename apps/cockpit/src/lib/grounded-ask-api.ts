@@ -67,6 +67,10 @@ export interface CaptureGroundedAnswerInput {
   projectId?: string;
 }
 
+export interface AskGroundedOptions {
+  projectId?: string;
+}
+
 export class GroundedAskApiError extends Error {
   constructor(
     message: string,
@@ -78,11 +82,14 @@ export class GroundedAskApiError extends Error {
   }
 }
 
-export async function askGrounded(question: string): Promise<GroundedAnswer> {
+export async function askGrounded(
+  question: string,
+  options: AskGroundedOptions = {},
+): Promise<GroundedAnswer> {
   const payload = await request<{ answer: GroundedAnswer }>(GROUNDED_ASK_ROOT, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ question, strict: true }),
+    body: JSON.stringify({ question, strict: true, ...options }),
   });
   return payload.answer;
 }

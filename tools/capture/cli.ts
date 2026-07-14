@@ -7,6 +7,7 @@ import {
 } from "./capture-service.js";
 import type { CaptureAction } from "./types.js";
 import { applyCaptureProposalAndRefresh } from "./capture-application-service.js";
+import { loadWorkspaceContext } from "../workspaces/config.js";
 
 interface CaptureCliOptions {
   values: Map<string, string>;
@@ -27,8 +28,10 @@ export async function runCaptureCli(argv: string[], cwd = process.cwd()): Promis
     return 0;
   }
 
+  const workspace = await loadWorkspaceContext({ repoRoot });
+
   if (command === "list") {
-    const proposals = await listCaptureProposals(repoRoot);
+    const proposals = await listCaptureProposals(repoRoot, workspace);
     if (json) console.log(JSON.stringify(proposals, null, 2));
     else if (!proposals.length) console.log("No pending capture proposals.");
     else {
@@ -43,7 +46,7 @@ export async function runCaptureCli(argv: string[], cwd = process.cwd()): Promis
 
   if (command === "show") {
     const proposalId = requireProposalId(options, "show");
-    const proposal = await getCaptureProposal(repoRoot, proposalId);
+    const proposal = await getCaptureProposal(repoRoot, proposalId, workspace);
     if (json) console.log(JSON.stringify(proposal, null, 2));
     else {
       console.log(`${proposal.proposalId} (${proposal.proposedAction})`);
@@ -68,11 +71,14 @@ export async function runCaptureCli(argv: string[], cwd = process.cwd()): Promis
     const proposalId = requireProposalId(options, "apply");
     const actionValue = options.values.get("action");
     if (!actionValue) {
-      throw new Error("Capture apply requires --action <create|append|replace|open-question>.");
+      throw new Error(
+        "Capture apply requires --action <create|append|replace|delete|open-question>.",
+      );
     }
     const action = normalizeAction(actionValue);
     const result = await applyCaptureProposalAndRefresh({
       repoRoot,
+      workspace,
       proposalId,
       action,
       dryRun,
@@ -89,7 +95,7 @@ export async function runCaptureCli(argv: string[], cwd = process.cwd()): Promis
 
   if (command === "reject") {
     const proposalId = requireProposalId(options, "reject");
-    const result = await rejectCaptureProposal(repoRoot, proposalId, dryRun);
+    const result = await rejectCaptureProposal(repoRoot, proposalId, dryRun, workspace);
     if (json) console.log(JSON.stringify(result, null, 2));
     else console.log(`${dryRun ? "Would reject" : "Rejected"} ${result.proposalId}`);
     return 0;
@@ -129,7 +135,7 @@ function requireProposalId(options: CaptureCliOptions, command: string): string 
 
 function normalizeAction(value: string): CaptureAction {
   const normalized = value.replace("-", "_") as CaptureAction;
-  if (!["create", "append", "replace", "open_question"].includes(normalized)) {
+  if (!["create", "append", "replace", "delete", "open_question"].includes(normalized)) {
     throw new Error(`Invalid capture action: ${value}`);
   }
   return normalized;
@@ -148,7 +154,7 @@ function printCaptureHelp(): void {
 Usage:
   gke capture list [--json]
   gke capture show <proposal-id> [--json]
-  gke capture apply <proposal-id> [--action <create|append|replace|open-question>] [--dry-run] [--json]
+  gke capture apply <proposal-id> [--action <create|append|replace|delete|open-question>] [--dry-run] [--json]
   gke capture reject <proposal-id> [--dry-run] [--json]
 
 Global options:

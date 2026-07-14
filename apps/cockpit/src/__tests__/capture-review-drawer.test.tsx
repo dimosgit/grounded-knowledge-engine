@@ -1,7 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { CaptureReviewDrawer } from "../components/CaptureReviewDrawer";
+import { OperatorActions } from "../components/OperatorActions";
 
 afterEach(() => {
   cleanup();
@@ -75,7 +75,7 @@ describe("capture review drawer", () => {
     });
 
     const user = userEvent.setup();
-    render(<CaptureReviewDrawer />);
+    render(<OperatorActions />);
     await user.click(screen.getByRole("button", { name: "Open capture review queue" }));
 
     expect(await screen.findByText("Old body")).toBeInTheDocument();
@@ -92,6 +92,86 @@ describe("capture review drawer", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(`/proposals/${proposalId}/apply`),
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  test("offers only deletion for an ingestion removal proposal", async () => {
+    const proposalId = "capture-20260713090000-fedcba654321";
+    let listCount = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/proposals") && (!init?.method || init.method === "GET")) {
+        listCount += 1;
+        return jsonResponse({
+          proposals:
+            listCount === 1
+              ? [
+                  {
+                    proposalId,
+                    createdAt: "2026-07-13T09:00:00.000Z",
+                    sourceOperation: "ingest",
+                    proposedAction: "delete",
+                    kind: "topic",
+                    title: "Removed chunk",
+                    path: "kb/topics/removed-part-2.md",
+                    requiresReview: true,
+                    reviewReasons: ["consequential-delete"],
+                    duplicateCandidateCount: 0,
+                  },
+                ]
+              : [],
+        });
+      }
+      if (url.endsWith(`/proposals/${proposalId}`)) {
+        return jsonResponse({
+          proposal: {
+            proposalId,
+            createdAt: "2026-07-13T09:00:00.000Z",
+            proposedAction: "delete",
+            proposedNote: {
+              kind: "topic",
+              title: "Removed chunk",
+              path: "kb/topics/removed-part-2.md",
+              track: "domain",
+              module: "general",
+              projectId: null,
+              body: "Removed chunk",
+            },
+            duplicateCandidates: [],
+            evidenceCitations: [],
+            groundedConfidence: null,
+            requiresReview: true,
+            reviewReasons: ["consequential-delete"],
+          },
+          preview: {
+            targetExists: true,
+            currentContent: "Current stale chunk",
+            proposedContent: "Removal marker",
+            currentContentHash: "abc",
+            stale: false,
+          },
+        });
+      }
+      if (url.endsWith(`/proposals/${proposalId}/reject`)) {
+        expect(init?.method).toBe("POST");
+        return jsonResponse({ result: { proposalId, action: "rejected" } });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    const user = userEvent.setup();
+    render(<OperatorActions />);
+    await user.click(screen.getByRole("button", { name: "Open capture review queue" }));
+    await screen.findByText("Current stale chunk");
+
+    const action = screen.getByLabelText("Apply action");
+    expect(action).toHaveTextContent("delete");
+    expect(action).not.toHaveTextContent("append");
+    expect(action).not.toHaveTextContent("replace");
+
+    await user.click(screen.getByRole("button", { name: "Reject" }));
+    await waitFor(() =>
+      expect(screen.getByText("No pending capture proposals.")).toBeInTheDocument(),
     );
   });
 });

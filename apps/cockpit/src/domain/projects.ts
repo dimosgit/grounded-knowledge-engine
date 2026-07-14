@@ -5,8 +5,11 @@ import {
   sectionItems,
   sectionSummary,
 } from "../../../../tools/projects/project-manifest";
+import {
+  calculateProjectAttention,
+  isCompletedProjectStatus,
+} from "../../../../tools/projects/project-attention";
 
-const COMPLETED_LIFECYCLES = new Set(["completed", "done", "complete", "shipped", "delivered"]);
 const ACTIVE_LIFECYCLES = new Set([
   "active",
   "in-progress",
@@ -34,7 +37,21 @@ export const BUCKET_LIFECYCLE: Record<string, string> = {
   reference: "",
 };
 
-export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, string> = {}) {
+export const PROJECT_ATTENTION_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "needs-attention", label: "Needs attention" },
+  { key: "overdue", label: "Overdue" },
+  { key: "blocked", label: "Blocked" },
+  { key: "open-questions", label: "Open questions" },
+] as const;
+
+export type ProjectAttentionFilter = (typeof PROJECT_ATTENTION_FILTERS)[number]["key"];
+
+export function buildProjectSummaries(
+  docs,
+  lifecycleOverrides: Record<string, string> = {},
+  options: { asOf?: string } = {},
+) {
   const projectGroups = new Map();
 
   docs
@@ -60,14 +77,16 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
       const activeDecisions = meaningfulSectionItems(sections.get("active-decisions"));
       const blockers = meaningfulSectionItems(sections.get("blockers")).slice(0, 5);
       const openQuestions = meaningfulSectionItems(sections.get("open-questions"));
-      const completed = COMPLETED_LIFECYCLES.has(
-        (
-          lifecycleOverrides[manifest.projectId] ??
-          normalizeFrontmatterScalar(doc.frontmatter?.lifecycle) ??
-          manifest.status ??
-          ""
-        ).toLowerCase(),
+      const hasLifecycleOverride = Object.prototype.hasOwnProperty.call(
+        lifecycleOverrides,
+        manifest.projectId,
       );
+      const resolvedStatus = (
+        hasLifecycleOverride
+          ? lifecycleOverrides[manifest.projectId]
+          : normalizeFrontmatterScalar(doc.frontmatter?.lifecycle) || manifest.status || ""
+      ).toLowerCase();
+      const completed = isCompletedProjectStatus(resolvedStatus);
       // Single source of truth for tasks: when the record has a checklist,
       // "next" is derived from its open items (in progress first, then not
       // started, in checklist order — checklists are priority-ordered among
@@ -89,12 +108,7 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
         ...explicitPaths.map((item) => resolveLogicalPath(doc.path, item)),
       ]);
       const startHereBrief = outcome || currentStatus || currentFocus;
-      const lifecycle = (
-        lifecycleOverrides[manifest.projectId] ??
-        normalizeFrontmatterScalar(doc.frontmatter?.lifecycle) ??
-        manifest.status ??
-        ""
-      ).toLowerCase();
+      const lifecycle = resolvedStatus;
       const eligiblePaths = buildEligiblePaths(
         docs,
         doc,
@@ -129,6 +143,13 @@ export function buildProjectSummaries(docs, lifecycleOverrides: Record<string, s
         sourceDoc: doc,
         eligiblePaths,
         legacy: manifest.legacy,
+        ...calculateProjectAttention({
+          reviewAfter: manifest.reviewAfter,
+          asOf: options.asOf || new Date().toISOString(),
+          status: resolvedStatus,
+          blockers,
+          openQuestions,
+        }),
       };
       const project = {
         ...projectCore,
@@ -276,6 +297,39 @@ export function buildProjectColumns(projectSummaries) {
   };
 }
 
+export function filterProjectSummaries(projectSummaries, filter: ProjectAttentionFilter = "all") {
+  if (filter === "needs-attention") {
+    return projectSummaries.filter((project) => project.needsAttention);
+  }
+  if (filter === "overdue") {
+    return projectSummaries.filter((project) => project.reviewState === "overdue");
+  }
+  if (filter === "blocked") {
+    return projectSummaries.filter(
+      (project) =>
+        project.reviewState !== "not-applicable" &&
+        (project.statusBucket === "blocked" || project.blockers.length > 0),
+    );
+  }
+  if (filter === "open-questions") {
+    return projectSummaries.filter((project) => project.openQuestions.length > 0);
+  }
+  return projectSummaries;
+}
+
+export function buildProjectAttentionCounts(projectSummaries) {
+  const due = projectSummaries.filter((project) => project.reviewState === "due").length;
+  const overdue = projectSummaries.filter((project) => project.reviewState === "overdue").length;
+  return {
+    due,
+    overdue,
+    dueOrOverdue: due + overdue,
+    blocked: filterProjectSummaries(projectSummaries, "blocked").length,
+    openQuestions: filterProjectSummaries(projectSummaries, "open-questions").length,
+    needsAttention: filterProjectSummaries(projectSummaries, "needs-attention").length,
+  };
+}
+
 export function buildProjectLinkedDocs(activeProject, _projectContextGraph, docs) {
   if (!activeProject) return [];
   const eligible = new Set(activeProject.eligiblePaths || []);
@@ -331,7 +385,7 @@ function isArchivedDoc(doc): boolean {
 
 function getProjectStatusBucket(project): string {
   const lifecycle = project.lifecycle;
-  if (lifecycle && COMPLETED_LIFECYCLES.has(lifecycle)) return "done";
+  if (lifecycle && isCompletedProjectStatus(lifecycle)) return "done";
   if (lifecycle && ACTIVE_LIFECYCLES.has(lifecycle)) return "active";
   if (lifecycle && BLOCKED_LIFECYCLES.has(lifecycle)) return "blocked";
   if (lifecycle && NEXT_LIFECYCLES.has(lifecycle)) return "next";

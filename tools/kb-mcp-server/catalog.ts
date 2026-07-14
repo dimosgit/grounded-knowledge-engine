@@ -429,6 +429,8 @@ function fullTools(options: CatalogOptions): ToolDefinition[] {
             status: { type: "string", enum: ["open", "resolved"] },
             resolvedBy: { type: "string" },
             relatedPath: { type: "string" },
+            owner: { type: "string" },
+            source: { type: "string" },
             dryRun: { type: "boolean" },
           },
           required: ["question", "whyOpen", "whatWouldResolve"],

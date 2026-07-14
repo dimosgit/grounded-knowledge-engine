@@ -1,6 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  authorizeWorkspaceOperationalRead,
+  authorizeWorkspaceWrite,
+} from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
+import {
   normalizeProjectId,
   parseProjectDocument,
   parseProjectFrontmatter,
@@ -42,6 +47,7 @@ const DATE_FIELDS = ["started_at", "updated", "review_after"] as const;
 export interface ProjectServiceOptions {
   repoRoot?: string;
   scanRoots?: string[];
+  workspace?: WorkspaceContext;
 }
 
 export interface CreateProjectOptions extends ProjectServiceOptions {
@@ -157,12 +163,12 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
     tags: normalizeCsvValues(options.tags || []),
   };
   const relPath = `kb/projects/${projectId}/project.md`;
-  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath);
+  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, options.workspace, "write");
   if (await exists(absPath)) {
     throw new Error(`Project already exists: ${relPath}`);
   }
 
-  const duplicates = await listProjects({ repoRoot });
+  const duplicates = await listProjects({ repoRoot, workspace: options.workspace });
   if (duplicates.some((project) => project.projectId === projectId)) {
     throw new Error(`Project ID already exists: ${projectId}`);
   }
@@ -183,11 +189,13 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   });
   const sourceDirectories = options.createSourceDirectory === false ? [] : sourceRoots;
   const sourceDirectoryPaths = await Promise.all(
-    sourceDirectories.map((sourceRoot) => resolveSafeWorkspacePath(repoRoot, sourceRoot)),
+    sourceDirectories.map((sourceRoot) =>
+      resolveSafeWorkspacePath(repoRoot, sourceRoot, options.workspace, "write"),
+    ),
   );
 
   if (!options.dryRun) {
-    await atomicWrite(absPath, content);
+    await atomicWrite(absPath, content, options.workspace);
     for (const sourceAbs of sourceDirectoryPaths) {
       await fs.mkdir(sourceAbs, { recursive: true });
     }
@@ -198,10 +206,16 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
 
 export async function listProjects(options: ProjectServiceOptions = {}): Promise<ProjectSummary[]> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
-  const records = await discoverProjectRecords(repoRoot, options.scanRoots || DEFAULT_SCAN_ROOTS);
+  const records = await discoverProjectRecords(
+    repoRoot,
+    options.scanRoots || DEFAULT_SCAN_ROOTS,
+    options.workspace,
+  );
   const summaries: ProjectSummary[] = [];
 
   for (const record of records) {
+    if (options.workspace)
+      await authorizeWorkspaceOperationalRead(options.workspace, record.absPath);
     const raw = await fs.readFile(record.absPath, "utf8");
     const parsed = parseProjectDocument(raw, record.relPath, "");
     summaries.push({
@@ -227,10 +241,16 @@ export async function getProject(
 ): Promise<LoadedProject> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const projectId = requireCanonicalProjectId(projectIdInput);
-  const records = await discoverProjectRecords(repoRoot, options.scanRoots || DEFAULT_SCAN_ROOTS);
+  const records = await discoverProjectRecords(
+    repoRoot,
+    options.scanRoots || DEFAULT_SCAN_ROOTS,
+    options.workspace,
+  );
   const matches: LoadedProject[] = [];
 
   for (const record of records) {
+    if (options.workspace)
+      await authorizeWorkspaceOperationalRead(options.workspace, record.absPath);
     const raw = await fs.readFile(record.absPath, "utf8");
     const parsed = parseProjectDocument(raw, record.relPath, "");
     if (parsed.manifest.projectId === projectId) {
@@ -253,10 +273,16 @@ export async function validateProject(
 ): Promise<ProjectValidationResult> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const projectId = requireCanonicalProjectId(projectIdInput);
-  const records = await discoverProjectRecords(repoRoot, options.scanRoots || DEFAULT_SCAN_ROOTS);
+  const records = await discoverProjectRecords(
+    repoRoot,
+    options.scanRoots || DEFAULT_SCAN_ROOTS,
+    options.workspace,
+  );
   const matches: LoadedProject[] = [];
 
   for (const record of records) {
+    if (options.workspace)
+      await authorizeWorkspaceOperationalRead(options.workspace, record.absPath);
     const raw = await fs.readFile(record.absPath, "utf8");
     const parsed = parseProjectDocument(raw, record.relPath, "");
     if (parsed.manifest.projectId === projectId) {
@@ -288,6 +314,7 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
   const loaded = await getProject(options.projectId, {
     repoRoot,
     scanRoots: options.scanRoots,
+    workspace: options.workspace,
   });
   let content = loaded.raw;
   const frontmatterUpdates: Record<string, string> = {};
@@ -327,8 +354,13 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
 
   const changed = content !== loaded.raw;
   if (changed && !options.dryRun) {
-    const target = await resolveSafeWorkspacePath(repoRoot, loaded.path);
-    await atomicWrite(target, content);
+    const target = await resolveSafeWorkspacePath(
+      repoRoot,
+      loaded.path,
+      options.workspace,
+      "write",
+    );
+    await atomicWrite(target, content, options.workspace);
   }
   return {
     projectId: loaded.parsed.manifest.projectId,
@@ -343,11 +375,12 @@ export async function addProjectTask(options: AddProjectTaskOptions): Promise<Ad
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const lockPath = options.dryRun
     ? null
-    : await acquireProjectTaskLock(repoRoot, options.projectId);
+    : await acquireProjectTaskLock(repoRoot, options.projectId, options.workspace);
   try {
     const loaded = await getProject(options.projectId, {
       repoRoot,
       scanRoots: options.scanRoots,
+      workspace: options.workspace,
     });
     const text = requireNonEmpty(options.text, "task text");
     const size = normalizeTaskSize(options.size || "M");
@@ -375,8 +408,13 @@ export async function addProjectTask(options: AddProjectTaskOptions): Promise<Ad
     );
     content = updateFrontmatter(content, { updated: todayIso() });
     if (!options.dryRun) {
-      const target = await resolveSafeWorkspacePath(repoRoot, loaded.path);
-      await atomicWrite(target, content);
+      const target = await resolveSafeWorkspacePath(
+        repoRoot,
+        loaded.path,
+        options.workspace,
+        "write",
+      );
+      await atomicWrite(target, content, options.workspace);
     }
 
     return {
@@ -399,9 +437,10 @@ export async function linkProjectSource(
   const loaded = await getProject(options.projectId, {
     repoRoot,
     scanRoots: options.scanRoots,
+    workspace: options.workspace,
   });
   const sourcePath = normalizeWorkspaceRelativePath(options.sourcePath);
-  const sourceAbs = await resolveSafeWorkspacePath(repoRoot, sourcePath);
+  const sourceAbs = await resolveSafeWorkspacePath(repoRoot, sourcePath, options.workspace);
   if (!(await exists(sourceAbs))) throw new Error(`Source path does not exist: ${sourcePath}`);
   const sourceStat = await fs.stat(sourceAbs);
   if (!sourceStat.isFile()) throw new Error(`Source path is not a file: ${sourcePath}`);
@@ -424,6 +463,7 @@ export async function linkProjectSource(
   return updateProject({
     repoRoot,
     scanRoots: options.scanRoots,
+    workspace: options.workspace,
     projectId: options.projectId,
     sections: { "key-documents": items },
     dryRun: options.dryRun,
@@ -743,11 +783,16 @@ function normalizeTaskTextForComparison(value: string): string {
 async function discoverProjectRecords(
   repoRoot: string,
   scanRoots: string[],
+  workspace?: WorkspaceContext,
 ): Promise<Array<{ absPath: string; relPath: string }>> {
   const records: Array<{ absPath: string; relPath: string }> = [];
   for (const scanRoot of scanRoots) {
     const normalizedRoot = normalizeWorkspaceRelativePath(scanRoot);
-    const projectsRoot = await resolveSafeWorkspacePath(repoRoot, `${normalizedRoot}/projects`);
+    const projectsRoot = await resolveSafeWorkspacePath(
+      repoRoot,
+      `${normalizedRoot}/projects`,
+      workspace,
+    );
     let entries;
     try {
       entries = await fs.readdir(projectsRoot, { withFileTypes: true });
@@ -757,14 +802,19 @@ async function discoverProjectRecords(
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const relPath = `${normalizedRoot}/projects/${entry.name}/project.md`;
-      const absPath = await resolveSafeWorkspacePath(repoRoot, relPath);
+      const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, workspace);
       if (await exists(absPath)) records.push({ absPath, relPath });
     }
   }
   return records.sort((a, b) => a.relPath.localeCompare(b.relPath));
 }
 
-async function resolveSafeWorkspacePath(repoRoot: string, relPath: string): Promise<string> {
+async function resolveSafeWorkspacePath(
+  repoRoot: string,
+  relPath: string,
+  workspace?: WorkspaceContext,
+  access: "read" | "write" = "read",
+): Promise<string> {
   const normalized = normalizeWorkspaceRelativePath(relPath);
   const root = path.resolve(repoRoot);
   const target = path.resolve(root, normalized);
@@ -783,10 +833,19 @@ async function resolveSafeWorkspacePath(repoRoot: string, relPath: string): Prom
   if (existingReal !== rootReal && !existingReal.startsWith(`${rootReal}${path.sep}`)) {
     throw new Error(`Path resolves outside the workspace root through a symlink: ${relPath}`);
   }
+  if (workspace) {
+    if (access === "write") await authorizeWorkspaceWrite(workspace, target);
+    else if (await exists(target)) await authorizeWorkspaceOperationalRead(workspace, target);
+  }
   return target;
 }
 
-async function atomicWrite(target: string, content: string): Promise<void> {
+async function atomicWrite(
+  target: string,
+  content: string,
+  workspace?: WorkspaceContext,
+): Promise<void> {
+  if (workspace) await authorizeWorkspaceWrite(workspace, target);
   await fs.mkdir(path.dirname(target), { recursive: true });
   const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
   try {
@@ -798,11 +857,17 @@ async function atomicWrite(target: string, content: string): Promise<void> {
   }
 }
 
-async function acquireProjectTaskLock(repoRoot: string, projectIdInput: string): Promise<string> {
+async function acquireProjectTaskLock(
+  repoRoot: string,
+  projectIdInput: string,
+  workspace?: WorkspaceContext,
+): Promise<string> {
   const projectId = normalizeProjectId(projectIdInput);
   const lockPath = await resolveSafeWorkspacePath(
     repoRoot,
     `.gke/project-task-locks/${projectId}.lock`,
+    workspace,
+    "write",
   );
   await fs.mkdir(path.dirname(lockPath), { recursive: true });
   for (let attempt = 0; attempt < 50; attempt += 1) {

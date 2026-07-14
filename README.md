@@ -31,7 +31,7 @@ workspace only.
 | **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations.                         |
 | **Daily project review**     | `gke review` and `gke://workspace/review` return due reviews, attention reasons, and explicitly scoped project changes since an ISO date.                           |
 | **One MCP server**           | Claude Code, Codex, and Gemini CLI use the same local `kb` server and knowledge base.                                                                               |
-| **Operator Cockpit**         | The local React Cockpit adds grounded Ask and capture review to the library, project board, detail, handoff, and graph views. The public preview remains read-only. |
+| **Operator Cockpit**         | The React Cockpit adds daily-attention summaries and Board filters. Local development also adds grounded Ask, capture review, and source-provenance project deltas. |
 | **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                       |
 
 ## The compounding loop
@@ -165,13 +165,16 @@ existing-target writes now enter review instead of mutating canonical content
 immediately.
 
 While the local Cockpit development server is running, **Ask** returns an
-evidence-gated answer with confidence, citations, and source excerpts. An
-explicit **Capture answer** action reruns grounding server-side, immediately
-writes a clear new note, and sends only ambiguous or conflicting captures to
-**Capture review**. The review drawer shows current/proposed Markdown, routing
-evidence, duplicate candidates, explicit apply actions, and rejection. These
-local adapters are development-only and are not included in the public static
-preview.
+evidence-gated answer with confidence, citations, and source excerpts. Project
+Detail scopes both grounding and capture to its verified active project;
+elsewhere the scope is explicitly workspace-wide. An explicit **Capture
+answer** action reruns grounding server-side, immediately writes a clear new
+note, and sends only ambiguous or conflicting captures to **Capture review**.
+New proposals update the shared queue badge immediately, and **Review now**
+opens the exact proposal. The review drawer shows current/proposed Markdown,
+routing evidence, duplicate candidates, explicit apply actions, and rejection.
+These local adapters are development-only and are not included in the public
+static preview.
 
 Project checklist work has a direct command and does not need to masquerade as
 a knowledge note:
@@ -381,10 +384,13 @@ available; PDF/DOCX/XLSX fall back to native Node extractors. Use
 `GKE_INGEST_CONVERTER=native` for the old native-only path or
 `GKE_INGEST_CONVERTER=markitdown` to require MarkItDown.
 
-Each source receives a deterministic path, making re-ingestion idempotent and
-preventing same-named files from colliding. Secret-like values are scrubbed by
-default. Image-only PDFs are detected and skipped in native mode because OCR is
-outside the current scope.
+Each source receives a stable workspace-local ID and a canonical record under
+`kb/sources/`. Raw-byte hashes and extraction settings make unchanged
+re-ingestion skip conversion. Changed and removed chunks enter the normal
+capture review queue, and the accepted source hash advances only after all
+candidate proposals are resolved successfully. Secret-like values are scrubbed
+by default. Image-only PDFs are detected and skipped in native mode because OCR
+is outside the current scope.
 
 Agents can also capture an attached document through the connected MCP server;
 see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
@@ -396,6 +402,7 @@ see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | [`tools/grounding`](tools/grounding)         | Deterministic indexing, retrieval, grounded synthesis, and evaluation.                                                   |
 | [`tools/projects`](tools/projects)           | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting.                  |
+| [`tools/questions`](tools/questions)         | Atomic, deduplicated, workspace-authorized open-question mutation shared by protocol and local adapters.                 |
 | [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts.                      |
 | [`tools/ingest`](tools/ingest)               | Local document extraction and capture adapters.                                                                          |
 | [`apps/cockpit`](apps/cockpit)               | Optional React preview over the same Markdown and shared project model; hosted as a static demo at `gke.dimouzunov.com`. |

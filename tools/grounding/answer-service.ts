@@ -44,6 +44,7 @@ export interface GroundedAnswerInput {
   mode?: unknown;
   track?: unknown;
   module?: unknown;
+  projectId?: unknown;
   includeArchive?: boolean;
   backend?: unknown;
   debug?: boolean;

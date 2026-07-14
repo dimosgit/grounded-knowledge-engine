@@ -1,6 +1,7 @@
 import { applyUnreviewedCapture, persistCaptureProposal, planCapture } from "./capture-service.js";
 import { refreshCaptureRetrievalState } from "./capture-application-service.js";
 import type { CaptureCitation, CaptureProposal } from "./types.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 
 export interface GroundedCaptureEvidence {
   path: string;
@@ -21,6 +22,7 @@ export interface GroundedAnswerForCapture {
 
 export interface CaptureGroundedAnswerOptions {
   repoRoot: string;
+  workspace?: WorkspaceContext;
   grounded: GroundedAnswerForCapture;
   title: string;
   kind?: "topic" | "term";
@@ -61,6 +63,7 @@ export async function captureGroundedAnswer(
   const kind = options.kind || "topic";
   const plan = await planCapture({
     repoRoot: options.repoRoot,
+    workspace: options.workspace,
     sourceOperation: "answer",
     kind,
     title,
@@ -87,7 +90,7 @@ export async function captureGroundedAnswer(
   if (plan.proposal.requiresReview) {
     const proposalPath = options.dryRun
       ? null
-      : await persistCaptureProposal(options.repoRoot, plan.proposal);
+      : await persistCaptureProposal(options.repoRoot, plan.proposal, options.workspace);
     return {
       action: "proposed",
       path: plan.proposal.proposedNote.path,
@@ -105,10 +108,11 @@ export async function captureGroundedAnswer(
 
   const applied = await applyUnreviewedCapture(options.repoRoot, plan.proposal, {
     dryRun: options.dryRun,
+    workspace: options.workspace,
     refresh:
       options.refresh ||
       (async () => {
-        await refreshCaptureRetrievalState(options.repoRoot);
+        await refreshCaptureRetrievalState(options.repoRoot, options.workspace);
       }),
   });
   return {

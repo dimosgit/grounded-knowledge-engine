@@ -14,7 +14,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { detectFormat, extractText, isSupported } from "./extractors.js";
 import { deriveTitle, scrubSecrets, chunkText, normalizeDocument } from "./normalize.js";
-import { slugifySource } from "./ingest.js";
+import { mergeSourceMetadata, slugifySource } from "./ingest.js";
+import { deriveSourceId } from "./source-record.js";
 import { FIXTURE_TOKENS } from "./fixtures/tokens.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -101,6 +102,24 @@ function testSlugify(): void {
   assert.equal(slugifySource("sample.docx"), "sample-docx");
   assert.equal(slugifySource("sub dir/My Report.xlsx"), "sub-dir-my-report-xlsx");
   assert.equal(slugifySource("...weird___name.txt"), "weird-name-txt");
+  assert.equal(deriveSourceId("sub dir/My Report.xlsx"), deriveSourceId("sub dir\\My Report.xlsx"));
+  assert.notEqual(deriveSourceId("a/b.md"), deriveSourceId("a-b.md"));
+  assert.notEqual(deriveSourceId("Report.md"), deriveSourceId("report.md"));
+}
+
+function testSourceMetadataPreservesUnknownFrontmatter(): void {
+  const existing = `---\ncustom_field: keep-me\nsource_id: old-source\n---\n# Old\n`;
+  const generated = `---\nmodule: general\nstatus: draft\n---\n# New\n\nNew body.\n`;
+  const merged = mergeSourceMetadata(generated, existing, {
+    source_id: "stable-source",
+    source_uri: "folder/report.md",
+    source_chunk: "1",
+  });
+  assert.match(merged, /custom_field: keep-me/);
+  assert.match(merged, /source_id: stable-source/);
+  assert.match(merged, /source_uri: folder\/report\.md/);
+  assert.ok(!merged.includes("# Old"));
+  assert.ok(merged.includes("# New"));
 }
 
 function testNormalizeDocumentChunkingAndProvenance(): void {
@@ -181,6 +200,7 @@ const tests = [
   testScrubSecrets,
   testChunkText,
   testSlugify,
+  testSourceMetadataPreservesUnknownFrontmatter,
   testNormalizeDocumentChunkingAndProvenance,
   testMarkItDownConverter,
   testMarkItDownAutoFallsBackToNativeExtractor,

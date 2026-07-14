@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadWorkspaceContext } from "../workspaces/config.js";
 import {
   CaptureConflictError,
   applyCaptureProposal,
@@ -445,6 +446,50 @@ async function testCaptureCliListShowApplyAndReject(): Promise<void> {
   });
 }
 
+async function testReadOnlyWorkspaceRejectsReviewedMutations(): Promise<void> {
+  await withWorkspace(async (repoRoot) => {
+    const targetPath = "kb/topics/read-only-reviewed-target.md";
+    const original = "# Read-only Reviewed Target\n\nOriginal content.\n";
+    await write(repoRoot, targetPath, original);
+    const planned = await planCapture({
+      repoRoot,
+      sourceOperation: "answer",
+      kind: "topic",
+      title: "Read-only Reviewed Target",
+      body: "This replacement must remain blocked.",
+      requestedPath: targetPath,
+      proposedAction: "replace",
+      updated: "2026-07-14",
+    });
+    const workspace = await loadWorkspaceContext({
+      repoRoot,
+      scanRoots: ["demo-kb", "kb"],
+      writeRoots: ["kb", ".gke"],
+      environment: { KB_MCP_WORKSPACE_READ_ONLY: "true" },
+    });
+
+    await assert.rejects(
+      () =>
+        applyCaptureProposal({
+          repoRoot,
+          workspace,
+          proposalId: planned.proposal.proposalId,
+          action: "replace",
+        }),
+      /read-only/i,
+    );
+    await assert.rejects(
+      () => rejectCaptureProposal(repoRoot, planned.proposal.proposalId, false, workspace),
+      /read-only/i,
+    );
+    assert.equal(await fs.readFile(path.join(repoRoot, targetPath), "utf8"), original);
+    assert.equal(
+      (await getCaptureProposal(repoRoot, planned.proposal.proposalId, workspace)).proposalId,
+      planned.proposal.proposalId,
+    );
+  });
+}
+
 async function testUnsafePathsAreRejected(): Promise<void> {
   await withWorkspace(async (repoRoot) => {
     for (const requestedPath of [
@@ -542,6 +587,7 @@ const tests = [
   testDryRunPreservesTargetAndProposal,
   testConcurrentApplyAllowsOneCanonicalMutation,
   testCaptureCliListShowApplyAndReject,
+  testReadOnlyWorkspaceRejectsReviewedMutations,
   testUnsafePathsAreRejected,
   testSymlinkEscapesAreRejected,
 ];
@@ -566,6 +612,8 @@ console.log("Capture service tests passed.");
 async function withWorkspace(work: (repoRoot: string) => Promise<void>): Promise<void> {
   const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-capture-service-"));
   try {
+    await fs.mkdir(path.join(repoRoot, "demo-kb"), { recursive: true });
+    await fs.mkdir(path.join(repoRoot, "kb"), { recursive: true });
     await work(repoRoot);
   } finally {
     await fs.rm(repoRoot, { recursive: true, force: true });

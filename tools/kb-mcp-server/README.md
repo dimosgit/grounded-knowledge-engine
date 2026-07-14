@@ -23,7 +23,9 @@ The `full` profile additionally exposes:
 - `kb.list_modules`;
 - `kb.answer_grounded`;
 - `kb.refresh`;
-- `kb.upsert_note` and `kb.add_open_question` when writes are enabled.
+- `kb.upsert_note` and `kb.add_open_question` when writes are enabled. Open
+  questions use the shared atomic mutation service, so exact normalized
+  duplicates return `unchanged` instead of adding another entry.
 
 When writes are disabled, mutation tools are omitted from discovery.
 `kb.answer_and_capture` remains available as a read-only grounded answer tool
@@ -133,6 +135,28 @@ The server advertises:
 Resources use logical, workspace-relative identifiers and do not expose host
 filesystem paths.
 
+## Workspace boundary
+
+At startup the server loads `.gke/workspace.json` when present, or derives the
+backward-compatible `default` workspace from the environment. It resolves the
+repository and configured roots once, rejects traversal and symlink escapes,
+and never switches workspace during a request. A minimal local configuration is:
+
+```json
+{
+  "id": "client-alpha",
+  "label": "Client Alpha",
+  "scanRoots": ["kb"],
+  "writeRoots": ["kb", ".gke", ".cache"],
+  "readOnly": true,
+  "sensitivity": "sensitive"
+}
+```
+
+`gke://workspace/info` exposes this logical identity and the configured
+relative roots, never absolute host paths. A read-only workspace disables
+writes even if `KB_MCP_ENABLE_WRITES=true`.
+
 ## Environment variables
 
 - `KB_MCP_REPO_ROOT`: repository/workspace root. Defaults to this repository.
@@ -154,6 +178,13 @@ filesystem paths.
 - `KB_MCP_LOG_LEVEL`: `off|error|warn|info|debug`. Defaults to `error`.
 - `KB_MCP_WORKSPACE_ID`: logical workspace identifier exposed by the workspace
   resource. Defaults to `default`.
+- `KB_MCP_WORKSPACE_LABEL`: fallback label when `.gke/workspace.json` is absent.
+- `KB_MCP_WORKSPACE_SENSITIVITY`: `personal|internal|sensitive|restricted`;
+  defaults to `internal`.
+- `KB_MCP_WORKSPACE_READ_ONLY`: fallback read-only setting when configuration
+  is absent. Defaults to `false`.
+- `KB_MCP_WRITE_ROOTS`: comma-separated workspace-relative write roots. Defaults
+  to `kb,.gke,.cache`; `.cache` contains only disposable retrieval indexes.
 
 ## Protocol and safety
 

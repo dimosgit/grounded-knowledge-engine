@@ -8,12 +8,17 @@ import {
 } from "../../../tools/grounding/answer-service.js";
 import { getKbRetriever } from "../../../tools/grounding/retriever.js";
 import { getSqliteKbRetriever } from "../../../tools/grounding/sqlite-index.js";
+import type { IndexedDocument, SearchHit, SearchResult } from "../../../tools/grounding/types.js";
 import {
   captureGroundedAnswer,
   type CaptureGroundedAnswerOptions,
   type CaptureGroundedAnswerResult,
 } from "../../../tools/capture/grounded-capture-service.js";
 import { CaptureConflictError } from "../../../tools/capture/capture-service.js";
+import { getProject, type LoadedProject } from "../../../tools/projects/project-service.js";
+import { isDocumentInProject } from "../../../tools/projects/project-scope.js";
+import { loadWorkspaceContext } from "../../../tools/workspaces/config.js";
+import type { WorkspaceContext } from "../../../tools/workspaces/types.js";
 import {
   assertLocalRequest,
   assertOnlyKeys,
@@ -32,18 +37,31 @@ const CAPTURE_KEYS = [...ASK_KEYS, "title", "kind", "requestedPath"];
 
 export interface GroundedAskPluginOptions {
   repoRoot: string;
+  workspace?: WorkspaceContext;
   answer?: (input: GroundedAnswerInput) => Promise<GroundedAnswerResult>;
   capture?: (options: CaptureGroundedAnswerOptions) => Promise<CaptureGroundedAnswerResult>;
 }
 
+type GroundedAskRequestOptions = Omit<GroundedAskPluginOptions, "workspace"> & {
+  workspace: WorkspaceContext;
+};
+
 export function createGroundedAskPlugin(options: GroundedAskPluginOptions): Plugin {
   const repoRoot = path.resolve(options.repoRoot);
+  let workspacePromise: Promise<WorkspaceContext> | null = null;
+  const getWorkspace = () =>
+    (workspacePromise ??= options.workspace
+      ? Promise.resolve(options.workspace)
+      : loadWorkspaceContext({ repoRoot }));
   return {
     name: "grounded-ask-local-api",
     apply: "serve",
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
-        void handleGroundedAskRequest(req, res, { ...options, repoRoot })
+        void getWorkspace()
+          .then((workspace) =>
+            handleGroundedAskRequest(req, res, { ...options, repoRoot, workspace }),
+          )
           .then((handled) => {
             if (!handled) next();
           })
@@ -65,7 +83,7 @@ export function createGroundedAskPlugin(options: GroundedAskPluginOptions): Plug
 export async function handleGroundedAskRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  options: GroundedAskPluginOptions,
+  options: GroundedAskRequestOptions,
 ): Promise<boolean> {
   let requestUrl: URL;
   try {
@@ -87,6 +105,15 @@ export async function handleGroundedAskRequest(
     assertOnlyKeys(body, isCapture ? CAPTURE_KEYS : ASK_KEYS);
     const question = requiredString(body.question, "question", 3, 2_000);
     const strict = optionalBoolean(body.strict, "strict") ?? true;
+    const requestedProjectId = optionalString(body.projectId, "projectId", 120);
+    const project = requestedProjectId
+      ? await getProject(requestedProjectId, {
+          repoRoot: options.repoRoot,
+          scanRoots: [...options.workspace.scanRoots],
+          workspace: options.workspace,
+        })
+      : null;
+    const projectId = project?.parsed.manifest.projectId;
     const answerInput: GroundedAnswerInput = {
       question,
       strict,
@@ -94,10 +121,11 @@ export async function handleGroundedAskRequest(
       mode: optionalString(body.mode, "mode", 40),
       track: optionalString(body.track, "track", 120),
       module: optionalString(body.module, "module", 120),
+      projectId,
     };
     const grounded = options.answer
       ? await options.answer(answerInput)
-      : await runGroundedAnswer(options.repoRoot, answerInput);
+      : await runGroundedAnswer(options.repoRoot, answerInput, options.workspace, project);
 
     if (!isCapture) {
       sendJson(res, 200, { answer: shapeGroundedAnswer(grounded) });
@@ -108,13 +136,14 @@ export async function handleGroundedAskRequest(
     const kind = optionalEnum(body.kind, "kind", ["topic", "term"] as const) || "topic";
     const captureOptions: CaptureGroundedAnswerOptions = {
       repoRoot: options.repoRoot,
+      workspace: options.workspace,
       grounded,
       title,
       kind,
       requestedPath: optionalString(body.requestedPath, "requestedPath", 300),
       track: optionalString(body.track, "track", 120),
       module: optionalString(body.module, "module", 120),
-      projectId: optionalString(body.projectId, "projectId", 120),
+      projectId,
       owner: "cockpit-local",
     };
     const capture = options.capture
@@ -131,18 +160,82 @@ export async function handleGroundedAskRequest(
 async function runGroundedAnswer(
   repoRoot: string,
   input: GroundedAnswerInput,
+  workspace: WorkspaceContext,
+  project: LoadedProject | null,
 ): Promise<GroundedAnswerResult> {
   const backend = String(input.backend || process.env.KB_MCP_RETRIEVAL_BACKEND || "bm25")
     .trim()
     .toLowerCase();
   const retriever =
     backend === "sqlite"
-      ? await getSqliteKbRetriever({ repoRoot })
-      : await getKbRetriever({ repoRoot });
+      ? await getSqliteKbRetriever({ repoRoot, workspace })
+      : await getKbRetriever({ repoRoot, workspace });
+  const allDocuments = project ? await retriever.getDocuments() : null;
+  const scopedDocuments = project ? getProjectDocuments(allDocuments || [], project) : null;
+  const allowedPaths = scopedDocuments
+    ? new Set(scopedDocuments.map((document) => document.relPath))
+    : null;
   return answerGrounded(input, {
-    search: async (args) => retriever.search(args),
-    listDocuments: async () => retriever.getDocuments(),
+    search: async (args) => {
+      const result = await retriever.search(
+        allowedPaths ? { ...args, limit: 30, disableCache: true } : args,
+      );
+      return allowedPaths
+        ? scopeSearchResult(result, allowedPaths, Number(args.limit) || 8)
+        : result;
+    },
+    listDocuments: async () => scopedDocuments || retriever.getDocuments(),
   });
+}
+
+function getProjectDocuments(documents: IndexedDocument[], project: LoadedProject) {
+  const { manifest, explicitPaths } = project.parsed;
+  return documents.filter((document) =>
+    isDocumentInProject(
+      document,
+      manifest.projectId,
+      project.path,
+      manifest.sourceRoots,
+      explicitPaths,
+    ),
+  );
+}
+
+function scopeSearchResult(
+  result: SearchResult,
+  allowedPaths: ReadonlySet<string>,
+  limit: number,
+): SearchResult {
+  const hits = result.hits.filter((hit) => allowedPaths.has(hit.path)).slice(0, limit);
+  return {
+    ...result,
+    hitCount: hits.length,
+    hits,
+    signals: buildEvidenceSignals(hits, result.queryTokens),
+  };
+}
+
+function buildEvidenceSignals(hits: SearchHit[], queryTokens: string[]) {
+  const topHits = hits.slice(0, 5);
+  const coveredTokens = new Set<string>();
+  const sourceCounts = new Map<string, number>();
+  for (const hit of topHits) {
+    for (const token of hit.matchedTokens || []) coveredTokens.add(token);
+    sourceCounts.set(hit.path, (sourceCounts.get(hit.path) || 0) + 1);
+  }
+  const dominantSourceShare = topHits.length
+    ? Math.max(...sourceCounts.values()) / topHits.length
+    : 0;
+  return {
+    topScore: roundSignal(topHits[0]?.score || 0),
+    uniqueSources: sourceCounts.size,
+    tokenCoverage: roundSignal(queryTokens.length ? coveredTokens.size / queryTokens.length : 0),
+    dominantSourceShare: roundSignal(dominantSourceShare),
+  };
+}
+
+function roundSignal(value: number): number {
+  return Number(value.toFixed(3));
 }
 
 function shapeGroundedAnswer(answer: GroundedAnswerResult) {
@@ -222,8 +315,14 @@ function sendGroundedAskError(res: ServerResponse, error: unknown): void {
     sendJson(res, 409, { error: error.message, code: "capture_conflict" });
     return;
   }
-  if (error instanceof Error && /project.*not found|invalid project/i.test(error.message)) {
-    sendJson(res, 400, { error: error.message, code: "invalid_project" });
+  if (
+    error instanceof Error &&
+    /unknown project|duplicate project|invalid project/i.test(error.message)
+  ) {
+    sendJson(res, 400, {
+      error: "Project scope is invalid or unavailable.",
+      code: "invalid_project",
+    });
     return;
   }
   sendJson(res, 500, { error: "Grounded Ask request failed.", code: "internal_error" });

@@ -10,6 +10,8 @@ import {
 } from "../../../tools/capture/capture-service.js";
 import { applyCaptureProposalAndRefresh } from "../../../tools/capture/capture-application-service.js";
 import type { CaptureAction, CaptureProposal } from "../../../tools/capture/types.js";
+import { loadWorkspaceContext } from "../../../tools/workspaces/config.js";
+import type { WorkspaceContext } from "../../../tools/workspaces/types.js";
 import {
   assertLocalRequest,
   assertOnlyKeys,
@@ -25,25 +27,45 @@ export { assertLocalRequest } from "./local-dev-api.js";
 const API_ROOT = "/__gke/capture";
 const PROPOSALS_PATH = `${API_ROOT}/proposals`;
 const MAX_REQUEST_BODY_BYTES = 4 * 1024;
-const CAPTURE_ACTIONS = new Set<CaptureAction>(["create", "append", "replace", "open_question"]);
+const CAPTURE_ACTIONS = new Set<CaptureAction>([
+  "create",
+  "append",
+  "replace",
+  "delete",
+  "open_question",
+]);
 
 export interface CaptureReviewPluginOptions {
   repoRoot: string;
+  workspace?: WorkspaceContext;
   refreshIndex?: () => Promise<void>;
 }
 
+type CaptureReviewRequestOptions = Omit<CaptureReviewPluginOptions, "workspace"> & {
+  workspace: WorkspaceContext;
+};
+
 export function createCaptureReviewPlugin(options: CaptureReviewPluginOptions): Plugin {
   const repoRoot = path.resolve(options.repoRoot);
+  let workspacePromise: Promise<WorkspaceContext> | null = null;
+  const getWorkspace = () =>
+    (workspacePromise ??= options.workspace
+      ? Promise.resolve(options.workspace)
+      : loadWorkspaceContext({ repoRoot }));
 
   return {
     name: "capture-review-local-api",
     apply: "serve",
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
-        void handleCaptureReviewRequest(req, res, {
-          repoRoot,
-          ...(options.refreshIndex ? { refreshIndex: options.refreshIndex } : {}),
-        })
+        void getWorkspace()
+          .then((workspace) =>
+            handleCaptureReviewRequest(req, res, {
+              repoRoot,
+              workspace,
+              ...(options.refreshIndex ? { refreshIndex: options.refreshIndex } : {}),
+            }),
+          )
           .then((handled) => {
             if (!handled) next();
           })
@@ -68,7 +90,7 @@ export function createCaptureReviewPlugin(options: CaptureReviewPluginOptions): 
 export async function handleCaptureReviewRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  options: CaptureReviewPluginOptions,
+  options: CaptureReviewRequestOptions,
 ): Promise<boolean> {
   const rawUrl = req.url || "/";
   if (!rawUrl.startsWith(API_ROOT)) return false;
@@ -87,7 +109,7 @@ export async function handleCaptureReviewRequest(
 
     if (requestUrl.pathname === PROPOSALS_PATH) {
       if (method !== "GET") throw methodNotAllowed("GET");
-      const proposals = await listCaptureProposals(options.repoRoot);
+      const proposals = await listCaptureProposals(options.repoRoot, options.workspace);
       sendJson(res, 200, { proposals: proposals.map(toProposalSummary) });
       return true;
     }
@@ -100,7 +122,11 @@ export async function handleCaptureReviewRequest(
 
     if (!route.operation) {
       if (method !== "GET") throw methodNotAllowed("GET");
-      const review = await previewCaptureProposal(options.repoRoot, route.proposalId);
+      const review = await previewCaptureProposal(
+        options.repoRoot,
+        route.proposalId,
+        options.workspace,
+      );
       sendJson(res, 200, {
         proposal: review.proposal,
         preview: {
@@ -132,6 +158,7 @@ export async function handleCaptureReviewRequest(
       }
       const applyOptions = {
         repoRoot: options.repoRoot,
+        workspace: options.workspace,
         proposalId: route.proposalId,
         action: action as CaptureAction,
       };
@@ -143,7 +170,12 @@ export async function handleCaptureReviewRequest(
     }
 
     assertOnlyKeys(body, []);
-    const result = await rejectCaptureProposal(options.repoRoot, route.proposalId);
+    const result = await rejectCaptureProposal(
+      options.repoRoot,
+      route.proposalId,
+      false,
+      options.workspace,
+    );
     sendJson(res, 200, { result });
     return true;
   } catch (error) {
@@ -194,6 +226,10 @@ function sendCaptureError(res: ServerResponse, error: unknown): void {
   }
   if (error instanceof CaptureConflictError) {
     sendJson(res, 409, { error: error.message, code: "capture_conflict" });
+    return;
+  }
+  if (error instanceof Error && /workspace is read-only/i.test(error.message)) {
+    sendJson(res, 403, { error: "Workspace is read-only.", code: "workspace_read_only" });
     return;
   }
   if (error instanceof Error && /capture proposal not found/i.test(error.message)) {

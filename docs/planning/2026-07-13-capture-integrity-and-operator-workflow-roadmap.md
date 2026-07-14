@@ -1,9 +1,12 @@
 # Capture Integrity and Operator Workflow Roadmap
 
-**Status:** In progress — capture P0, policy routing, project task capture, and
-the local Cockpit Ask/review workflow are implemented. Later roadmap items for
-daily attention, source-aware ingestion, and scaling remain planned. **Review
-date:** 2026-07-13. **Repository:** Grounded Knowledge Engine.
+**Status:** In progress — capture P0, policy routing, project task capture,
+daily attention in the engine/CLI/read-only MCP resource, source-aware
+ingestion, shared atomic open-question mutation, and the local Cockpit
+project-scoped Ask/live review workflow, and Cockpit daily attention are
+implemented. Cockpit scaling remains planned. **Review date:** 2026-07-14. **Repository:** Grounded
+Knowledge Engine. **Current execution:** [Current Hardening and Operator
+Execution Plan](2026-07-14-current-hardening-and-operator-execution-plan.md).
 
 ## Product decision
 
@@ -136,7 +139,9 @@ open-question attention, and explicitly scoped document changes since an ISO
 date. Change provenance prefers Git commit timestamps and falls back to
 frontmatter or file modification time for dirty, ignored, or non-Git files.
 `gke://workspace/review` exposes the current compact report without adding a
-core MCP tool. Cockpit attention filters remain planned.
+core MCP tool. The Cockpit now reuses browser-safe attention rules for Hub
+summaries and Board filters; local development additionally exposes a bounded,
+read-only changed-document view with source provenance.
 
 #### Outcome
 
@@ -197,6 +202,11 @@ small public demo corpus.
   gap. Do not introduce embeddings as a speculative prerequisite.
 
 ### P1 — Source-Aware Ingestion and Re-ingestion Diffs
+
+**Implementation status:** Implemented on 2026-07-14. Raw-byte and extraction
+settings hashes short-circuit unchanged sources; canonical source records retain
+accepted converter/version provenance; changed and removed chunks use the
+capture review queue and candidate state under `.gke/`.
 
 #### Outcome
 
@@ -290,7 +300,8 @@ the current MCP schemas and transport behavior throughout the refactor.
 ### Phase 2 — Make review operational
 
 1. Add policy-driven routing. **Implemented.**
-2. Add due-review/project-delta output. **Engine, CLI, and resource implemented.**
+2. Add due-review/project-delta output. **Engine, CLI, resource, and Cockpit
+   attention implemented.**
 3. Add source-aware ingestion deltas.
 4. Expand retrieval evaluation categories.
 

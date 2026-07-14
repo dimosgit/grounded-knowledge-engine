@@ -146,6 +146,8 @@ export function ProjectDetailView({
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
+      askProjectId={activeProject?.id}
+      askProjectTitle={activeProject?.title}
     >
       <div className="mx-auto flex max-w-[1200px] flex-col gap-10 px-4 py-8 md:px-8">
         <section className="flex flex-col justify-between gap-4 border-b border-border-subtle pb-6 md:flex-row md:items-end">
