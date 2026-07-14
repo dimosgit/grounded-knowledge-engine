@@ -1,0 +1,157 @@
+{
+  "description": "Isolated synthetic workspace-shape quality gate for exact recall, vague recall, project isolation, abstention, freshness, filters, and citations.",
+  "floors": {
+    "overall": {
+      "recallAtK": 1,
+      "top1Accuracy": 1,
+      "mrrAtK": 1,
+      "passRateAtK": 1,
+      "expectedCoverageAtK": 1,
+      "citationPathCoverage": 1,
+      "citationResolvableRate": 1,
+      "hardNegativeCleanRateAtK": 1,
+      "abstentionAccuracy": 1
+    },
+    "categories": {
+      "citation": {
+        "expectedCoverageAtK": 1,
+        "citationPathCoverage": 1
+      },
+      "exact": {
+        "recallAtK": 1,
+        "top1Accuracy": 1
+      },
+      "multi-track": {
+        "passRateAtK": 1
+      },
+      "negative": {
+        "abstentionAccuracy": 1,
+        "hardNegativeCleanRateAtK": 1
+      },
+      "project-isolation": {
+        "top1Accuracy": 1
+      },
+      "stale-current": {
+        "top1Accuracy": 1
+      },
+      "vague": {
+        "recallAtK": 1,
+        "top1Accuracy": 1
+      }
+    }
+  },
+  "cases": [
+    {
+      "id": "exact-term-lumen-key",
+      "category": "exact",
+      "query": "define LumenKey reconciliation marker",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/terms/lumen-key.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "exact-title-orbit-matrix",
+      "category": "exact",
+      "query": "Orbit Handoff Matrix",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/topics/orbit-handoff-matrix.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "vague-recall-blue-envelope",
+      "category": "vague",
+      "query": "something about the blue packet waiting step before courier handoff",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/topics/blue-envelope-recall.md"],
+      "forbiddenPathPatterns": [],
+      "expectAbstention": false
+    },
+    {
+      "id": "project-isolation-atlas",
+      "category": "project-isolation",
+      "query": "Atlas north pad Meridian launch readiness owner ATLAS-NORTH-47",
+      "mode": "project",
+      "track": "launches",
+      "module": "meridian",
+      "expectedPathPatterns": ["kb/projects/atlas/project.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "project-isolation-beacon",
+      "category": "project-isolation",
+      "query": "Beacon south pad Meridian launch readiness owner BEACON-SOUTH-82",
+      "mode": "project",
+      "track": "launches",
+      "module": "meridian",
+      "expectedPathPatterns": ["kb/projects/beacon/project.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "hard-negative-abstention-boundary",
+      "category": "negative",
+      "query": "may a missing Zephyr-Null procedure be inferred from a similar project",
+      "mode": "generic",
+      "track": "governance",
+      "module": "grounding",
+      "expectedPathPatterns": ["kb/topics/abstention-boundary.md"],
+      "forbiddenPathPatterns": [],
+      "expectAbstention": true
+    },
+    {
+      "id": "hard-negative-unknown-procedure",
+      "category": "negative",
+      "query": "give the exact pressure sequence for the nonexistent Nacre-Delta procedure",
+      "mode": "generic",
+      "expectedPathPatterns": [],
+      "forbiddenPathPatterns": [],
+      "expectAbstention": true
+    },
+    {
+      "id": "stale-versus-current-copper-window",
+      "category": "stale-current",
+      "query": "current canonical Copper Window rotation cadence 21 days amber checksum",
+      "mode": "generic",
+      "track": "operations",
+      "module": "scheduling",
+      "expectedPathPatterns": ["kb/topics/copper-window-current.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "multi-track-red-filter",
+      "category": "multi-track",
+      "query": "signal bridge escalation drill operator channel",
+      "mode": "generic",
+      "track": "red",
+      "module": "bridge",
+      "expectedPathPatterns": ["kb/topics/red-track-signal-bridge.md"],
+      "forbiddenPathPatterns": ["kb/topics/blue-track-signal-bridge.md"]
+    },
+    {
+      "id": "multi-track-blue-filter",
+      "category": "multi-track",
+      "query": "signal bridge escalation drill operator channel",
+      "mode": "generic",
+      "track": "blue",
+      "module": "bridge",
+      "expectedPathPatterns": ["kb/topics/blue-track-signal-bridge.md"],
+      "forbiddenPathPatterns": ["kb/topics/red-track-signal-bridge.md"]
+    },
+    {
+      "id": "citation-path-coverage-aurora-packet",
+      "category": "citation",
+      "query": "Aurora audit citation packet checksum approver evidence review ticket",
+      "mode": "generic",
+      "track": "audit",
+      "module": "aurora",
+      "expectedPathPatterns": [
+        "kb/sources/aurora-checksum-evidence.md",
+        "kb/sources/aurora-approval-evidence.md"
+      ],
+      "expectedCitationPathPatterns": [
+        "kb/sources/aurora-checksum-evidence.md",
+        "kb/sources/aurora-approval-evidence.md"
+      ],
+      "forbiddenPathPatterns": []
+    }
+  ]
+}

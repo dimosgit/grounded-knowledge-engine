@@ -48,8 +48,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Retrieval eval
-        run: npm run eval -- --refresh
+      - name: Isolated retrieval quality gate (BM25 + SQLite)
+        run: npm run test:retrieval
 
       - name: Configure shared MCP server adapters
         run: npm run setup:mcp -- --skip-smoke

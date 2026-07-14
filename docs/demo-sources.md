@@ -5,9 +5,9 @@ layer of original orchestration notes authored for this repository.
 
 ## Real sources (bulk knowledge layer)
 
-| Source | URL | Ref | Date pulled | License | What changed |
-|---|---|---|---|---|---|
-| Model Context Protocol docs | https://github.com/modelcontextprotocol/docs | `main` (2026-06-17) | 2026-06-17 | MIT (© 2024–2025 Anthropic, PBC and contributors) | Concepts from the seven `docs/concepts` pages (architecture, tools, resources, prompts, roots, sampling, transports) were **paraphrased** into short original Markdown notes (`demo-kb/topics/mcp-source-*.md`). No verbatim text was copied; each note records its upstream `source:` path in front matter. |
+| Source                      | URL                                          | Ref                 | Date pulled | License                                           | What changed                                                                                                                                                                                                                                                                                                 |
+| --------------------------- | -------------------------------------------- | ------------------- | ----------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Model Context Protocol docs | https://github.com/modelcontextprotocol/docs | `main` (2026-06-17) | 2026-06-17  | MIT (© 2024–2025 Anthropic, PBC and contributors) | Concepts from the seven `docs/concepts` pages (architecture, tools, resources, prompts, roots, sampling, transports) were **paraphrased** into short original Markdown notes (`demo-kb/topics/mcp-source-*.md`). No verbatim text was copied; each note records its upstream `source:` path in front matter. |
 
 The upstream MIT license notice is preserved verbatim in
 [`demo-kb/NOTICES/modelcontextprotocol-docs-LICENSE.txt`](../demo-kb/NOTICES/modelcontextprotocol-docs-LICENSE.txt).
@@ -37,7 +37,9 @@ source:
 
 The notes are paraphrases pinned to the upstream `main` branch as pulled on
 2026-06-17. When refreshing the demo corpus, update the `Ref` / `Date pulled`
-columns above and re-run `npm run eval` to confirm retrieval still passes.
+columns above and re-run `npm run eval` to inspect demo retrieval. Run
+`npm run test:retrieval` for the isolated BM25/SQLite quality gate used by CI;
+that suite deliberately does not scan demo or machine-local workspace content.
 
 The complete demo can also be regenerated as a standalone canonical workspace
 through the project CLI:
