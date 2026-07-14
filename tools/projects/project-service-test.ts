@@ -356,6 +356,11 @@ Duplicate.
 
   const cliRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-project-cli-"));
   try {
+    const helpResult = await runCli(["help"]);
+    assert.equal(helpResult.code, 0, helpResult.stderr);
+    assert.match(helpResult.stdout, /gke review \[project-id\]/);
+    assert.match(helpResult.stdout, /--state <due\|overdue\|all>/);
+
     const createResult = await runCli([
       "create",
       "cli-project",
@@ -376,6 +381,23 @@ Duplicate.
     const listResult = await runCli(["list", "--repo-root", cliRoot, "--json"]);
     assert.equal(listResult.code, 0, listResult.stderr);
     assert.match(listResult.stdout, /"projectId": "cli-project"/);
+
+    const reviewResult = await runCli([
+      "review",
+      "cli-project",
+      "--repo-root",
+      cliRoot,
+      "--as-of",
+      "2099-01-01",
+      "--state",
+      "overdue",
+      "--json",
+    ]);
+    assert.equal(reviewResult.code, 0, reviewResult.stderr);
+    const reviewReport = JSON.parse(reviewResult.stdout);
+    assert.equal(reviewReport.projectCount, 1);
+    assert.equal(reviewReport.projects[0].projectId, "cli-project");
+    assert.equal(reviewReport.projects[0].reviewState, "overdue");
 
     const updateResult = await runCli([
       "update",
