@@ -79,9 +79,8 @@ export async function createMcpHttpServer(config: HttpServerConfig = {}): Promis
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const maxConcurrent = config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
   const requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-  const repoRoot = path.resolve(
-    config.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
-  );
+  if (config.repoRoot) process.env.KB_MCP_REPO_ROOT = config.repoRoot;
+  const repoRoot = path.resolve(process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."));
 
   // Force the imported server into read-only mode before it evaluates env.
   // The dynamic import guarantees this runs first; server.ts reads

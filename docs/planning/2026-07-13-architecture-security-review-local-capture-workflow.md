@@ -13,11 +13,14 @@ clear new-note create immediately or persists a review-required proposal.
 
 The local Cockpit calls same-origin Vite development middleware. Grounded Ask
 delegates to a provider-neutral answer service with injected retriever and
-document dependencies. Capture reruns grounding server-side, then delegates to
-the shared planner; successful immediate create or reviewed apply refreshes the
-active retrieval backend after the atomic Markdown write. The middleware uses
-Vite's `apply: "serve"` boundary, so it is not registered in the production
-static build.
+document dependencies. Project Detail passes a canonical project ID that the
+server validates before filtering evidence through explicit project membership.
+Capture reruns grounding server-side, then delegates to the shared planner;
+successful immediate create or reviewed apply refreshes the active retrieval
+backend after the atomic Markdown write. Ask and review share one event-driven
+proposal-summary owner, so proposal, apply, and reject events reconcile the
+badge and selection without polling. The middleware uses Vite's `apply: "serve"`
+boundary, so it is not registered in the production static build.
 
 Project tasks use a separate project application service and canonical
 `Delivery checklist` syntax. This avoids treating actionable work as a generic
@@ -95,8 +98,7 @@ escape rejection.
 
 ### Follow-up
 
-- Consider a first-class open-question application service for explicitly
-  retaining abstained local Ask results without treating them as canonical
-  knowledge.
+- Implemented: abstained answers and the compatibility write tool now share the
+  first-class atomic open-question application service.
 - Consolidate the remaining project lifecycle filesystem mutation behind the
   broader project application-service boundary.

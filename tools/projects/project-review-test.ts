@@ -5,11 +5,42 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { reviewWorkspace } from "./project-review.js";
+import { calculateProjectAttention } from "./project-attention.js";
 
 const execFileAsync = promisify(execFile);
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "gke-project-review-"));
 
 try {
+  assert.deepEqual(
+    calculateProjectAttention({
+      reviewAfter: "2026-07-13",
+      asOf: "2026-07-13T18:30:00.000Z",
+      status: "active",
+      blockers: ["Approval pending."],
+      openQuestions: ["Who signs?"],
+    }),
+    {
+      reviewState: "due",
+      daysUntilReview: 0,
+      needsAttention: true,
+      attentionReasons: ["Review due 2026-07-13", "1 blocker", "1 open question"],
+    },
+  );
+  assert.deepEqual(
+    calculateProjectAttention({
+      reviewAfter: "2026-07-01",
+      asOf: "2026-07-13",
+      status: "completed",
+      blockers: ["Historical only."],
+    }),
+    {
+      reviewState: "not-applicable",
+      daysUntilReview: null,
+      needsAttention: false,
+      attentionReasons: [],
+    },
+  );
+
   await writeProject("alpha", {
     title: "Alpha Rollout",
     status: "active",

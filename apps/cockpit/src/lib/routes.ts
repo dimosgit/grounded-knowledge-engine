@@ -11,7 +11,18 @@ export function getHashRoute() {
     return { mode: "hub", path: null };
   }
   if (hashPath === "/projects") {
-    return { mode: "projects", path: null };
+    const queryString = hash.slice(1).split("?")[1] || "";
+    const requestedFilter = new URLSearchParams(queryString).get("attention") || "";
+    const attentionFilter = [
+      "all",
+      "needs-attention",
+      "overdue",
+      "blocked",
+      "open-questions",
+    ].includes(requestedFilter)
+      ? requestedFilter
+      : "";
+    return { mode: "projects", path: null, attentionFilter };
   }
   if (hashPath === "/graph") {
     const queryString = hash.slice(1).split("?")[1] || "";
@@ -59,8 +70,10 @@ export function setHashHub() {
   window.location.hash = "/hub";
 }
 
-export function setHashProjects() {
-  window.location.hash = "/projects";
+export function setHashProjects(attentionFilter = "") {
+  window.location.hash = attentionFilter
+    ? `/projects?attention=${encodeURIComponent(attentionFilter)}`
+    : "/projects";
 }
 
 export function setHashGraph(focusPath = "") {

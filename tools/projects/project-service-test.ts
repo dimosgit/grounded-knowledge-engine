@@ -361,6 +361,9 @@ Duplicate.
     assert.match(helpResult.stdout, /gke review \[project-id\]/);
     assert.match(helpResult.stdout, /--state <due\|overdue\|all>/);
 
+    await fs.mkdir(path.join(cliRoot, "demo-kb"), { recursive: true });
+    await fs.mkdir(path.join(cliRoot, "kb"), { recursive: true });
+
     const createResult = await runCli([
       "create",
       "cli-project",
@@ -441,18 +444,18 @@ Duplicate.
     assert.equal(duplicateTaskResult.code, 1);
     assert.match(duplicateTaskResult.stderr, /task already exists/i);
 
-    await write(cliRoot, "notes/cli-source.md", "# CLI Source\n");
+    await write(cliRoot, "kb/sources/cli-source.md", "# CLI Source\n");
     const linkResult = await runCli([
       "link",
       "cli-project",
-      "notes/cli-source.md",
+      "kb/sources/cli-source.md",
       "--repo-root",
       cliRoot,
       "--label",
       "CLI source",
     ]);
     assert.equal(linkResult.code, 0, linkResult.stderr);
-    assert.match(linkResult.stdout, /Linked notes\/cli-source\.md to cli-project/);
+    assert.match(linkResult.stdout, /Linked kb\/sources\/cli-source\.md to cli-project/);
 
     const rawResult = await runCli(["show", "cli-project", "--repo-root", cliRoot, "--raw"]);
     assert.match(rawResult.stdout, /Exercise the CLI update path/);
@@ -472,6 +475,30 @@ Duplicate.
     ]);
     assert.equal(unknownOptionResult.code, 1);
     assert.match(unknownOptionResult.stderr, /Unknown option for 'update': --focus/);
+
+    await fs.mkdir(path.join(cliRoot, ".gke"), { recursive: true });
+    await fs.writeFile(
+      path.join(cliRoot, ".gke", "workspace.json"),
+      `${JSON.stringify(
+        {
+          id: "read-only-cli",
+          label: "Read-only CLI",
+          scanRoots: ["demo-kb", "kb"],
+          writeRoots: ["kb", ".gke"],
+          readOnly: true,
+          sensitivity: "internal",
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    const readOnlyResult = await runCli(["create", "must-not-write", "--repo-root", cliRoot]);
+    assert.equal(readOnlyResult.code, 1);
+    assert.match(readOnlyResult.stderr, /read-only/i);
+    assert.equal(
+      await exists(path.join(cliRoot, "kb", "projects", "must-not-write", "project.md")),
+      false,
+    );
   } finally {
     await fs.rm(cliRoot, { recursive: true, force: true });
   }

@@ -10,6 +10,7 @@ export function useRouteSync({
   setIsReadingMode,
   setSelectedGraphPath,
   setSelectedProjectId,
+  setProjectAttentionFilter,
   setViewMode,
 }) {
   useEffect(() => {
@@ -20,6 +21,7 @@ export function useRouteSync({
         return;
       }
       if (route.mode === "projects") {
+        if (route.attentionFilter) setProjectAttentionFilter(route.attentionFilter);
         setViewMode("projects");
         return;
       }
@@ -63,6 +65,7 @@ export function useRouteSync({
     setIsReadingMode,
     setSelectedGraphPath,
     setSelectedProjectId,
+    setProjectAttentionFilter,
     setViewMode,
   ]);
 }
