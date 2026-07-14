@@ -182,6 +182,7 @@ npm run test:mcp:http     # loopback HTTP bridge: parity, auth, write-denial, li
 npm run test:projects     # strict project resolution, isolation, resource parity
 npm run smoke:mcp         # discovery, resources, search, capture, reuse, resume
 npm run test:loop         # ground → capture → re-ground → cite
+npm run test:retrieval    # isolated BM25 + SQLite category quality gate
 npm run eval -- --k 5 --runs 3 --refresh
 npm run eval -- --k 5 --runs 3 --backend sqlite
 ```
@@ -192,3 +193,9 @@ Use a custom QA set or include retrieval traces:
 npm run eval -- --file tools/grounding/eval/qa-set.json --json
 npm run eval -- --k 5 --traces
 ```
+
+`npm run eval` remains an exploratory command over the demo or a caller-supplied
+case file. `npm run test:retrieval` is the deterministic CI gate: it uses only
+the synthetic workspace under `tools/grounding/eval/workspace-fixtures`, runs
+both supported retrieval backends, and exits nonzero when an aggregate or
+category floor fails.

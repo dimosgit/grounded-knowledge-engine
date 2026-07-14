@@ -165,6 +165,15 @@ needs attention now?” and “what changed since the requested point in time?�
 
 ### P1 — Retrieval Evaluation That Matches Real Workspaces
 
+**Implementation status:** The isolated quality gate was implemented on
+2026-07-13. A synthetic mini-workspace covers exact and vague recall,
+overlapping projects, strict abstention, stale/current guidance, multi-track
+filters, and multi-source citations. The evaluator reports aggregate and
+per-category metrics, validates citation paths, keeps negative cases out of
+positive-query MRR, and fails declared floors. `npm run test:retrieval` gates
+both BM25 and SQLite without scanning demo or machine-local knowledge. Optional
+local feedback metrics remain planned.
+
 #### Outcome
 
 Retrieval changes are judged across several knowledge shapes, not only the
