@@ -61,6 +61,42 @@ export interface ProjectSummary {
   workspaceId: string;
 }
 
+export type ProjectReviewState = "due" | "overdue" | "scheduled" | "unscheduled" | "not-applicable";
+
+export type ProjectChangeSource = "git" | "frontmatter" | "mtime";
+
+export interface ProjectChangedDocument {
+  path: string;
+  title: string;
+  changedAt: string;
+  source: ProjectChangeSource;
+  citation: ProjectCitation;
+}
+
+export interface ProjectReviewEntry {
+  projectId: string;
+  title: string;
+  status: string;
+  path: string;
+  reviewAfter: string;
+  reviewState: ProjectReviewState;
+  daysUntilReview: number | null;
+  needsAttention: boolean;
+  attentionReasons: string[];
+  blockers: string[];
+  openQuestions: string[];
+  changedDocuments: ProjectChangedDocument[];
+  citations: ProjectCitation[];
+}
+
+export interface WorkspaceReviewReport {
+  asOf: string;
+  since: string | null;
+  projectCount: number;
+  attentionCount: number;
+  projects: ProjectReviewEntry[];
+}
+
 export interface ProjectCapsule {
   projectId: string;
   title: string;

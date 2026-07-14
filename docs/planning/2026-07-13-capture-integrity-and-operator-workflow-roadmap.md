@@ -130,6 +130,14 @@ fallback when stronger context exists.
 
 ### P1 — Daily Attention and Project Delta
 
+**Implementation status:** Engine, CLI, and read-only MCP resource implemented
+on 2026-07-13. `gke review` computes due/overdue state, blocker and
+open-question attention, and explicitly scoped document changes since an ISO
+date. Change provenance prefers Git commit timestamps and falls back to
+frontmatter or file modification time for dirty, ignored, or non-Git files.
+`gke://workspace/review` exposes the current compact report without adding a
+core MCP tool. Cockpit attention filters remain planned.
+
 #### Outcome
 
 Project resume answers not only “what is the current state?” but also “what
@@ -273,7 +281,7 @@ the current MCP schemas and transport behavior throughout the refactor.
 ### Phase 2 — Make review operational
 
 1. Add policy-driven routing. **Implemented.**
-2. Add due-review/project-delta output.
+2. Add due-review/project-delta output. **Engine, CLI, and resource implemented.**
 3. Add source-aware ingestion deltas.
 4. Expand retrieval evaluation categories.
 

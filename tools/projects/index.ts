@@ -1,5 +1,6 @@
 export { resumeProject } from "./project-capsule.js";
 export { formatTechnicalPeerHandoff, renderProjectCapsule } from "./project-capsule.js";
+export { reviewWorkspace } from "./project-review.js";
 export {
   addProjectTask,
   createProject,

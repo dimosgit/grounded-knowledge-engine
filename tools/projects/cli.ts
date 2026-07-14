@@ -2,6 +2,7 @@
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { reviewWorkspace } from "./index.js";
 import {
   addProjectTask,
   createProject,
@@ -71,6 +72,27 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
         );
       }
     }
+    return 0;
+  }
+
+  if (command === "review") {
+    const projectId = parsed.positionals[0];
+    if (parsed.positionals.length > 1) {
+      throw new Error("Usage: gke review [project-id] [options]");
+    }
+    const scanRoots = all(parsed, "scan-root");
+    const result = await reviewWorkspace(
+      {
+        asOf: first(parsed, "as-of"),
+        since: first(parsed, "since"),
+        projectId,
+        state: first(parsed, "state") as "due" | "overdue" | "all" | undefined,
+      },
+      repoRoot,
+      scanRoots.length ? scanRoots : ["demo-kb", "kb"],
+    );
+    if (json) console.log(JSON.stringify(result.structured, null, 2));
+    else console.log(result.contentText);
     return 0;
   }
 
@@ -275,6 +297,7 @@ function assertKnownOptions(command: string | undefined, options: CliOptions): v
       "dry-run",
     ],
     list: [],
+    review: ["as-of", "since", "state", "scan-root"],
     show: ["raw"],
     validate: [],
     update: [
@@ -317,11 +340,18 @@ function printHelp(): void {
 Usage:
   gke create <project-id> [options]
   gke list [--json]
+  gke review [project-id] [--as-of <date>] [--since <date-or-timestamp>] [--state <state>]
   gke show <project-id> [--raw|--json]
   gke validate [project-id] [--json]
   gke update <project-id> [options]
   gke task add <project-id> <text> [--size M] [--status todo]
   gke link <project-id> <source-path> [--label <label>]
+
+Review options:
+  --as-of <YYYY-MM-DD>        date used to compute due and overdue reviews
+  --since <ISO date/time>     include explicitly scoped documents changed since this point
+  --state <due|overdue|all>   filter review state; default: all
+  --scan-root <path>          repeatable; default: demo-kb and kb
 
 Create options:
   --title <title>

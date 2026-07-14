@@ -29,6 +29,7 @@ workspace only.
 | **Durable capture**          | Clear learning is captured immediately; ambiguous routing, duplicates, and destructive replacements enter a conflict-safe local review queue.                       |
 | **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                                             |
 | **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations.                         |
+| **Daily project review**     | `gke review` and `gke://workspace/review` return due reviews, attention reasons, and explicitly scoped project changes since an ISO date.                           |
 | **One MCP server**           | Claude Code, Codex, and Gemini CLI use the same local `kb` server and knowledge base.                                                                               |
 | **Operator Cockpit**         | The local React Cockpit adds grounded Ask and capture review to the library, project board, detail, handoff, and graph views. The public preview remains read-only. |
 | **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                       |
@@ -79,6 +80,9 @@ npm run search -- --query "are MCP tools model controlled or application control
 
 # Prove MCP discovery, resources, grounding, capture, reuse, and project resume
 npm run smoke:mcp
+
+# See what needs attention and what changed
+npx tsx tools/cli.ts review --as-of 2026-07-13 --since 2026-07-01
 
 # Run the complete engine suite
 npm run test:gke
