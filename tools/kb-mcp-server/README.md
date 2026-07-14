@@ -169,6 +169,9 @@ filesystem paths.
   available for write previews.
 - `kb.answer_grounded` is evidence-gated and can abstain.
 - `kb.answer_and_capture` couples retrieval with explicit capture policy.
+- Grounded answers report an estimated visible-text token footprint split across
+  the request, retrieved evidence, and answer. This is not a provider-billed
+  total and excludes hidden agent context.
 - Canonical capture writes use realpath containment, per-proposal locking,
   atomic replacement, and post-write index refresh.
 - No external network dependency is required.

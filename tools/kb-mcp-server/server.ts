@@ -23,7 +23,7 @@ import {
   DEFAULT_SCAN_ROOTS as RETRIEVER_DEFAULT_SCAN_ROOTS,
   getKbRetriever,
 } from "../grounding/retriever.js";
-import { answerGrounded } from "../grounding/answer-service.js";
+import { answerGrounded, type GroundedTokenUsage } from "../grounding/answer-service.js";
 import { resumeProject } from "../projects/index.js";
 import {
   applyUnreviewedCapture,
@@ -624,6 +624,7 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
   lines.push(
     `SLO guard: ${slo.status.toUpperCase()} (threshold=${slo.thresholdMs} ms, total=${slo.totalMs} ms${slo.breached ? `, over=${slo.overByMs} ms` : ""})`,
   );
+  lines.push(formatTokenUsage(answer.tokenUsage));
   lines.push("");
   lines.push(answer.answer || "");
 
@@ -658,16 +659,20 @@ async function buildGroundedAnswerPayload(args: JsonObject): Promise<ToolPayload
 
   let contentText: string;
   if (!structured.evidence.length) {
-    contentText =
-      "No grounded evidence found in local KB sources for that question. Try broader wording or remove filters.";
+    contentText = [
+      "No grounded evidence found in local KB sources for that question. Try broader wording or remove filters.",
+      "",
+      formatTokenUsage(structured.tokenUsage),
+    ].join("\n");
   } else if (structured.fastPath.used) {
-    contentText = structured.answer;
+    contentText = [structured.answer, "", formatTokenUsage(structured.tokenUsage)].join("\n");
   } else {
     contentText = [
       "# kb.answer_grounded",
       `Question: ${structured.question}`,
       `Confidence: ${structured.confidence.label} (${structured.confidence.score})`,
       `Strict gate: ${structured.gate.pass ? "pass" : "fail"}`,
+      formatTokenUsage(structured.tokenUsage),
       "",
       structured.answer,
     ].join("\n");
@@ -678,6 +683,13 @@ async function buildGroundedAnswerPayload(args: JsonObject): Promise<ToolPayload
     attachSloGuardToPayload(payload, resolveSloThreshold(args?.sloMs)),
     args,
   );
+}
+
+function formatTokenUsage(usage: GroundedTokenUsage | null | undefined): string {
+  if (!usage || !Number.isFinite(usage.totalTokens)) return "Token usage: unavailable";
+  const prefix = usage.kind === "estimate" ? "~" : "";
+  const label = usage.kind === "estimate" ? "estimate" : "provider reported";
+  return `Token usage: ${prefix}${usage.totalTokens} visible tokens (${label}: request ${usage.requestTokens}, evidence ${usage.evidenceTokens}, answer ${usage.answerTokens})`;
 }
 
 async function handleKbRefresh() {

@@ -87,6 +87,7 @@ const groundedOutputSchema: JsonSchema = {
     abstained: { type: "boolean" },
     citations: { type: "array", items: citationSchema },
     confidence: { type: "object" },
+    tokenUsage: { type: "object" },
     timings: { type: "object" },
     slo: { type: "object" },
     warnings: { type: "array", items: { type: "string" } },

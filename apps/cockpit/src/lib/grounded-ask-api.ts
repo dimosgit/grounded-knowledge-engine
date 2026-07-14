@@ -39,6 +39,14 @@ export interface GroundedAnswer {
   gate: GroundedGate;
   citations: GroundedCitation[];
   evidence: GroundedEvidence[];
+  tokenUsage?: {
+    kind: "estimate" | "provider";
+    scope: string;
+    requestTokens: number;
+    evidenceTokens: number;
+    answerTokens: number;
+    totalTokens: number;
+  };
   timings?: Record<string, number | null>;
 }
 

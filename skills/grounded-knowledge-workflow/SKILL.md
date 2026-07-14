@@ -33,6 +33,15 @@ retrieval, project scope, citations, and writes.
   answer a question that genuinely requires current information. Keep external
   findings distinct from existing local knowledge.
 
+## Report the visible token footprint
+
+- Include the `tokenUsage` summary returned by `kb.answer_and_capture` or the
+  grounded answer service near the end of the user-facing answer.
+- Preserve its label: a GKE visible-text estimate is not the provider-billed
+  total and does not include hidden instructions, reasoning, or agent overhead.
+- If a provider supplies exact usage, prefer that value and label it as provider
+  reported. Never silently turn an estimate into an exact count.
+
 ## Preserve boundaries
 
 - Require an explicit project ID for project resume.
