@@ -205,8 +205,8 @@ function answerAndCaptureTool(options: CatalogOptions): ToolDefinition {
     name: "kb.answer_and_capture",
     title: options.writesEnabled ? "Answer and Capture Learning" : "Answer From Grounded Knowledge",
     description: options.writesEnabled
-      ? "Answer from local evidence and capture useful learning or an open question."
-      : "Answer from local evidence. Automatic capture is skipped because writes are disabled.",
+      ? "Primary grounded Q&A tool. Call directly without pre-search; answer from local evidence and capture useful learning or an open question."
+      : "Primary grounded Q&A tool. Call directly without pre-search; automatic capture is skipped because writes are disabled.",
     annotations: options.writesEnabled ? annotations.additiveWrite : annotations.read,
     inputSchema: {
       type: "object",
