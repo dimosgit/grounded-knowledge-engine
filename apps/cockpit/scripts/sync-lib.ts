@@ -16,12 +16,20 @@ const contentRoot = path.join(appRoot, "content");
 // namespace, regardless of which physical folder a note came from. Override with
 // `KB_PREVIEW_SOURCE_FOLDERS="from:to,from2:to2"` (the `:to` part is optional and
 // defaults to the source name).
-interface SourceFolder {
+export interface SourceFolder {
   from: string;
   to: string;
 }
 
-function parseSourceFolders(): SourceFolder[] {
+export interface SyncContentOptions {
+  publicOnly?: boolean;
+}
+
+function parseSourceFolders({ publicOnly = false }: SyncContentOptions = {}): SourceFolder[] {
+  if (publicOnly) {
+    return [{ from: "demo-kb", to: "kb" }];
+  }
+
   const raw = process.env.KB_PREVIEW_SOURCE_FOLDERS?.trim();
   if (raw) {
     return raw
@@ -39,7 +47,6 @@ function parseSourceFolders(): SourceFolder[] {
   ];
 }
 
-const sourceFolders = parseSourceFolders();
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif"]);
 
 export interface SyncStats {
@@ -129,7 +136,8 @@ async function copyContentTree(sourceDir: string, destinationDir: string): Promi
   return { markdown, assets };
 }
 
-export async function syncContent(): Promise<SyncStats> {
+export async function syncContent(options: SyncContentOptions = {}): Promise<SyncStats> {
+  const sourceFolders = parseSourceFolders(options);
   await fs.rm(contentRoot, { recursive: true, force: true });
   await fs.mkdir(contentRoot, { recursive: true });
 
@@ -152,10 +160,10 @@ export async function syncContent(): Promise<SyncStats> {
   };
 }
 
-export function getPaths(): RepoPaths {
+export function getPaths(options: SyncContentOptions = {}): RepoPaths {
   return {
     appRoot,
     repoRoot,
-    sourceFolders,
+    sourceFolders: parseSourceFolders(options),
   };
 }
