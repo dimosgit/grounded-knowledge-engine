@@ -97,6 +97,9 @@ async function assertProtocolVersion(version: string): Promise<void> {
     assert.equal(initialized.protocolVersion, version);
     assert.ok(initialized.capabilities?.tools);
     assert.ok(initialized.capabilities?.resources);
+    assert.match(initialized.instructions, /call kb\.answer_and_capture exactly once/i);
+    assert.match(initialized.instructions, /do not call kb\.search or kb\.get_record first/i);
+    assert.match(initialized.instructions, /tokenUsage, and timings immediately/i);
     client.notify("notifications/initialized", {});
 
     const listed = await client.request("tools/list", {});
@@ -108,6 +111,7 @@ async function assertProtocolVersion(version: string): Promise<void> {
       (tool: { name: string }) => tool.name === "kb.answer_and_capture",
     );
     assert.equal(answerTool.annotations?.readOnlyHint, true);
+    assert.match(answerTool.description, /call directly without pre-search/i);
 
     const answered = await client.callTool("kb.answer_and_capture", {
       question: "Which MCP primitive is model controlled?",
