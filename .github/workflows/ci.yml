@@ -48,29 +48,11 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Retrieval eval
-        run: npm run eval -- --refresh
-
       - name: Configure shared MCP server adapters
         run: npm run setup:mcp -- --skip-smoke
 
-      - name: MCP smoke test (grounding loop)
-        run: npm run smoke:mcp
-
-      - name: MCP catalog contract (profiles, schemas, annotations, budget)
-        run: npm run test:mcp:catalog
-
-      - name: Project Context contract (strict resolution, isolation, resource parity)
-        run: npm run test:projects
-
-      - name: Loop integration test (ground -> capture -> re-ground -> cite)
-        run: npm run test:loop
-
-      - name: Ingestion unit tests
-        run: npm run test:ingest:unit
-
-      - name: Ingestion integration test (PDF/DOCX/XLSX -> grounded & cited)
-        run: npm run test:ingest
+      - name: Complete engine verification
+        run: npm run test:gke
 
       - name: Sanitization gate (strings + filenames + gitleaks)
         run: npm run scrub
@@ -105,3 +87,6 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Production bundle boundary
+        run: npm run test:production-boundary

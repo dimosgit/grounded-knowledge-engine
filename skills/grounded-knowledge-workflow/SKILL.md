@@ -9,11 +9,24 @@ Use the engine as shared memory, not as a replacement for judgment. Keep this
 skill thin: select the semantic operation and let the MCP server and CLI enforce
 retrieval, project scope, citations, and writes.
 
+## Use the one-call Q&A fast path
+
+- For an ordinary definition, recall, explanation, or comparison, call
+  `kb.answer_and_capture` exactly once with `responseMode: auto` and
+  `responseFormat: compact`.
+- Do not call `kb.search` or `kb.get_record` before it. The answer tool performs
+  its own retrieval, grounding, deduplication, and capture planning.
+- After a successful call, return the answer, citations, capture status,
+  `tokenUsage`, and `timings` immediately.
+- Do not inspect the written note, edit navigation/digests, or run broad KB
+  checks afterward. Continue into maintenance only when the result reports an
+  error or review requirement, or the user explicitly asks for curation.
+
 ## Choose the operation
 
 1. For a named project or “continue where I stopped,” call
    `kb.resume_project` with the explicit `projectId`.
-2. For a general question about the user's local knowledge, call `kb.search`.
+2. For an evidence-only search request, call `kb.search`.
 3. For one known record, call `kb.get_record` by path, title, slug, or filename.
 4. For a grounded answer that may retain useful context, call
    `kb.answer_and_capture`.
@@ -32,6 +45,15 @@ retrieval, project scope, citations, and writes.
 - Use external research only when the user asks for it or local evidence cannot
   answer a question that genuinely requires current information. Keep external
   findings distinct from existing local knowledge.
+
+## Report the visible token footprint
+
+- Include the `tokenUsage` summary returned by `kb.answer_and_capture` or the
+  grounded answer service near the end of the user-facing answer.
+- Preserve its label: a GKE visible-text estimate is not the provider-billed
+  total and does not include hidden instructions, reasoning, or agent overhead.
+- If a provider supplies exact usage, prefer that value and label it as provider
+  reported. Never silently turn an estimate into an exact count.
 
 ## Preserve boundaries
 

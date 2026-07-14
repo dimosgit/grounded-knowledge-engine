@@ -2,7 +2,10 @@
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { loadWorkspaceContext } from "../workspaces/config.js";
+import { reviewWorkspace } from "./index.js";
 import {
+  addProjectTask,
   createProject,
   getProject,
   linkProjectSource,
@@ -29,11 +32,20 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     return 0;
   }
 
+  const requestedScanRoots = all(parsed, "scan-root");
+  const workspace = await loadWorkspaceContext({
+    repoRoot,
+    ...(requestedScanRoots.length ? { scanRoots: requestedScanRoots } : {}),
+  });
+  const scanRoots = [...workspace.scanRoots];
+
   if (command === "create") {
     const projectId = parsed.positionals[0];
     if (!projectId) throw new Error("Usage: gke create <project-id> [options]");
     const result = await createProject({
       repoRoot,
+      workspace,
+      scanRoots,
       projectId,
       title: first(parsed, "title"),
       workspaceId: first(parsed, "workspace"),
@@ -60,7 +72,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
   }
 
   if (command === "list") {
-    const projects = await listProjects({ repoRoot });
+    const projects = await listProjects({ repoRoot, workspace, scanRoots });
     if (json) console.log(JSON.stringify(projects, null, 2));
     else if (!projects.length) console.log("No projects found.");
     else {
@@ -73,10 +85,31 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     return 0;
   }
 
+  if (command === "review") {
+    const projectId = parsed.positionals[0];
+    if (parsed.positionals.length > 1) {
+      throw new Error("Usage: gke review [project-id] [options]");
+    }
+    const result = await reviewWorkspace(
+      {
+        asOf: first(parsed, "as-of"),
+        since: first(parsed, "since"),
+        projectId,
+        state: first(parsed, "state") as "due" | "overdue" | "all" | undefined,
+      },
+      repoRoot,
+      scanRoots,
+      workspace,
+    );
+    if (json) console.log(JSON.stringify(result.structured, null, 2));
+    else console.log(result.contentText);
+    return 0;
+  }
+
   if (command === "show") {
     const projectId = parsed.positionals[0];
     if (!projectId) throw new Error("Usage: gke show <project-id>");
-    const project = await getProject(projectId, { repoRoot });
+    const project = await getProject(projectId, { repoRoot, workspace, scanRoots });
     if (json) {
       console.log(
         JSON.stringify(
@@ -111,8 +144,8 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
   if (command === "validate") {
     const projectId = parsed.positionals[0];
     const results = projectId
-      ? [await validateProject(projectId, { repoRoot })]
-      : await validateAllProjects({ repoRoot });
+      ? [await validateProject(projectId, { repoRoot, workspace, scanRoots })]
+      : await validateAllProjects({ repoRoot, workspace, scanRoots });
     if (json) console.log(JSON.stringify(results, null, 2));
     else {
       for (const result of results) {
@@ -131,6 +164,8 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     if (!projectId) throw new Error("Usage: gke update <project-id> [options]");
     const result = await updateProject({
       repoRoot,
+      workspace,
+      scanRoots,
       projectId,
       title: first(parsed, "title"),
       status: first(parsed, "status"),
@@ -171,11 +206,40 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     return 0;
   }
 
+  if (command === "task") {
+    const [subcommand, projectId, ...taskParts] = parsed.positionals;
+    if (subcommand !== "add" || !projectId || !taskParts.length) {
+      throw new Error(
+        "Usage: gke task add <project-id> <text> [--size <XS|S|M|L|XL>] [--status <todo|in-progress|gated|done>]",
+      );
+    }
+    const result = await addProjectTask({
+      repoRoot,
+      workspace,
+      scanRoots,
+      projectId,
+      text: taskParts.join(" "),
+      size: first(parsed, "size") as "XS" | "S" | "M" | "L" | "XL" | undefined,
+      status: first(parsed, "status") as "todo" | "in-progress" | "gated" | "done" | undefined,
+      dryRun: has(parsed, "dry-run"),
+    });
+    if (json) console.log(JSON.stringify(result, null, 2));
+    else {
+      console.log(
+        `${result.dryRun ? "Would add" : "Added"} task to project ${result.projectId}: ${result.task.markdown}`,
+      );
+      if (result.dryRun) console.log(`\n${result.content}`);
+    }
+    return 0;
+  }
+
   if (command === "link") {
     const [projectId, sourcePath] = parsed.positionals;
     if (!projectId || !sourcePath) throw new Error("Usage: gke link <project-id> <source-path>");
     const result = await linkProjectSource({
       repoRoot,
+      workspace,
+      scanRoots,
       projectId,
       sourcePath,
       label: first(parsed, "label"),
@@ -249,6 +313,7 @@ function assertKnownOptions(command: string | undefined, options: CliOptions): v
       "dry-run",
     ],
     list: [],
+    review: ["as-of", "since", "state", "scan-root"],
     show: ["raw"],
     validate: [],
     update: [
@@ -271,6 +336,7 @@ function assertKnownOptions(command: string | undefined, options: CliOptions): v
       "key-document",
       "dry-run",
     ],
+    task: ["size", "status", "dry-run"],
     link: ["label", "dry-run"],
     help: [],
     "--help": [],
@@ -290,10 +356,18 @@ function printHelp(): void {
 Usage:
   gke create <project-id> [options]
   gke list [--json]
+  gke review [project-id] [--as-of <date>] [--since <date-or-timestamp>] [--state <state>]
   gke show <project-id> [--raw|--json]
   gke validate [project-id] [--json]
   gke update <project-id> [options]
+  gke task add <project-id> <text> [--size M] [--status todo]
   gke link <project-id> <source-path> [--label <label>]
+
+Review options:
+  --as-of <YYYY-MM-DD>        date used to compute due and overdue reviews
+  --since <ISO date/time>     include explicitly scoped documents changed since this point
+  --state <due|overdue|all>   filter review state; default: all
+  --scan-root <path>          repeatable; default: demo-kb and kb
 
 Create options:
   --title <title>
@@ -328,6 +402,11 @@ Update options:
   --open-question <text>      repeatable; replaces the section
   --next-action <text>        repeatable; replaces the section
   --key-document <text>       repeatable; replaces the section
+
+Task add options:
+  --size <XS|S|M|L|XL>       default: M
+  --status <status>           todo, in-progress, gated, or done; default: todo
+  --dry-run
 
 Global options:
   --repo-root <path>

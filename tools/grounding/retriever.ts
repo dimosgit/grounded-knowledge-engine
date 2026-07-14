@@ -2,6 +2,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  authorizeWorkspaceRead,
+  authorizeWorkspaceRuntimePath,
+  authorizeWorkspaceWrite,
+} from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
+import {
   buildManifestHash,
   gatherCandidateFiles,
   getDocumentTitle,
@@ -243,13 +249,18 @@ export async function getKbRetriever(options: RetrieverOptions = {}): Promise<Kb
 }
 
 function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
-  const repoRoot = path.resolve(
-    options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
-  );
-  const scanRoots = normalizeScanRoots(
-    options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS,
-    DEFAULT_SCAN_ROOTS,
-  );
+  const workspace = options.workspace;
+  const repoRoot = workspace
+    ? workspace.realRepoRoot
+    : path.resolve(
+        options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
+      );
+  const scanRoots = workspace
+    ? [...workspace.scanRoots]
+    : normalizeScanRoots(
+        options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS,
+        DEFAULT_SCAN_ROOTS,
+      );
   const cachePath = path.resolve(repoRoot, options.cachePath || DEFAULT_INDEX_CACHE_FILE);
   const cacheTtlMs = parsePositiveInt(
     options.cacheTtlMs,
@@ -273,6 +284,7 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
   const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}`;
 
   return {
+    workspace,
     repoRoot,
     scanRoots,
     cachePath,
@@ -285,8 +297,11 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
 }
 
 async function loadOrBuildIndex(options: ResolvedRetrieverOptions): Promise<RetrieverIndex> {
-  const files = await gatherCandidateFiles(options.repoRoot, options.scanRoots);
+  const files = await gatherCandidateFiles(options.repoRoot, options.scanRoots, options.workspace);
   const manifestHash = buildManifestHash(files);
+  if (options.workspace) {
+    await authorizeWorkspaceRuntimePath(options.workspace, options.cachePath);
+  }
 
   if (!options.forceRefresh) {
     const cached = await tryLoadCachedIndex(options.cachePath);
@@ -297,12 +312,16 @@ async function loadOrBuildIndex(options: ResolvedRetrieverOptions): Promise<Retr
 
   const built = await buildIndex({
     repoRoot: options.repoRoot,
+    workspace: options.workspace,
     files,
     manifestHash,
     scanRoots: options.scanRoots,
   });
 
-  await trySaveCachedIndex(options.cachePath, built);
+  if (!options.workspace?.readOnly) {
+    if (options.workspace) await authorizeWorkspaceWrite(options.workspace, options.cachePath);
+    await trySaveCachedIndex(options.cachePath, built);
+  }
   return hydrateIndex(built);
 }
 
@@ -310,8 +329,10 @@ async function buildIndex({
   files,
   manifestHash,
   scanRoots,
+  workspace,
 }: {
   repoRoot: string;
+  workspace?: WorkspaceContext;
   files: CandidateFile[];
   manifestHash: string;
   scanRoots: string[];
@@ -325,6 +346,7 @@ async function buildIndex({
   for (const file of files) {
     let raw;
     try {
+      if (workspace) await authorizeWorkspaceRead(workspace, file.absPath);
       raw = await fs.readFile(file.absPath, "utf8");
     } catch {
       continue;

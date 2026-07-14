@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import { normalizeScalar } from "../grounding/document-core.js";
-import { resumeProject } from "../projects/index.js";
+import { resumeProject, reviewWorkspace } from "../projects/index.js";
+import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 
 export const MCP_RESOURCES = [
   {
@@ -10,6 +12,14 @@ export const MCP_RESOURCES = [
     description: "Active repository root and indexed logical scan roots.",
     mimeType: "application/json",
     annotations: { audience: ["user", "assistant"], priority: 0.9 },
+  },
+  {
+    uri: "gke://workspace/review",
+    name: "workspace-review",
+    title: "GKE Workspace Review",
+    description: "Read due project reviews, attention reasons, and changed project documents.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["user", "assistant"], priority: 0.95 },
   },
 ];
 
@@ -39,7 +49,7 @@ export interface ResourceDocument {
 
 export interface ResourceDependencies {
   repoRoot: string;
-  workspaceId: string;
+  workspace: WorkspaceContext;
   profile: string;
   writesEnabled: boolean;
   scanRoots: string[];
@@ -61,10 +71,14 @@ export async function readMcpResource(
           mimeType: "application/json",
           text: JSON.stringify(
             {
-              workspaceId: dependencies.workspaceId,
+              workspaceId: dependencies.workspace.id,
+              label: dependencies.workspace.label,
+              sensitivity: dependencies.workspace.sensitivity,
+              readOnly: dependencies.workspace.readOnly,
               profile: dependencies.profile,
               writesEnabled: dependencies.writesEnabled,
-              scanRoots: dependencies.scanRoots,
+              scanRoots: dependencies.workspace.scanRoots,
+              writeRoots: dependencies.workspace.writeRoots,
             },
             null,
             2,
@@ -72,6 +86,29 @@ export async function readMcpResource(
         },
       ],
     };
+  }
+
+  if (uri === "gke://workspace/review") {
+    try {
+      const result = await reviewWorkspace(
+        {},
+        dependencies.repoRoot,
+        dependencies.scanRoots,
+        dependencies.workspace,
+      );
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/markdown",
+            text: result.contentText,
+            annotations: { audience: ["user", "assistant"], priority: 0.95 },
+          },
+        ],
+      };
+    } catch (error) {
+      throw rpcError(-32602, errorMessage(error));
+    }
   }
 
   const projectMatch = uri.match(/^gke:\/\/project\/([^/]+)\/context$/);
@@ -87,6 +124,7 @@ export async function readMcpResource(
         { projectId },
         dependencies.repoRoot,
         dependencies.scanRoots,
+        dependencies.workspace,
       );
       return {
         contents: [
@@ -117,6 +155,7 @@ export async function readMcpResource(
   const documents = await dependencies.getDocuments();
   const document = documents.find((item) => item.relPath === relPath);
   if (!document) throw rpcError(-32602, `Indexed record not found: ${relPath}`);
+  await authorizeWorkspaceRead(dependencies.workspace, document.absPath);
   const raw = await fs.readFile(document.absPath, "utf8");
   return {
     contents: [
@@ -138,6 +177,9 @@ function sanitizeResourcePath(value: string): string {
   if (!normalized) throw new Error("Resource path is required.");
   if (normalized.split("/").some((part) => part === ".." || part === "")) {
     throw new Error("Path traversal is not allowed.");
+  }
+  if (normalized.split("/").some((part) => part.toLowerCase() === ".gke")) {
+    throw new Error("Operational state is not exposed as a knowledge resource.");
   }
   return normalized;
 }

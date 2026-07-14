@@ -5,6 +5,8 @@ import { performance } from "node:perf_hooks";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { loadWorkspaceContext } from "../workspaces/config.js";
+import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
 import { negotiateProtocolVersion } from "./protocol.js";
 import { MCP_RESOURCES, MCP_RESOURCE_TEMPLATES, readMcpResource } from "./resources.js";
@@ -15,15 +17,19 @@ import {
   inferSourceKind,
   inferTrack,
   normalizeScalar,
-  normalizeScanRoots,
   parseFrontmatter,
   parsePositiveInt,
 } from "../grounding/document-core.js";
-import {
-  DEFAULT_SCAN_ROOTS as RETRIEVER_DEFAULT_SCAN_ROOTS,
-  getKbRetriever,
-} from "../grounding/retriever.js";
+import { getKbRetriever } from "../grounding/retriever.js";
+import { answerGrounded, type GroundedTokenUsage } from "../grounding/answer-service.js";
 import { resumeProject } from "../projects/index.js";
+import {
+  applyUnreviewedCapture,
+  isCaptureProposalUnchanged,
+  persistCaptureProposal,
+  planCapture,
+} from "../capture/capture-service.js";
+import type { CaptureAction, CaptureSourceOperation } from "../capture/types.js";
 import type {
   IndexedDocument,
   KbRetriever,
@@ -31,10 +37,14 @@ import type {
   SearchHit,
   SearchResult,
 } from "../grounding/types.js";
+import { mutateOpenQuestion } from "../questions/open-question-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."));
+const workspace = await loadWorkspaceContext({
+  repoRoot: process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
+});
+const repoRoot = workspace.realRepoRoot;
 
 const SERVER_INFO = {
   name: "kb-mcp-server",
@@ -71,7 +81,8 @@ const DEFAULT_CACHE_TTL_MS = parsePositiveInt(
 );
 const DEFAULT_SLO_MS = parsePositiveInt(process.env.KB_MCP_SLO_MS, 3000, 50, 120 * 1000);
 const DEFAULT_REQUIRE_CAPTURE = parseBooleanEnv(process.env.KB_MCP_REQUIRE_CAPTURE, true);
-const DEFAULT_ENABLE_WRITES = parseBooleanEnv(process.env.KB_MCP_ENABLE_WRITES, false);
+const DEFAULT_ENABLE_WRITES =
+  !workspace.readOnly && parseBooleanEnv(process.env.KB_MCP_ENABLE_WRITES, false);
 const DEFAULT_MCP_PROFILE = normalizeMcpProfile(process.env.KB_MCP_PROFILE);
 const DEFAULT_RETRIEVAL_BACKEND = normalizeRetrievalBackend(
   process.env.KB_MCP_RETRIEVAL_BACKEND || "bm25",
@@ -85,53 +96,23 @@ const WRITE_REFRESH_DEBOUNCE_MS = parsePositiveInt(
   0,
   2000,
 );
-const DEFAULT_SCAN_ROOTS = RETRIEVER_DEFAULT_SCAN_ROOTS;
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
 const MAX_CONTEXT = 3;
 
 const logOrder = { off: 0, error: 1, warn: 2, info: 3, debug: 4 };
 const logLevel = normalizeLogLevel(process.env.KB_MCP_LOG_LEVEL || "error");
-const SIMILARITY_STOPWORDS = new Set([
-  "the",
-  "and",
-  "for",
-  "with",
-  "that",
-  "this",
-  "from",
-  "your",
-  "into",
-  "when",
-  "what",
-  "where",
-  "which",
-  "how",
-  "why",
-  "are",
-  "was",
-  "were",
-  "can",
-  "use",
-  "using",
-  "local",
-  "domain",
-  "note",
-  "topic",
-  "term",
-]);
-
 let docCache = {
   loadedAt: 0,
   docs: [] as LocalDocument[],
 };
-let writeQueue = Promise.resolve();
 let pendingDocRefresh: Promise<void> | null = null;
 
 async function getRetriever(forceRefresh = false): Promise<KbRetriever> {
   return getKbRetriever({
+    workspace,
     repoRoot,
-    scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+    scanRoots: [...workspace.scanRoots],
     cacheTtlMs: DEFAULT_CACHE_TTL_MS,
     forceRefresh,
   });
@@ -140,8 +121,9 @@ async function getRetriever(forceRefresh = false): Promise<KbRetriever> {
 async function getSqliteRetriever(forceRefresh = false): Promise<KbRetriever> {
   const { getSqliteKbRetriever } = await import("../grounding/sqlite-index.js");
   return getSqliteKbRetriever({
+    workspace,
     repoRoot,
-    scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+    scanRoots: [...workspace.scanRoots],
     forceRefresh,
   });
 }
@@ -175,8 +157,7 @@ async function handleKbResumeProject(args: JsonObject): Promise<ToolPayload> {
   if (!projectId) {
     throw new Error("Missing required argument: projectId");
   }
-  const scanRoots = parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS);
-  const result = await resumeProject({ projectId }, repoRoot, scanRoots);
+  const result = await resumeProject({ projectId }, repoRoot, [...workspace.scanRoots], workspace);
   return result;
 }
 
@@ -206,7 +187,7 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
         protocolVersion: negotiateProtocolVersion(params?.protocolVersion),
         capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
-        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). Use kb.search for evidence, kb.get_record for direct reads, and kb.answer_and_capture for grounded Q&A. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled; automatic capture is skipped"}.`,
+        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). For ordinary grounded Q&A, call kb.answer_and_capture exactly once with responseMode=auto and responseFormat=compact. Do not call kb.search or kb.get_record first. After a successful call, return its answer, citations, capture status, tokenUsage, and timings immediately. Do not inspect or manually edit KB/navigation/digest files or run broad checks unless the result reports review/error or the user explicitly asks for maintenance. Use kb.search only for evidence-only requests, kb.get_record only for an explicitly requested record, and kb.resume_project for a named project. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled; automatic capture is skipped"}.`,
       };
     case "ping":
       return {};
@@ -221,10 +202,10 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
     case "resources/read":
       return await readMcpResource(params, {
         repoRoot,
-        workspaceId: normalizeScalar(process.env.KB_MCP_WORKSPACE_ID) || "default",
+        workspace,
         profile: DEFAULT_MCP_PROFILE,
         writesEnabled: DEFAULT_ENABLE_WRITES,
-        scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+        scanRoots: [...workspace.scanRoots],
         getDocuments: () => getDocuments(false),
       });
     case "prompts/list":
@@ -440,12 +421,16 @@ async function handleKbUpsertNote(args: JsonObject): Promise<ToolPayload> {
     path: normalizeScalar(args?.path),
     module: normalizeScalar(args?.module),
     track: normalizeScalar(args?.track),
+    projectId: normalizeScalar(args?.projectId),
     type: normalizeScalar(args?.type),
     status: normalizeScalar(args?.status),
     tags: normalizeTags(args?.tags),
     owner: normalizeScalar(args?.owner),
     updated: normalizeDateString(args?.updated),
     append: Boolean(args?.append),
+    conflictPolicy: normalizeScalar(args?.conflictPolicy).toLowerCase(),
+    baseContentHash: normalizeScalar(args?.baseContentHash).toLowerCase(),
+    sourceOperation: normalizeScalar(args?.sourceOperation).toLowerCase() || "upsert",
     dryRun,
   });
 
@@ -460,8 +445,12 @@ async function handleKbUpsertNote(args: JsonObject): Promise<ToolPayload> {
   if (result.type) lines.push(`Type: ${result.type}`);
   if (result.dedupe?.matched) {
     lines.push(
-      `Dedupe: reused existing note (${result.dedupe.reason}, score=${result.dedupe.score})`,
+      `Dedupe: advisory candidate (${result.dedupe.reason}, score=${result.dedupe.score})`,
     );
+  }
+  if (result.proposal) {
+    lines.push(`Proposal: ${result.proposal.proposalId}`);
+    lines.push(`Review required: ${result.proposal.requiresReview}`);
   }
 
   return {
@@ -485,6 +474,8 @@ async function handleKbAddOpenQuestion(args: JsonObject): Promise<ToolPayload> {
     status: normalizeScalar(args?.status) || "open",
     resolvedBy: normalizeScalar(args?.resolvedBy),
     relatedPath: normalizeScalar(args?.relatedPath),
+    owner: normalizeScalar(args?.owner),
+    source: normalizeScalar(args?.source) || "kb.add_open_question",
     dryRun: Boolean(args?.dryRun),
   });
 
@@ -529,8 +520,7 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
   if (strategy === "note") {
     const captureStartedAt = performance.now();
     const noteKind = normalizeScalar(args?.noteKind).toLowerCase() || "topic";
-    const inferredModule =
-      normalizeScalar(args?.module) || inferPrimaryModule(args?.question, args?.mode);
+    const requestedModule = normalizeScalar(args?.module);
     const defaultTitle = inferNoteTitle(args?.question, noteKind);
     const noteTitle = normalizeScalar(args?.noteTitle) || defaultTitle;
     const noteBody =
@@ -545,14 +535,34 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
       title: noteTitle,
       body: noteBody,
       path: normalizeScalar(args?.notePath),
-      module: inferredModule,
+      module: requestedModule,
       track: normalizeScalar(args?.track),
+      projectId: normalizeScalar(args?.projectId),
       type: normalizeScalar(args?.noteType) || "concept",
       status: normalizeScalar(args?.noteStatus) || "draft",
-      tags: normalizeTags(args?.noteTags) || inferDefaultTags(args?.mode, inferredModule),
+      tags:
+        normalizeTags(args?.noteTags) ||
+        inferDefaultTags(
+          args?.mode,
+          requestedModule || inferPrimaryModule(args?.question, args?.mode),
+        ),
       owner: normalizeScalar(args?.noteOwner) || "kb-mcp-server",
       updated: normalizeDateString(""),
       append: Boolean(args?.append),
+      conflictPolicy: normalizeScalar(args?.conflictPolicy).toLowerCase(),
+      sourceOperation: "answer",
+      evidenceCitations: Array.isArray(answer?.citations) ? answer.citations : [],
+      evidenceRoutes: Array.isArray(answer?.evidence)
+        ? (answer.evidence as SearchHit[]).map((item) => ({
+            path: normalizeScalar(item?.path),
+            track: normalizeScalar(item?.track),
+            module: normalizeScalar(item?.module),
+            projectId: inferEvidenceProjectId(item?.path),
+            score: Number(item?.score),
+          }))
+        : [],
+      groundedConfidence:
+        answer?.confidence && typeof answer.confidence === "object" ? answer.confidence : null,
       dryRun,
     });
     captureMs = roundMs(performance.now() - captureStartedAt);
@@ -570,6 +580,8 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
       status: "open",
       resolvedBy: "",
       relatedPath: "",
+      owner: normalizeScalar(args?.noteOwner) || "kb-mcp-server",
+      source: "kb.answer_and_capture",
       dryRun,
     });
     captureMs = roundMs(performance.now() - captureStartedAt);
@@ -600,6 +612,9 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
   lines.push(`Capture action: ${capture.action}${dryRun ? " (dry-run)" : ""}`);
   lines.push(`Capture file: ${capture.path}`);
   if (capture.reason) lines.push(`Capture reason: ${capture.reason}`);
+  if (capture.proposal?.proposalId) {
+    lines.push(`Capture proposal: ${capture.proposal.proposalId}`);
+  }
   const answerTimings = answer?.timings || {};
   const timings = {
     retrievalMs: Number.isFinite(answerTimings?.retrievalMs) ? answerTimings.retrievalMs : null,
@@ -615,6 +630,7 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
   lines.push(
     `SLO guard: ${slo.status.toUpperCase()} (threshold=${slo.thresholdMs} ms, total=${slo.totalMs} ms${slo.breached ? `, over=${slo.overByMs} ms` : ""})`,
   );
+  lines.push(formatTokenUsage(answer.tokenUsage));
   lines.push("");
   lines.push(answer.answer || "");
 
@@ -642,174 +658,44 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
 }
 
 async function buildGroundedAnswerPayload(args: JsonObject): Promise<ToolPayload> {
-  const startedAt = performance.now();
-  const question = normalizeScalar(args?.question);
-  if (!question) throw new Error("Missing required argument: question");
-  const strict = args?.strict !== false;
-  const sloThresholdMs = resolveSloThreshold(args?.sloMs);
-  const responseMode = normalizeResponseMode(args?.responseMode);
-
-  const fastAnswer = await tryBuildFastAnswer({
-    question,
-    mode: normalizeScalar(args?.mode).toLowerCase(),
-    responseMode,
-    strict,
-  });
-  if (fastAnswer) {
-    const existing: any = fastAnswer.structured?.timings || {};
-    fastAnswer.structured.timings = {
-      retrievalMs: Number.isFinite(existing.retrievalMs) ? existing.retrievalMs : null,
-      synthesisMs: Number.isFinite(existing.synthesisMs) ? existing.synthesisMs : null,
-      captureMs: null as number | null,
-      totalMs: roundMs(performance.now() - startedAt),
-    };
-    return shapeGroundedPayload(attachSloGuardToPayload(fastAnswer, sloThresholdMs), args);
-  }
-
-  const retrievalStartedAt = performance.now();
-  const searchResult = await runSearch({
-    query: question,
-    limit: parsePositiveInt(args?.limit, 8, 3, MAX_LIMIT),
-    context: 1,
-    mode: args?.mode,
-    track: args?.track,
-    module: args?.module,
-    includeArchive: Boolean(args?.includeArchive),
-    backend: args?.backend,
-    debug: Boolean(args?.debug),
-    debugTopN: parsePositiveInt(args?.debugTopN, 5, 1, 25),
-  });
-  const retrievalMs = Number.isFinite(searchResult?.metrics?.latencyMs)
-    ? roundMs(searchResult.metrics.latencyMs)
-    : roundMs(performance.now() - retrievalStartedAt);
-  const synthesisStartedAt = performance.now();
-
-  if (!searchResult.hits.length) {
-    const thresholds = buildGateThresholds();
-    const gate = {
-      pass: false,
-      reasons: ["no evidence hits"],
-      thresholds,
-      measured: {
-        hitCount: 0,
-        uniqueSources: 0,
-        tokenCoverage: 0,
-        topScore: 0,
-        dominantSourceShare: 1,
-      },
-    };
-    const payload = {
-      contentText:
-        "No grounded evidence found in local KB sources for that question. Try broader wording or remove filters.",
-      structured: {
-        question,
-        answer:
-          "No grounded answer available from local KB evidence for this query. Broaden the query or remove filters.",
-        strict,
-        responseMode,
-        sourceTier: "no-local-evidence",
-        abstained: true,
-        confidence: { label: "low", score: 0.15, rationale: "No evidence hits" },
-        gate,
-        citations: [] as any[],
-        evidence: [] as SearchHit[],
-        search: {
-          signals: searchResult.signals || null,
-          debug: searchResult.debug || null,
-          metrics: searchResult.metrics || null,
-        },
-        timings: {
-          retrievalMs,
-          synthesisMs: roundMs(performance.now() - synthesisStartedAt),
-          captureMs: null as number | null,
-          totalMs: roundMs(performance.now() - startedAt),
-        },
-      },
-    };
-    return shapeGroundedPayload(attachSloGuardToPayload(payload, sloThresholdMs), args);
-  }
-
-  const bestEvidence = searchResult.hits.slice(0, Math.min(6, searchResult.hits.length));
-  const citations = bestEvidence.map((hit) => ({
-    path: hit.path,
-    line: hit.lineNumber,
-    score: hit.score,
-  }));
-
-  const assessment = assessGrounding(searchResult);
-  const confidence = assessment.confidence;
-  const gate = assessment.gate;
-  const evidenceBullets = bestEvidence.slice(0, 4).map((hit) => {
-    return `${trimSentence(hit.snippet)} (${hit.path}:${hit.lineNumber})`;
+  const structured = await answerGrounded(args, {
+    search: runSearch,
+    listDocuments: async () => await getDocuments(false),
   });
 
-  let answerText;
-  const shouldAbstain = strict && !gate.pass;
-  if (shouldAbstain) {
-    const reasonText = gate.reasons.length
-      ? gate.reasons.join("; ")
-      : "evidence thresholds not met";
-    answerText =
-      "Grounded answer withheld (strict evidence gate):\n" +
-      `- Reason: ${reasonText}.\n` +
-      "- Please refine your question with specific Domain object names, transaction codes, or implementation context.\n" +
-      "\nBest matching local evidence:\n" +
-      evidenceBullets.map((line) => `- ${line}`).join("\n") +
-      "\n\nNote: Strict mode avoids weakly-grounded synthesis.";
-  } else if (confidence.label === "low") {
-    answerText =
-      "Grounded answer (retrieval-based, low confidence):\n" +
-      "- The current evidence is partial or weak for a reliable direct answer.\n" +
-      "- Please refine with more specific Domain object names, transaction codes, or module context.\n" +
-      "\nBest matching local evidence:\n" +
-      evidenceBullets.map((line) => `- ${line}`).join("\n") +
-      "\n\nNote: This output is extractive and intentionally conservative.";
+  let contentText: string;
+  if (!structured.evidence.length) {
+    contentText = [
+      "No grounded evidence found in local KB sources for that question. Try broader wording or remove filters.",
+      "",
+      formatTokenUsage(structured.tokenUsage),
+    ].join("\n");
+  } else if (structured.fastPath.used) {
+    contentText = [structured.answer, "", formatTokenUsage(structured.tokenUsage)].join("\n");
   } else {
-    answerText =
-      "Grounded answer (retrieval-based):\n" +
-      evidenceBullets.map((line) => `- ${line}`).join("\n") +
-      "\n\nNote: This synthesis is extractive from local KB evidence.";
+    contentText = [
+      "# kb.answer_grounded",
+      `Question: ${structured.question}`,
+      `Confidence: ${structured.confidence.label} (${structured.confidence.score})`,
+      `Strict gate: ${structured.gate.pass ? "pass" : "fail"}`,
+      formatTokenUsage(structured.tokenUsage),
+      "",
+      structured.answer,
+    ].join("\n");
   }
 
-  const lines: any[] = [];
-  lines.push(`# kb.answer_grounded`);
-  lines.push(`Question: ${question}`);
-  lines.push(`Confidence: ${confidence.label} (${confidence.score})`);
-  lines.push(`Strict gate: ${gate.pass ? "pass" : "fail"}`);
-  lines.push("");
-  lines.push(answerText);
+  const payload: ToolPayload = { contentText, structured };
+  return shapeGroundedPayload(
+    attachSloGuardToPayload(payload, resolveSloThreshold(args?.sloMs)),
+    args,
+  );
+}
 
-  const payload = {
-    contentText: lines.join("\n"),
-    structured: {
-      question,
-      answer: answerText,
-      strict,
-      responseMode,
-      sourceTier: inferSourceTier(searchResult, bestEvidence),
-      abstained: shouldAbstain,
-      confidence,
-      gate,
-      citations,
-      evidence: bestEvidence,
-      search: {
-        signals: searchResult.signals || null,
-        debug: searchResult.debug || null,
-        metrics: searchResult.metrics || null,
-      },
-      fastPath: {
-        used: false,
-        alreadyCaptured: false,
-      },
-      timings: {
-        retrievalMs,
-        synthesisMs: roundMs(performance.now() - synthesisStartedAt),
-        captureMs: null as number | null,
-        totalMs: roundMs(performance.now() - startedAt),
-      },
-    },
-  };
-  return shapeGroundedPayload(attachSloGuardToPayload(payload, sloThresholdMs), args);
+function formatTokenUsage(usage: GroundedTokenUsage | null | undefined): string {
+  if (!usage || !Number.isFinite(usage.totalTokens)) return "Token usage: unavailable";
+  const prefix = usage.kind === "estimate" ? "~" : "";
+  const label = usage.kind === "estimate" ? "estimate" : "provider reported";
+  return `Token usage: ${prefix}${usage.totalTokens} visible tokens (${label}: request ${usage.requestTokens}, evidence ${usage.evidenceTokens}, answer ${usage.answerTokens})`;
 }
 
 async function handleKbRefresh() {
@@ -831,394 +717,6 @@ async function runSearch(args: JsonObject): Promise<SearchResult> {
   const retriever =
     backend === "sqlite" ? await getSqliteRetriever(false) : await getRetriever(false);
   return retriever.search(args as SearchArgs);
-}
-
-async function tryBuildFastAnswer({
-  question,
-  mode,
-  responseMode,
-  strict,
-}: {
-  question: string;
-  mode: string;
-  responseMode: string;
-  strict: boolean;
-}): Promise<ToolPayload | null> {
-  const startedAt = performance.now();
-  if (responseMode === "curate") return null;
-  if (mode === "project") return null;
-
-  const extractedTerm = extractSimpleTerm(question);
-  if (!extractedTerm) return null;
-
-  const retrievalStartedAt = performance.now();
-  const termDoc = await findFastTermDocument(extractedTerm);
-  const retrievalMs = roundMs(performance.now() - retrievalStartedAt);
-  if (!termDoc) {
-    return await tryBuildFastTopicAnswer({
-      question,
-      responseMode,
-      strict,
-      startedAt,
-      retrievalStartedAt,
-    });
-  }
-
-  const synthesisStartedAt = performance.now();
-  const citationLine =
-    findHeadingLine(termDoc.lines, /^##\s+Definition\b/i) ||
-    findHeadingLine(termDoc.lines, /^##\s+1-minute explanation\b/i) ||
-    1;
-  const shortAnswer =
-    extractFastTermSummary(termDoc) || `${termDoc.title} is a curated Domain term in the local KB.`;
-
-  const answerText = [
-    "Fast grounded answer (term cache hit):",
-    `- ${trimSentence(shortAnswer)}`,
-    `- Source: ${termDoc.relPath}:${citationLine}`,
-    "",
-    "Note: Fast mode reused an existing curated term note.",
-  ].join("\n");
-
-  const thresholds = {
-    ...buildGateThresholds(),
-    minHits: 1,
-    minUniqueSources: 1,
-    minTokenCoverage: 0,
-    minTopScore: 0,
-    maxDominantSourceShare: 1,
-  };
-  const modeLabel = responseMode === "fast" ? "forced-fast" : "auto-fast";
-  return {
-    contentText: answerText,
-    structured: {
-      question,
-      answer: answerText,
-      strict: strict !== false,
-      responseMode,
-      sourceTier: "exact-term",
-      abstained: false,
-      confidence: {
-        label: "high",
-        score: 0.94,
-        rationale: "Direct match to an existing curated term note",
-      },
-      gate: {
-        pass: true,
-        reasons: [] as string[],
-        thresholds,
-        measured: {
-          hitCount: 1,
-          uniqueSources: 1,
-          tokenCoverage: 1,
-          topScore: 99,
-          dominantSourceShare: 1,
-        },
-      },
-      citations: [
-        {
-          path: termDoc.relPath,
-          line: citationLine,
-          score: 99,
-        },
-      ],
-      evidence: [
-        {
-          path: termDoc.relPath,
-          score: 99,
-          lineNumber: citationLine,
-          endLine: Math.min(termDoc.lines.length, citationLine + 1),
-          title: termDoc.title,
-          sourceKind: termDoc.sourceKind,
-          track: termDoc.track,
-          module: termDoc.module,
-          snippet: shortAnswer,
-          matchedTokens: [normalizeScalar(extractedTerm).toLowerCase()],
-          context: [] as any[],
-        },
-      ],
-      search: {
-        signals: null as any,
-        debug: null as any,
-      },
-      fastPath: {
-        used: true,
-        mode: modeLabel,
-        strategy: "term-note",
-        term: extractedTerm,
-        path: termDoc.relPath,
-        alreadyCaptured: true,
-      },
-      timings: {
-        retrievalMs,
-        synthesisMs: roundMs(performance.now() - synthesisStartedAt),
-        captureMs: null as number | null,
-        totalMs: roundMs(performance.now() - startedAt),
-      },
-    },
-  };
-}
-
-async function tryBuildFastTopicAnswer({
-  question,
-  responseMode,
-  strict,
-  startedAt,
-  retrievalStartedAt,
-}: {
-  question: string;
-  responseMode: string;
-  strict: boolean;
-  startedAt: number;
-  retrievalStartedAt: number;
-}): Promise<ToolPayload | null> {
-  const topicQuery = extractLikelyTopicQuery(question);
-  if (!topicQuery) return null;
-
-  const topicDoc = await findFastTopicDocument(topicQuery);
-  const retrievalMs = roundMs(performance.now() - retrievalStartedAt);
-  if (!topicDoc) return null;
-
-  const synthesisStartedAt = performance.now();
-  const citationLine = findHeadingLine(topicDoc.lines, /^#\s+/) || 1;
-  const shortAnswer =
-    extractFastTopicSummary(topicDoc) || `${topicDoc.title} is a curated local KB topic.`;
-  const answerText = [
-    "Fast grounded answer (topic cache hit):",
-    `- ${trimSentence(shortAnswer)}`,
-    `- Source: ${topicDoc.relPath}:${citationLine}`,
-    "",
-    "Note: Fast mode reused an existing curated topic note.",
-  ].join("\n");
-  const modeLabel = responseMode === "fast" ? "forced-fast" : "auto-fast";
-
-  return {
-    contentText: answerText,
-    structured: {
-      question,
-      answer: answerText,
-      strict: strict !== false,
-      responseMode,
-      sourceTier: "exact-topic",
-      abstained: false,
-      confidence: {
-        label: "high",
-        score: 0.91,
-        rationale: "Direct match to an existing curated topic note",
-      },
-      gate: {
-        pass: true,
-        reasons: [] as string[],
-        thresholds: {
-          ...buildGateThresholds(),
-          minHits: 1,
-          minUniqueSources: 1,
-          minTokenCoverage: 0,
-          minTopScore: 0,
-          maxDominantSourceShare: 1,
-        },
-        measured: {
-          hitCount: 1,
-          uniqueSources: 1,
-          tokenCoverage: 1,
-          topScore: 95,
-          dominantSourceShare: 1,
-        },
-      },
-      citations: [{ path: topicDoc.relPath, line: citationLine, score: 95 }],
-      evidence: [
-        {
-          path: topicDoc.relPath,
-          score: 95,
-          lineNumber: citationLine,
-          endLine: Math.min(topicDoc.lines.length, citationLine + 3),
-          title: topicDoc.title,
-          sourceKind: topicDoc.sourceKind,
-          track: topicDoc.track,
-          module: topicDoc.module,
-          snippet: shortAnswer,
-          matchedTokens: tokenizeForSimilarity(topicQuery).slice(0, 12),
-          context: [] as any[],
-        },
-      ],
-      search: {
-        signals: null as any,
-        debug: null as any,
-      },
-      fastPath: {
-        used: true,
-        mode: modeLabel,
-        strategy: "topic-note",
-        topic: topicQuery,
-        path: topicDoc.relPath,
-        alreadyCaptured: true,
-      },
-      timings: {
-        retrievalMs,
-        synthesisMs: roundMs(performance.now() - synthesisStartedAt),
-        captureMs: null as number | null,
-        totalMs: roundMs(performance.now() - startedAt),
-      },
-    },
-  };
-}
-
-async function findFastTermDocument(term: string): Promise<LocalDocument | null> {
-  const docs = await getDocuments(false);
-  const termDocs = docs.filter(
-    (doc) => doc.relPath.startsWith("kb/terms/") && doc.relPath.endsWith(".md"),
-  );
-  if (!termDocs.length) return null;
-
-  const target = normalizeTermKey(term);
-  if (!target) return null;
-
-  const exact = termDocs.find((doc) => {
-    const docBase = path.basename(doc.relPath, ".md");
-    return normalizeTermKey(docBase) === target || normalizeTermKey(doc.title) === target;
-  });
-  if (exact) return exact;
-
-  const normalizedQuery = normalizeForMatch(term);
-  const ranked = termDocs
-    .map((doc) => ({ doc, score: scoreDocumentMatch(doc, normalizedQuery) }))
-    .sort((a, b) => b.score - a.score || a.doc.relPath.localeCompare(b.doc.relPath));
-
-  const best = ranked[0];
-  if (best && best.score >= 95) return best.doc;
-  return null;
-}
-
-async function findFastTopicDocument(topicQuery: string): Promise<LocalDocument | null> {
-  const docs = await getDocuments(false);
-  const topicDocs = docs.filter(
-    (doc) => doc.relPath.startsWith("kb/topics/") && doc.relPath.endsWith(".md"),
-  );
-  if (!topicDocs.length) return null;
-
-  const normalizedQuery = normalizeForMatch(topicQuery);
-  const ranked = topicDocs
-    .map((doc) => ({ doc, score: scoreDocumentMatch(doc, normalizedQuery) }))
-    .sort((a, b) => b.score - a.score || a.doc.relPath.localeCompare(b.doc.relPath));
-
-  const best = ranked[0];
-  if (best && best.score >= 95) return best.doc;
-  return null;
-}
-
-function extractSimpleTerm(question: string): string {
-  const q = singleLine(question);
-  if (!q) return "";
-
-  const patterns = [
-    /^\s*what(?:'s|\s+is)\s+([A-Za-z0-9/_-]{2,24})\s+in\s+domain\s*\??\s*$/i,
-    /^\s*define\s+([A-Za-z0-9/_-]{2,24})\s+(?:in\s+domain)?\s*\??\s*$/i,
-    /^\s*meaning\s+of\s+([A-Za-z0-9/_-]{2,24})\s+in\s+domain\s*\??\s*$/i,
-  ];
-
-  for (const pattern of patterns) {
-    const match = q.match(pattern);
-    if (!match?.[1]) continue;
-    const candidate = normalizeScalar(match[1]).replace(/[^A-Za-z0-9/_-]+/g, "");
-    if (!candidate) continue;
-    if (normalizeTermKey(candidate) === "Domain") continue;
-    return candidate;
-  }
-  return "";
-}
-
-function extractLikelyTopicQuery(question: string): string {
-  const q = singleLine(question).replace(/\?+$/, "");
-  if (!q) return "";
-  const patterns = [
-    /^\s*(?:explain|summarize|tell\s+me\s+about)\s+(.+)$/i,
-    /^\s*what(?:'s|\s+is)\s+(.+)$/i,
-    /^\s*how\s+does\s+(.+)\s+work\s*$/i,
-  ];
-  for (const pattern of patterns) {
-    const match = q.match(pattern);
-    if (match?.[1]) return singleLine(match[1]);
-  }
-  return q.length <= 160 ? q : "";
-}
-
-function extractFastTermSummary(doc: LocalDocument): string {
-  const lines = Array.isArray(doc?.lines) ? doc.lines : [];
-  if (!lines.length) return "";
-
-  const minuteHeading = findHeadingLine(lines, /^##\s+1-minute explanation\b/i);
-  if (minuteHeading) {
-    const bullets: string[] = [];
-    for (let i = minuteHeading; i < lines.length; i += 1) {
-      const line = lines[i];
-      if (/^##\s+/.test(line)) break;
-      const bulletMatch = line.match(/^\s*-\s+(.*)$/);
-      if (!bulletMatch) continue;
-      const bullet = singleLine(bulletMatch[1]);
-      if (bullet) bullets.push(bullet);
-      if (bullets.length >= 2) break;
-    }
-    if (bullets.length) return bullets.join(" ");
-  }
-
-  const definitionHeading = findHeadingLine(lines, /^##\s+Definition\b/i);
-  if (definitionHeading) {
-    for (let i = definitionHeading; i < lines.length; i += 1) {
-      const line = singleLine(lines[i]);
-      if (!line) continue;
-      if (/^##\s+/.test(line)) break;
-      return line;
-    }
-  }
-
-  for (const raw of lines) {
-    const line = singleLine(raw);
-    if (!line || line.startsWith("#")) continue;
-    if (line.startsWith("- ")) return line.slice(2).trim();
-    return line;
-  }
-  return "";
-}
-
-function extractFastTopicSummary(doc: LocalDocument): string {
-  const lines = Array.isArray(doc?.lines) ? doc.lines : [];
-  if (!lines.length) return "";
-
-  const preferredHeading = lines.findIndex((line) =>
-    /^##\s+(Decision|Definition|Goal|Purpose|1-minute explanation|Current status|Summary)\b/i.test(
-      line,
-    ),
-  );
-  const start = preferredHeading >= 0 ? preferredHeading + 1 : 0;
-  const bullets: string[] = [];
-  const paragraphs: string[] = [];
-
-  for (let i = start; i < lines.length; i += 1) {
-    const raw = lines[i];
-    if (i > start && /^##\s+/.test(raw)) break;
-    const line = singleLine(raw);
-    if (!line || line.startsWith("#")) continue;
-    const bullet = line.match(/^[-*]\s+(.+)$/);
-    if (bullet?.[1]) {
-      bullets.push(singleLine(bullet[1]));
-      if (bullets.length >= 2) break;
-      continue;
-    }
-    paragraphs.push(line);
-    if (paragraphs.join(" ").length >= 180) break;
-  }
-
-  if (bullets.length) return bullets.join(" ");
-  if (paragraphs.length) return paragraphs.join(" ");
-  return "";
-}
-
-function findHeadingLine(lines: string[], pattern: RegExp): number {
-  if (!Array.isArray(lines) || !(pattern instanceof RegExp)) return 0;
-  for (let i = 0; i < lines.length; i += 1) {
-    if (pattern.test(lines[i])) return i + 1;
-  }
-  return 0;
 }
 
 function buildDocumentPayload(doc: LocalDocument, maxChars: number) {
@@ -1259,143 +757,6 @@ function scoreDocumentMatch(doc: LocalDocument, normalizedQuery: string): number
   return score;
 }
 
-function assessGrounding(searchResult: SearchResult) {
-  const hits = Array.isArray(searchResult?.hits) ? searchResult.hits : [];
-  const queryTokens = Array.isArray(searchResult?.queryTokens) ? searchResult.queryTokens : [];
-  if (!hits.length) {
-    return {
-      confidence: { label: "low", score: 0.15, rationale: "No evidence hits" },
-      gate: {
-        pass: false,
-        reasons: ["no evidence hits"],
-        thresholds: buildGateThresholds(),
-        measured: {
-          hitCount: 0,
-          uniqueSources: 0,
-          tokenCoverage: 0,
-          topScore: 0,
-        },
-      },
-    };
-  }
-
-  const topHits = hits.slice(0, 5);
-  const signals = searchResult?.signals as any;
-  const topScore = Number.isFinite(signals.topScore) ? signals.topScore : topHits[0]?.score || 0;
-  const hitCount = Number.isFinite(signals.hitCount) ? signals.hitCount : hits.length;
-  const uniqueSources = Number.isFinite(signals.uniqueSources)
-    ? signals.uniqueSources
-    : new Set(topHits.map((hit) => hit.path)).size;
-  const tokenCoverage = Number.isFinite(signals.tokenCoverage)
-    ? signals.tokenCoverage
-    : estimateTokenCoverage(topHits, queryTokens);
-  const dominantSourceShare = Number.isFinite(signals.dominantSourceShare)
-    ? signals.dominantSourceShare
-    : estimateDominantSourceShare(topHits);
-
-  const thresholds = buildGateThresholds();
-  const reasons: string[] = [];
-  if (hitCount < thresholds.minHits)
-    reasons.push(`evidence hits ${hitCount} < ${thresholds.minHits}`);
-  if (uniqueSources < thresholds.minUniqueSources)
-    reasons.push(`unique sources ${uniqueSources} < ${thresholds.minUniqueSources}`);
-  if (tokenCoverage < thresholds.minTokenCoverage)
-    reasons.push(`token coverage ${tokenCoverage} < ${thresholds.minTokenCoverage}`);
-  if (topScore < thresholds.minTopScore)
-    reasons.push(`top score ${topScore} < ${thresholds.minTopScore}`);
-  if (dominantSourceShare > thresholds.maxDominantSourceShare) {
-    reasons.push(`source dominance ${dominantSourceShare} > ${thresholds.maxDominantSourceShare}`);
-  }
-  const gatePass = reasons.length === 0;
-
-  const relevanceSignal = Math.min(1, topScore / 18);
-  const diversitySignal = Math.min(1, uniqueSources / 3);
-  const coverageSignal = queryTokens.length ? Math.min(1, tokenCoverage) : 0.5;
-
-  const score = Number(
-    (0.45 * relevanceSignal + 0.3 * coverageSignal + 0.25 * diversitySignal).toFixed(2),
-  );
-  let confidence;
-  if (score >= 0.75) {
-    confidence = {
-      label: "high",
-      score,
-      rationale: "High-scoring evidence with strong query coverage and source diversity",
-    };
-  } else if (score >= 0.5) {
-    confidence = {
-      label: "medium",
-      score,
-      rationale: "Moderate evidence quality; answer is grounded but may require verification",
-    };
-  } else {
-    confidence = {
-      label: "low",
-      score,
-      rationale: "Weak or partial evidence coverage; refine query for a reliable answer",
-    };
-  }
-
-  return {
-    confidence,
-    gate: {
-      pass: gatePass,
-      reasons,
-      thresholds,
-      measured: {
-        hitCount,
-        uniqueSources,
-        tokenCoverage: Number(tokenCoverage.toFixed(3)),
-        topScore: Number(topScore.toFixed(3)),
-        dominantSourceShare: Number(dominantSourceShare.toFixed(3)),
-      },
-    },
-  };
-}
-
-function buildGateThresholds() {
-  return {
-    minHits: 3,
-    minUniqueSources: 2,
-    minTokenCoverage: 0.45,
-    minTopScore: 14,
-    maxDominantSourceShare: 0.9,
-  };
-}
-
-function inferSourceTier(searchResult: SearchResult, evidence: SearchHit[]): string {
-  const topEvidence = Array.isArray(evidence) ? evidence : [];
-  if (topEvidence.some((hit) => hit?.sourceKind === "reference-source")) return "local-book";
-  if (searchResult?.backend === "sqlite") return "sqlite";
-  return "bm25";
-}
-
-function estimateTokenCoverage(hits: SearchHit[], queryTokens: string[]): number {
-  if (!queryTokens.length) return 0;
-  const covered = new Set<string>();
-  for (const hit of hits) {
-    const matched = Array.isArray(hit.matchedTokens) ? hit.matchedTokens : [];
-    for (const token of matched) covered.add(token);
-  }
-  return covered.size / queryTokens.length;
-}
-
-function estimateDominantSourceShare(hits: SearchHit[]): number {
-  if (!hits.length) return 1;
-  const counts = new Map<string, number>();
-  for (const hit of hits) {
-    counts.set(hit.path, (counts.get(hit.path) || 0) + 1);
-  }
-  const maxCount = Math.max(...counts.values());
-  return maxCount / hits.length;
-}
-
-function enqueueWrite(work: () => Promise<void>): Promise<void> {
-  const run = async () => await work();
-  writeQueue = writeQueue.then(run, run);
-  return writeQueue;
-}
-
 function scheduleDocumentRefresh(): Promise<void> {
   if (pendingDocRefresh) return pendingDocRefresh;
   pendingDocRefresh = new Promise<void>((resolve, reject) => {
@@ -1413,65 +774,6 @@ function scheduleDocumentRefresh(): Promise<void> {
   return pendingDocRefresh;
 }
 
-async function findDuplicateNoteCandidate({
-  kind,
-  title,
-  body,
-  plannedPath,
-}: {
-  kind: string;
-  title: string;
-  body: string;
-  plannedPath: string;
-}): Promise<any> {
-  const docs = await getDocuments(false);
-  const prefix = kind === "term" ? "kb/terms/" : "kb/topics/";
-  const candidates = docs.filter(
-    (doc) => doc.relPath.startsWith(prefix) && doc.relPath.endsWith(".md"),
-  );
-  if (!candidates.length) return null;
-
-  const titleTokens = tokenizeForSimilarity(title);
-  const bodyTokens = tokenizeForSimilarity(body).slice(0, 140);
-  const normalizedPlanned = normalizeForMatch(plannedPath);
-  const normalizedTitle = normalizeForSimilarity(title);
-
-  let best: any = null;
-  for (const doc of candidates) {
-    if (normalizeForMatch(doc.relPath) === normalizedPlanned) continue;
-    const docBase = path.basename(doc.relPath, ".md");
-    const docTitle = doc.title || docBase;
-    const titleScore = tokenOverlapScore(titleTokens, tokenizeForSimilarity(docTitle));
-    const bodyScore = tokenOverlapScore(bodyTokens, tokenizeForSimilarity(doc.body).slice(0, 140));
-    const sameSlug =
-      slugify(docBase) === slugify(title) || normalizeForSimilarity(docBase) === normalizedTitle;
-    const score = sameSlug ? 1 : Number((0.72 * titleScore + 0.28 * bodyScore).toFixed(3));
-    if (!best || score > best.score) {
-      best = {
-        path: doc.relPath,
-        title: docTitle,
-        sameSlug,
-        score,
-        titleScore: Number(titleScore.toFixed(3)),
-        bodyScore: Number(bodyScore.toFixed(3)),
-      };
-    }
-  }
-
-  if (!best) return null;
-  const threshold = kind === "term" ? 0.74 : 0.7;
-  if (!best.sameSlug && best.score < threshold) return null;
-  return {
-    matched: true,
-    reason: best.sameSlug ? "slug-or-title-match" : "title-body-overlap",
-    score: best.score,
-    titleScore: best.titleScore,
-    bodyScore: best.bodyScore,
-    path: best.path,
-    title: best.title,
-  };
-}
-
 async function upsertKbNote(options: JsonObject): Promise<any> {
   const kind = normalizeScalar(options?.kind).toLowerCase();
   if (kind !== "topic" && kind !== "term") {
@@ -1483,217 +785,158 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
   if (!title) throw new Error("Missing title for note upsert.");
   if (!body) throw new Error("Missing body for note upsert.");
 
-  const requestedPath = normalizeScalar(options?.path);
-  let relPath = resolveKbNotePath({
-    kind,
-    title,
-    requestedPath,
-  });
-  let dedupe: any = null;
-  if (!requestedPath) {
-    dedupe = await findDuplicateNoteCandidate({
-      kind,
-      title,
-      body,
-      plannedPath: relPath,
-    });
-    if (dedupe?.matched && dedupe.path) {
-      relPath = dedupe.path;
-    }
-  }
-  const absPath = resolveRepoPath(relPath);
-  const exists = await fileExists(absPath);
-  const append = Boolean(options?.append);
   const dryRun = Boolean(options?.dryRun);
   assertWriteAllowed({ dryRun, toolName: "kb.upsert_note" });
-
   const today = normalizeDateString(options?.updated) || getTodayIsoDate();
   const normalizedTags = normalizeTags(options?.tags);
-  const moduleKey = kind === "topic" ? normalizeScalar(options?.module) || "general" : "";
-  const inferredTrack =
-    kind === "topic"
-      ? await resolveTrackForModule(moduleKey, normalizeScalar(options?.track) || "domain")
-      : normalizeScalar(options?.track) || "domain";
-  const noteContent =
-    kind === "topic"
-      ? renderTopicNote({
-          title,
-          body,
-          module: moduleKey,
-          track: inferredTrack,
-          type: normalizeScalar(options?.type) || "concept",
-          status: normalizeScalar(options?.status) || "draft",
-          owner: normalizeScalar(options?.owner) || "kb-mcp-server",
-          updated: today,
-          tags: normalizedTags || inferDefaultTags("domain", moduleKey),
-        })
-      : renderTermNote({
-          title,
-          body,
-        });
-
-  let finalContent = noteContent;
-  let action = exists ? "updated" : "created";
-  if (append && exists) {
-    const existing = await fs.readFile(absPath, "utf8");
-    finalContent = `${existing.trimEnd()}\n\n---\n\n${noteContent.trim()}\n`;
-    action = "appended";
+  const moduleKey = kind === "topic" ? normalizeScalar(options?.module) : "";
+  const requestedTrack = normalizeScalar(options?.track);
+  const fallbackTrack =
+    kind === "topic" && moduleKey
+      ? await resolveTrackForModule(moduleKey, "domain")
+      : kind === "topic"
+        ? "domain"
+        : "";
+  const conflictPolicy = normalizeScalar(options?.conflictPolicy).toLowerCase();
+  if (conflictPolicy && !["error", "append", "replace"].includes(conflictPolicy)) {
+    throw new Error("Invalid conflict policy. Expected error, append, or replace.");
   }
-
-  if (!dryRun) {
-    await enqueueWrite(async () => {
-      await fs.mkdir(path.dirname(absPath), { recursive: true });
-      await fs.writeFile(absPath, ensureTrailingNewline(finalContent), "utf8");
+  const proposedAction: CaptureAction | undefined = options?.append
+    ? "append"
+    : conflictPolicy === "append" || conflictPolicy === "replace"
+      ? conflictPolicy
+      : undefined;
+  const sourceOperationRaw = normalizeScalar(options?.sourceOperation).toLowerCase();
+  const sourceOperation: CaptureSourceOperation = ["answer", "ingest", "upsert"].includes(
+    sourceOperationRaw,
+  )
+    ? (sourceOperationRaw as CaptureSourceOperation)
+    : "upsert";
+  const plan = await planCapture({
+    repoRoot,
+    workspace,
+    sourceOperation,
+    kind,
+    title,
+    body,
+    requestedPath: normalizeScalar(options?.path),
+    module: moduleKey,
+    track: requestedTrack,
+    projectId: normalizeScalar(options?.projectId),
+    type: normalizeScalar(options?.type) || "concept",
+    status: normalizeScalar(options?.status) || "draft",
+    tags: normalizedTags || inferDefaultTags("domain", moduleKey || "general"),
+    owner: normalizeScalar(options?.owner) || "kb-mcp-server",
+    updated: today,
+    proposedAction,
+    evidenceCitations: Array.isArray(options?.evidenceCitations) ? options.evidenceCitations : [],
+    evidenceRoutes: Array.isArray(options?.evidenceRoutes) ? options.evidenceRoutes : [],
+    routingDefaults: kind === "topic" ? { track: fallbackTrack, module: "general" } : undefined,
+    groundedConfidence:
+      options?.groundedConfidence && typeof options.groundedConfidence === "object"
+        ? options.groundedConfidence
+        : null,
+    persist: false,
+  });
+  const requestedBaseContentHash = normalizeScalar(options?.baseContentHash).toLowerCase();
+  if (requestedBaseContentHash && requestedBaseContentHash !== plan.proposal.baseContentHash) {
+    throw new Error(`Capture target changed before planning: ${plan.proposal.proposedNote.path}`);
+  }
+  const unchanged =
+    sourceOperation === "ingest" &&
+    plan.targetExists &&
+    plan.proposal.proposedAction === "replace" &&
+    (await isCaptureProposalUnchanged(repoRoot, plan.proposal, workspace));
+  let action = "unchanged";
+  let proposalPath: string | null = null;
+  if (!unchanged && plan.proposal.requiresReview) {
+    if (!dryRun) proposalPath = await persistCaptureProposal(repoRoot, plan.proposal, workspace);
+    action = "proposed";
+  } else if (!unchanged) {
+    const applied = await applyUnreviewedCapture(repoRoot, plan.proposal, {
+      dryRun,
+      refresh: scheduleDocumentRefresh,
+      workspace,
     });
-    await scheduleDocumentRefresh();
+    action = applied.action;
   }
+
+  const candidate = plan.proposal.duplicateCandidates[0];
+  const dedupe = candidate
+    ? {
+        matched: true,
+        advisory: true,
+        reason: candidate.matchReason,
+        score: candidate.score,
+        titleScore: candidate.titleScore,
+        bodyScore: candidate.bodyScore,
+        path: candidate.path,
+        title: candidate.title,
+      }
+    : { matched: false };
 
   return {
     kind,
-    path: relPath,
+    path: plan.proposal.proposedNote.path,
     action,
     dryRun,
-    existsBefore: exists,
+    existsBefore: plan.targetExists,
     title,
-    module: moduleKey || null,
-    track: inferredTrack || null,
+    module: plan.proposal.proposedNote.module,
+    track: plan.proposal.proposedNote.track,
+    projectId: plan.proposal.proposedNote.projectId,
     type: kind === "topic" ? normalizeScalar(options?.type) || "concept" : null,
     status: kind === "topic" ? normalizeScalar(options?.status) || "draft" : null,
     tags: normalizedTags || null,
-    dedupe: dedupe || { matched: false },
+    dedupe,
+    duplicateCandidates: plan.proposal.duplicateCandidates,
+    baseContentHash: plan.proposal.baseContentHash,
+    routing: plan.proposal.routing,
+    proposal: plan.proposal.requiresReview
+      ? {
+          proposalId: plan.proposal.proposalId,
+          path: proposalPath,
+          status: dryRun ? "dry-run" : "pending",
+          requiresReview: true,
+          reasons: plan.proposal.reviewReasons,
+          proposedAction: plan.proposal.proposedAction,
+          routing: plan.proposal.routing,
+        }
+      : null,
   };
 }
 
 async function addOpenQuestion(options: JsonObject): Promise<any> {
-  const question = singleLine(options?.question);
-  const whyOpen = singleLine(options?.whyOpen);
-  const whatWouldResolve = singleLine(options?.whatWouldResolve);
-  const status = normalizeScalar(options?.status).toLowerCase() || "open";
-  if (status !== "open" && status !== "resolved") {
-    throw new Error("Invalid open-question status. Expected 'open' or 'resolved'.");
-  }
-  if (!question || !whyOpen || !whatWouldResolve) {
-    throw new Error("Open question requires question, whyOpen, and whatWouldResolve.");
-  }
-
-  const openQuestionsPath = "kb/open_questions.md";
-  const absPath = resolveRepoPath(openQuestionsPath);
   const dryRun = Boolean(options?.dryRun);
   assertWriteAllowed({ dryRun, toolName: "kb.add_open_question" });
-  const resolvedBy = singleLine(options?.resolvedBy);
-  const relatedPath = normalizeScalar(options?.relatedPath);
-
-  const relatedLink = relatedPath ? toOpenQuestionRelativeLink(relatedPath) : "";
-  const entryLines = [
-    `- question: ${question}`,
-    `  why it's open: ${whyOpen}`,
-    `  what would resolve it: ${whatWouldResolve}`,
-    `  status: ${status}`,
-  ];
-  if (resolvedBy) entryLines.push(`  resolved by: ${resolvedBy}`);
-  if (relatedLink) entryLines.push(`  related: ${relatedLink}`);
-  entryLines.push(`  added: ${getTodayIsoDate()}`);
-  const entry = entryLines.join("\n");
-
-  let current = "# Open Questions\n";
-  let exists = false;
-  if (await fileExists(absPath)) {
-    exists = true;
-    current = await fs.readFile(absPath, "utf8");
-  }
-
-  const separator = current.trimEnd().endsWith("# Open Questions") ? "\n\n" : "\n\n";
-  const next = `${current.trimEnd()}${separator}${entry}\n`;
-  if (!dryRun) {
-    await enqueueWrite(async () => {
-      await fs.mkdir(path.dirname(absPath), { recursive: true });
-      await fs.writeFile(absPath, next, "utf8");
-    });
-    await scheduleDocumentRefresh();
-  }
-
-  return {
-    action: exists ? "appended" : "created",
-    dryRun,
-    path: openQuestionsPath,
-    status,
-    question,
-  };
+  return mutateOpenQuestion(
+    {
+      question: options?.question,
+      whyOpen: options?.whyOpen,
+      whatWouldResolve: options?.whatWouldResolve,
+      status: options?.status,
+      resolvedBy: options?.resolvedBy,
+      relatedPath: options?.relatedPath,
+      owner: options?.owner,
+      source: options?.source,
+      dryRun,
+    },
+    {
+      repoRoot,
+      workspace,
+      writesEnabled: DEFAULT_ENABLE_WRITES,
+      refresh: refreshOpenQuestionRetrieval,
+    },
+  );
 }
 
-function resolveKbNotePath({
-  kind,
-  title,
-  requestedPath,
-}: {
-  kind: string;
-  title: string;
-  requestedPath: string;
-}): string {
-  const normalizedRequested = sanitizeRelativePath(requestedPath);
-  if (normalizedRequested) {
-    if (!normalizedRequested.endsWith(".md")) {
-      throw new Error("Note path must end with .md");
-    }
-    if (kind === "topic" && !normalizedRequested.startsWith("kb/topics/")) {
-      throw new Error("Topic notes must be written under kb/topics/");
-    }
-    if (kind === "term" && !normalizedRequested.startsWith("kb/terms/")) {
-      throw new Error("Term notes must be written under kb/terms/");
-    }
-    return normalizedRequested;
+async function refreshOpenQuestionRetrieval(): Promise<void> {
+  await getDocuments(true);
+  if (DEFAULT_RETRIEVAL_BACKEND === "sqlite") {
+    await getSqliteRetriever(true);
+  } else {
+    await getRetriever(true);
   }
-
-  if (kind === "topic") {
-    return `kb/topics/${slugify(title)}.md`;
-  }
-  return `kb/terms/${toTermFileName(title)}.md`;
-}
-
-function renderTopicNote({
-  title,
-  body,
-  module,
-  track,
-  type,
-  status,
-  owner,
-  updated,
-  tags,
-}: {
-  title: string;
-  body: string;
-  module: string;
-  track: string;
-  type: string;
-  status: string;
-  owner: string;
-  updated: string;
-  tags: string[] | string | null;
-}): string {
-  if (body.startsWith("---\n")) {
-    return body;
-  }
-  const normalizedTags = Array.isArray(tags) ? tags.join(", ") : singleLine(tags);
-  const frontmatter = [
-    "---",
-    `module: ${module || "general"}`,
-    `track: ${track || "domain"}`,
-    `status: ${status || "draft"}`,
-    `type: ${type || "concept"}`,
-    `owner: ${owner || "kb-mcp-server"}`,
-    `updated: ${updated || getTodayIsoDate()}`,
-    `tags: ${normalizedTags || "domain, kb-captured"}`,
-    "---",
-    "",
-  ].join("\n");
-  const titleHeading = body.startsWith("# ") ? "" : `# ${title}\n\n`;
-  return `${frontmatter}${titleHeading}${body.trim()}\n`;
-}
-
-function renderTermNote({ title, body }: { title: string; body: string }): string {
-  if (body.startsWith("# ")) return body;
-  return `# ${title}\n\n${body.trim()}\n`;
 }
 
 function buildCapturedNoteBody({
@@ -1735,6 +978,11 @@ function inferPrimaryModule(question: unknown, mode: unknown): string {
   const q = normalizeScalar(question).toLowerCase();
   if (mode === "project" || /\bproject\b|\btask\s*\d+\b/.test(q)) return "project-tracking";
   return "general";
+}
+
+function inferEvidenceProjectId(value: unknown): string {
+  const evidencePath = normalizeScalar(value).replaceAll("\\", "/");
+  return evidencePath.match(/(?:^|\/)projects\/([^/]+)(?:\/|$)/)?.[1] || "";
 }
 
 function inferNoteTitle(question: unknown, kind: string): string {
@@ -1786,69 +1034,6 @@ function singleLine(value: unknown): string {
   return `${value || ""}`.replace(/\s+/g, " ").trim();
 }
 
-function normalizeTermKey(value: unknown): string {
-  return normalizeScalar(value)
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
-}
-
-function slugify(value: unknown): string {
-  const clean = normalizeScalar(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return clean || `note-${Date.now()}`;
-}
-
-function toTermFileName(title: unknown): string {
-  const cleaned = normalizeScalar(title);
-  if (/^[A-Z0-9/_-]{2,24}$/.test(cleaned)) {
-    return `${cleaned.replace(/[^A-Z0-9-]+/g, "-")}.md`;
-  }
-  const words = cleaned
-    .replace(/[^a-zA-Z0-9]+/g, " ")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
-  const base = words.join("-") || `Term-${Date.now()}`;
-  return `${base}.md`;
-}
-
-function sanitizeRelativePath(relPath: unknown): string {
-  const raw = normalizeScalar(relPath);
-  if (!raw) return "";
-  const normalized = toPosix(raw.replace(/^\.\/+/, "").replace(/^\/+/, ""));
-  if (!normalized) return "";
-  if (normalized.split("/").some((part) => part === "..")) {
-    throw new Error("Path traversal is not allowed.");
-  }
-  return normalized;
-}
-
-function resolveRepoPath(relPath: unknown): string {
-  const normalized = sanitizeRelativePath(relPath);
-  if (!normalized) throw new Error("Missing relative path.");
-  const absPath = path.resolve(repoRoot, normalized);
-  if (absPath !== repoRoot && !absPath.startsWith(`${repoRoot}${path.sep}`)) {
-    throw new Error("Resolved path is outside repository root.");
-  }
-  return absPath;
-}
-
-function ensureTrailingNewline(text: string): string {
-  return text.endsWith("\n") ? text : `${text}\n`;
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 let ownershipCache = {
   loadedAt: 0,
   moduleTracks: {} as Record<string, string>,
@@ -1870,14 +1055,6 @@ async function resolveTrackForModule(module: unknown, fallbackTrack: string): Pr
     };
   }
   return normalizeScalar(ownershipCache.moduleTracks[moduleKey]) || fallbackTrack || "domain";
-}
-
-function toOpenQuestionRelativeLink(relatedPath: unknown): string {
-  const rel = sanitizeRelativePath(relatedPath);
-  if (!rel) return "";
-  if (!rel.startsWith("kb/")) return rel;
-  const fromKbRoot = rel.slice(3);
-  return `[${rel}](./${fromKbRoot})`;
 }
 
 function toTitleCase(text: unknown): string {
@@ -1904,13 +1081,13 @@ async function getDocuments(forceRefresh: boolean): Promise<LocalDocument[]> {
 }
 
 async function loadDocuments(): Promise<LocalDocument[]> {
-  const roots = parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS);
-  const candidates = await gatherKnowledgeFiles(repoRoot, roots);
+  const candidates = await gatherKnowledgeFiles(repoRoot, [...workspace.scanRoots], workspace);
   const docs: LocalDocument[] = [];
 
   for (const file of candidates) {
     let raw;
     try {
+      await authorizeWorkspaceRead(workspace, file.absPath);
       raw = await fs.readFile(file.absPath, "utf8");
     } catch {
       continue;
@@ -1942,46 +1119,8 @@ async function loadDocuments(): Promise<LocalDocument[]> {
   return docs;
 }
 
-function parseScanRoots(raw: string | undefined, defaults: string[]): string[] {
-  return normalizeScanRoots(raw || defaults, defaults);
-}
-
 function normalizeForMatch(value: unknown): string {
   return normalizeScalar(value).toLowerCase().replace(/\\/g, "/").replace(/\.md$/i, "");
-}
-
-function normalizeForSimilarity(value: unknown): string {
-  return normalizeScalar(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function tokenizeForSimilarity(value: unknown): string[] {
-  const normalized = normalizeForSimilarity(value);
-  if (!normalized) return [];
-  return normalized
-    .split(" ")
-    .filter((token) => token.length >= 3 && !SIMILARITY_STOPWORDS.has(token));
-}
-
-function tokenOverlapScore(tokensA: string[], tokensB: string[]): number {
-  if (!tokensA.length || !tokensB.length) return 0;
-  const setA = new Set(tokensA);
-  const setB = new Set(tokensB);
-  const minSize = Math.min(setA.size, setB.size);
-  if (minSize === 0) return 0;
-  let overlap = 0;
-  for (const token of setA) {
-    if (setB.has(token)) overlap += 1;
-  }
-  return overlap / minSize;
-}
-
-function trimSentence(text: string): string {
-  const clean = text.replace(/\s+/g, " ").trim();
-  return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
 }
 
 function roundMs(value: number): number {
@@ -2068,10 +1207,6 @@ function parseBooleanEnv(raw: unknown, fallback: boolean): boolean {
   if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off")
     return false;
   return fallback;
-}
-
-function toPosix(value: string): string {
-  return value.split(path.sep).join("/");
 }
 
 function normalizeRetrievalBackend(value: unknown): "bm25" | "sqlite" {

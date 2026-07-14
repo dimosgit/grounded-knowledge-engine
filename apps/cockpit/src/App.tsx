@@ -43,10 +43,13 @@ import {
 import {
   BUCKET_LIFECYCLE,
   buildOpenQuestionItems,
+  buildProjectAttentionCounts,
   buildProjectColumns,
   buildProjectLinkedDocs,
   buildProjectSummaries,
+  filterProjectSummaries,
   getActiveProject,
+  type ProjectAttentionFilter,
 } from "./domain/projects";
 import {
   getAppRoute,
@@ -110,6 +113,9 @@ export default function App() {
   const [moduleContextByPath, setModuleContextByPath] = useState({});
   const [selectedProjectId, setSelectedProjectId] = useState(initialRoute.projectId || "");
   const [lifecycleOverrides, setLifecycleOverrides] = useState<Record<string, string>>({});
+  const [projectAttentionFilter, setProjectAttentionFilter] = useState<ProjectAttentionFilter>(
+    (initialRoute.attentionFilter as ProjectAttentionFilter) || "all",
+  );
   const [selectedGraphPath, setSelectedGraphPath] = useState(initialRoute.focusPath || "overview");
   const [graphQuery, setGraphQuery] = useState("");
   const [activePath, setActivePath] = useState(() => {
@@ -132,6 +138,7 @@ export default function App() {
     setIsReadingMode,
     setSelectedGraphPath,
     setSelectedProjectId,
+    setProjectAttentionFilter,
     setViewMode,
   });
 
@@ -335,6 +342,13 @@ export default function App() {
     setHashProjects();
   }
 
+  function openAttentionQueue(filter: ProjectAttentionFilter) {
+    setProjectAttentionFilter(filter);
+    setIsReadingMode(false);
+    setViewMode("projects");
+    setHashProjects(filter);
+  }
+
   function goToGraph(focusPath = "") {
     const nextFocusPath = focusPath || selectedGraphPath || "overview";
     if (nextFocusPath) setSelectedGraphPath(nextFocusPath);
@@ -390,7 +404,22 @@ export default function App() {
     () => getActiveProject(projectSummaries, selectedProjectId),
     [projectSummaries, selectedProjectId],
   );
-  const projectColumns = useMemo(() => buildProjectColumns(projectSummaries), [projectSummaries]);
+  const attentionCounts = useMemo(
+    () => buildProjectAttentionCounts(projectSummaries),
+    [projectSummaries],
+  );
+  const attentionProjects = useMemo(
+    () => filterProjectSummaries(projectSummaries, "needs-attention"),
+    [projectSummaries],
+  );
+  const filteredProjectSummaries = useMemo(
+    () => filterProjectSummaries(projectSummaries, projectAttentionFilter),
+    [projectAttentionFilter, projectSummaries],
+  );
+  const projectColumns = useMemo(
+    () => buildProjectColumns(filteredProjectSummaries),
+    [filteredProjectSummaries],
+  );
   const moveProject = async (projectId, bucket) => {
     const project = projectSummaries.find((item) => item.id === projectId);
     if (!project || project.statusBucket === bucket) return;
@@ -477,6 +506,10 @@ export default function App() {
         recentDocs={recentDocs}
         onOpenDoc={openDoc}
         getDocBadge={getDocBadge}
+        attentionCounts={attentionCounts}
+        attentionProjects={attentionProjects}
+        onAttentionFilter={openAttentionQueue}
+        onOpenProject={openProject}
       />
     );
   }
@@ -496,6 +529,9 @@ export default function App() {
         projectColumns={projectColumns}
         onOpenProject={openProject}
         onMoveProject={moveProject}
+        attentionFilter={projectAttentionFilter}
+        onAttentionFilterChange={setProjectAttentionFilter}
+        attentionCounts={attentionCounts}
       />
     );
   }

@@ -23,7 +23,9 @@ The `full` profile additionally exposes:
 - `kb.list_modules`;
 - `kb.answer_grounded`;
 - `kb.refresh`;
-- `kb.upsert_note` and `kb.add_open_question` when writes are enabled.
+- `kb.upsert_note` and `kb.add_open_question` when writes are enabled. Open
+  questions use the shared atomic mutation service, so exact normalized
+  duplicates return `unchanged` instead of adding another entry.
 
 When writes are disabled, mutation tools are omitted from discovery.
 `kb.answer_and_capture` remains available as a read-only grounded answer tool
@@ -73,6 +75,18 @@ The same capsule is available as:
 gke://project/{projectId}/context
 ```
 
+Daily attention and project deltas are available without adding another MCP
+tool. `gke review` reports due or overdue project reviews, blockers, open
+questions, and explicitly scoped documents changed since an optional ISO date:
+
+```bash
+gke review --as-of 2026-07-13
+gke review my-project --since 2026-07-01 --json
+```
+
+AI clients can read the current workspace attention report through the
+read-only `gke://workspace/review` resource.
+
 Project creation and validation intentionally live outside MCP. Use the
 human-facing project CLI:
 
@@ -87,16 +101,61 @@ npm run project -- link my-project notes/evidence.md
 Direct Markdown authoring remains supported at
 `kb/projects/<project-id>/project.md`.
 
+## Capture planning and review
+
+The capture domain keeps duplicate advice separate from write authorization.
+An unambiguous new path can be created immediately. A fuzzy duplicate candidate
+or existing target produces a versioned proposal under
+`.gke/capture-proposals/`; the candidate never becomes the target
+automatically. Existing-target replacement and append are applied only after
+review against the exact base-content hash.
+
+Proposal review is deliberately a local CLI/application-service surface, not a
+fifth core MCP tool:
+
+```bash
+gke capture list
+gke capture show <proposal-id>
+gke capture apply <proposal-id> --action <create|append|replace|open-question>
+gke capture reject <proposal-id>
+```
+
+The stdio server reports proposal metadata in existing capture output. The
+read-only HTTP bridge cannot advertise or execute proposal writes.
+
 ## Resources
 
 The server advertises:
 
 - `gke://workspace/info`
+- `gke://workspace/review`
 - `gke://record/{path}`
 - `gke://project/{projectId}/context`
 
 Resources use logical, workspace-relative identifiers and do not expose host
 filesystem paths.
+
+## Workspace boundary
+
+At startup the server loads `.gke/workspace.json` when present, or derives the
+backward-compatible `default` workspace from the environment. It resolves the
+repository and configured roots once, rejects traversal and symlink escapes,
+and never switches workspace during a request. A minimal local configuration is:
+
+```json
+{
+  "id": "client-alpha",
+  "label": "Client Alpha",
+  "scanRoots": ["kb"],
+  "writeRoots": ["kb", ".gke", ".cache"],
+  "readOnly": true,
+  "sensitivity": "sensitive"
+}
+```
+
+`gke://workspace/info` exposes this logical identity and the configured
+relative roots, never absolute host paths. A read-only workspace disables
+writes even if `KB_MCP_ENABLE_WRITES=true`.
 
 ## Environment variables
 
@@ -119,6 +178,13 @@ filesystem paths.
 - `KB_MCP_LOG_LEVEL`: `off|error|warn|info|debug`. Defaults to `error`.
 - `KB_MCP_WORKSPACE_ID`: logical workspace identifier exposed by the workspace
   resource. Defaults to `default`.
+- `KB_MCP_WORKSPACE_LABEL`: fallback label when `.gke/workspace.json` is absent.
+- `KB_MCP_WORKSPACE_SENSITIVITY`: `personal|internal|sensitive|restricted`;
+  defaults to `internal`.
+- `KB_MCP_WORKSPACE_READ_ONLY`: fallback read-only setting when configuration
+  is absent. Defaults to `false`.
+- `KB_MCP_WRITE_ROOTS`: comma-separated workspace-relative write roots. Defaults
+  to `kb,.gke,.cache`; `.cache` contains only disposable retrieval indexes.
 
 ## Protocol and safety
 
@@ -134,7 +200,11 @@ filesystem paths.
   available for write previews.
 - `kb.answer_grounded` is evidence-gated and can abstain.
 - `kb.answer_and_capture` couples retrieval with explicit capture policy.
-- Write operations are queued and index refresh is debounced.
+- Grounded answers report an estimated visible-text token footprint split across
+  the request, retrieved evidence, and answer. This is not a provider-billed
+  total and excludes hidden agent context.
+- Canonical capture writes use realpath containment, per-proposal locking,
+  atomic replacement, and post-write index refresh.
 - No external network dependency is required.
 
 ## Verification
@@ -146,6 +216,7 @@ npm run test:mcp:http     # loopback HTTP bridge: parity, auth, write-denial, li
 npm run test:projects     # strict project resolution, isolation, resource parity
 npm run smoke:mcp         # discovery, resources, search, capture, reuse, resume
 npm run test:loop         # ground → capture → re-ground → cite
+npm run test:retrieval    # isolated BM25 + SQLite category quality gate
 npm run eval -- --k 5 --runs 3 --refresh
 npm run eval -- --k 5 --runs 3 --backend sqlite
 ```
@@ -156,3 +227,9 @@ Use a custom QA set or include retrieval traces:
 npm run eval -- --file tools/grounding/eval/qa-set.json --json
 npm run eval -- --k 5 --traces
 ```
+
+`npm run eval` remains an exploratory command over the demo or a caller-supplied
+case file. `npm run test:retrieval` is the deterministic CI gate: it uses only
+the synthetic workspace under `tools/grounding/eval/workspace-fixtures`, runs
+both supported retrieval backends, and exits nonzero when an aggregate or
+category floor fails.

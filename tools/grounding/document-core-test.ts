@@ -35,6 +35,10 @@ The uniqueparitytoken appears in this evidence line.
   await write("kb/topics/ignored.json", '{"ignored":true}\n');
   await write("kb/node_modules/ignored.md", "# Must Not Index\n");
   await write("kb/.cache/ignored.md", "# Must Not Index\n");
+  await write(
+    ".gke/capture-proposals/leak.md",
+    "# Pending Capture Proposal\n\nThis operational state must never be indexed.\n",
+  );
 
   const files = await gatherCandidateFiles(root, ["kb"]);
   assert.deepEqual(
@@ -43,6 +47,18 @@ The uniqueparitytoken appears in this evidence line.
   );
   const originalHash = buildManifestHash(files);
   assert.equal(originalHash, buildManifestHash(files));
+
+  const workspaceFiles = await gatherCandidateFiles(root, ["."]);
+  assert.equal(
+    workspaceFiles.some((file) => file.relPath.includes(".gke")),
+    false,
+    "Workspace-root scans must exclude .gke operational state.",
+  );
+  assert.deepEqual(
+    await gatherCandidateFiles(root, [".gke/capture-proposals"]),
+    [],
+    "Direct .gke scan roots must remain excluded.",
+  );
 
   const parsed = parseFrontmatter(await fs.readFile(path.join(root, "kb/topics/alpha.md"), "utf8"));
   assert.equal(parsed.frontmatter.track, "test");
