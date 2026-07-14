@@ -77,6 +77,12 @@ function normalizeForMatch(filePath: string): string {
   return filePath.split(path.sep).join("/").toLowerCase();
 }
 
+function isOperationalStatePath(filePath: string): boolean {
+  return normalizeForMatch(filePath)
+    .split("/")
+    .some((segment) => segment === ".gke");
+}
+
 function shouldCopyFile(sourcePath: string, fileName: string): CopyDecision {
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".md")) return { markdown: true, asset: false };
@@ -96,6 +102,7 @@ async function copyContentTree(sourceDir: string, destinationDir: string): Promi
   let assets = 0;
 
   for (const entry of entries) {
+    if (entry.name.toLowerCase() === ".gke") continue;
     const sourcePath = path.join(sourceDir, entry.name);
     const destinationPath = path.join(destinationDir, entry.name);
 
@@ -129,6 +136,7 @@ export async function syncContent(): Promise<SyncStats> {
   let markdown = 0;
   let assets = 0;
   for (const { from, to } of sourceFolders) {
+    if (isOperationalStatePath(from) || isOperationalStatePath(to)) continue;
     const source = path.join(repoRoot, from);
     const destination = path.join(contentRoot, to);
     if (!(await exists(source))) continue;

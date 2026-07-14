@@ -87,6 +87,28 @@ npm run project -- link my-project notes/evidence.md
 Direct Markdown authoring remains supported at
 `kb/projects/<project-id>/project.md`.
 
+## Capture planning and review
+
+The capture domain keeps duplicate advice separate from write authorization.
+An unambiguous new path can be created immediately. A fuzzy duplicate candidate
+or existing target produces a versioned proposal under
+`.gke/capture-proposals/`; the candidate never becomes the target
+automatically. Existing-target replacement and append are applied only after
+review against the exact base-content hash.
+
+Proposal review is deliberately a local CLI/application-service surface, not a
+fifth core MCP tool:
+
+```bash
+gke capture list
+gke capture show <proposal-id>
+gke capture apply <proposal-id> --action <create|append|replace|open-question>
+gke capture reject <proposal-id>
+```
+
+The stdio server reports proposal metadata in existing capture output. The
+read-only HTTP bridge cannot advertise or execute proposal writes.
+
 ## Resources
 
 The server advertises:
@@ -134,7 +156,8 @@ filesystem paths.
   available for write previews.
 - `kb.answer_grounded` is evidence-gated and can abstain.
 - `kb.answer_and_capture` couples retrieval with explicit capture policy.
-- Write operations are queued and index refresh is debounced.
+- Canonical capture writes use realpath containment, per-proposal locking,
+  atomic replacement, and post-write index refresh.
 - No external network dependency is required.
 
 ## Verification

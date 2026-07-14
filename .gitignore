@@ -2,6 +2,7 @@ node_modules/
 dist/
 content/
 .cache/
+.gke/
 .DS_Store
 .env
 .env.*
