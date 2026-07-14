@@ -165,6 +165,7 @@ try {
 
   const resources = await request("resources/list", {});
   assert.ok(resources.resources.some((resource: any) => resource.uri === "gke://workspace/info"));
+  assert.ok(resources.resources.some((resource: any) => resource.uri === "gke://workspace/review"));
 
   const resourceTemplates = await request("resources/templates/list", {});
   assert.ok(
@@ -180,6 +181,10 @@ try {
 
   const workspaceResource = await request("resources/read", { uri: "gke://workspace/info" });
   assert.equal(workspaceResource.contents?.[0]?.mimeType, "application/json");
+
+  const reviewResource = await request("resources/read", { uri: "gke://workspace/review" });
+  assert.equal(reviewResource.contents?.[0]?.mimeType, "text/markdown");
+  assert.match(reviewResource.contents?.[0]?.text || "", /workspace review/i);
 
   const prompts = await request("prompts/list", {});
   assert.ok(Array.isArray(prompts.prompts));
