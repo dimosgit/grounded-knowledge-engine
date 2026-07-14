@@ -61,6 +61,7 @@
     "source-docs",
     "output",
     ".cache",
+    ".gke",
     "node_modules",
     "dist",
     "content"

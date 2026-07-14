@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CommandBar } from "../components/CommandBar";
 import { OperatorFrame } from "../components/OperatorFrame";
 import { ProjectCard } from "../components/ProjectCard";
+import { PROJECT_ATTENTION_FILTERS } from "../domain/projects";
 
 const columns = [
   { key: "next", label: "Next Up", dot: "bg-status-waiting" },
@@ -23,6 +24,9 @@ export function ProjectBoardView({
   projectColumns,
   onOpenProject,
   onMoveProject,
+  attentionFilter,
+  onAttentionFilterChange,
+  attentionCounts,
 }) {
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const canMove = typeof onMoveProject === "function";
@@ -58,6 +62,36 @@ export function ProjectBoardView({
             </span>
           </p>
         )}
+        <div className="mt-5 flex flex-wrap gap-2" aria-label="Project attention filters">
+          {PROJECT_ATTENTION_FILTERS.map((filter) => {
+            const count =
+              filter.key === "all"
+                ? null
+                : filter.key === "needs-attention"
+                  ? attentionCounts.needsAttention
+                  : filter.key === "overdue"
+                    ? attentionCounts.overdue
+                    : filter.key === "blocked"
+                      ? attentionCounts.blocked
+                      : attentionCounts.openQuestions;
+            return (
+              <button
+                key={filter.key}
+                type="button"
+                aria-pressed={attentionFilter === filter.key}
+                onClick={() => onAttentionFilterChange(filter.key)}
+                className={`rounded-full border px-3 py-1.5 text-metadata font-semibold ${
+                  attentionFilter === filter.key
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-outline-variant bg-surface text-on-surface-variant hover:border-primary"
+                }`}
+              >
+                {filter.label}
+                {count !== null ? ` ${count}` : ""}
+              </button>
+            );
+          })}
+        </div>
       </div>
       <div className="overflow-x-auto px-4 py-8 md:px-8">
         <div className="mx-auto grid min-w-[1180px] max-w-[1840px] grid-cols-4 gap-5">

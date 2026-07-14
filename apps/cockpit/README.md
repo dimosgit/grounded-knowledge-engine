@@ -13,6 +13,8 @@ not expose a remote MCP server, private workspaces, or write access.
 ## What The App Does
 
 - Gives a dashboard-style home view ("Mission Control") for the current project context.
+- Derives daily review, blocker, and open-question attention from project
+  Markdown and composes those filters with the existing Board lanes.
 - Lets you browse all Markdown notes with track, item, and document-type filters.
 - Provides full-text search and a command bar.
 - Renders Markdown with GFM tables, Mermaid diagrams, internal links, relative assets, and unresolved-asset fallbacks.
@@ -22,6 +24,9 @@ not expose a remote MCP server, private workspaces, or write access.
   current focus, recent changes, decisions, blockers/questions, next actions,
   linked context, and a copyable technical handoff.
 - Builds a major-context graph across tracks, modules, and projects.
+- In local development only, provides evidence-gated Ask with explicit project
+  or workspace scope, a live shared capture-review queue, and explicitly scoped
+  changed-document deltas with Git/frontmatter/mtime provenance.
 
 ## Routes
 
@@ -55,12 +60,12 @@ cd apps/cockpit
 npm run sync:content
 ```
 
-The app indexes synced files from the repository-root knowledge folders. By
-default it syncs `demo-kb/**/*.md` and `kb/**/*.md`, funneling both under a
-single logical `kb/` namespace inside `content/`. Override the source folders
-with the `KB_PREVIEW_SOURCE_FOLDERS` environment variable (a comma-separated
-list of `from:to` pairs, where `:to` is optional and defaults to the source
-name), e.g.:
+For local development, the app indexes synced files from the repository-root
+knowledge folders. By default it syncs `demo-kb/**/*.md` and `kb/**/*.md`,
+funneling both under a single logical `kb/` namespace inside `content/`.
+Override local source folders with the `KB_PREVIEW_SOURCE_FOLDERS` environment
+variable (a comma-separated list of `from:to` pairs, where `:to` is optional
+and defaults to the source name), e.g.:
 
 ```bash
 KB_PREVIEW_SOURCE_FOLDERS="demo-kb:kb,kb:kb" npm run sync:content
@@ -86,16 +91,17 @@ npm run typecheck
 
 Notes:
 
-- `pretest` and `prebuild` automatically run `sync:content`.
+- `pretest` syncs the local preview sources; `prebuild` always syncs only the
+  sanitized `demo-kb` corpus and ignores source-folder overrides.
 - Do not run `npm run test` and `npm run build` in parallel because both sync content.
-- `build` emits the static app into `apps/cockpit/dist`.
+- `build` emits the demo-only static app into `apps/cockpit/dist`.
 
 ## Architecture
 
 The app is split so `App.tsx` remains a thin orchestrator.
 
 ```text
-Markdown source files (demo-kb/, kb/)
+Markdown source files (demo-kb/ plus kb/ for local preview)
   -> scripts/sync-markdown.ts
   -> content/**/*.md
   -> domain/catalog.ts
@@ -113,9 +119,11 @@ Markdown source files (demo-kb/, kb/)
 
 ### Views
 
-- `src/views/HubView.tsx`: dashboard/home screen — active project, current module, open questions, tracks, recent docs.
+- `src/views/HubView.tsx`: dashboard/home screen — daily attention, active
+  project, current module, open questions, tracks, and recent docs.
 - `src/views/LibraryView.tsx`: Knowledge Base reader — filters, side list, Markdown article, digest quick view, print/PDF mode.
-- `src/views/ProjectBoardView.tsx`: project board columns.
+- `src/views/ProjectBoardView.tsx`: project board columns composed with
+  attention filters.
 - `src/views/ProjectDetailView.tsx`: project status, focus, changes, decisions,
   blockers/questions, actions, linked docs, and handoff copying.
 - `src/views/ContextGraphView.tsx`: major-context graph with focus selection, zoom, fit/reset, node movement, and collapsible context links.

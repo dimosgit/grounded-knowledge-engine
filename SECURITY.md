@@ -4,8 +4,7 @@
 
 Please **do not** open a public issue for security reports. Instead use
 [GitHub private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability)
-on this repository (**Security → Report a vulnerability**), or email the maintainer
-directly at **dimobskn@gmail.com**.
+on this repository (**Security → Report a vulnerability**).
 
 You can expect an initial response within a few days. Please include reproduction
 steps and the affected version/commit.

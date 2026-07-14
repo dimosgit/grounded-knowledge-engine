@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "gke": "./dist/tools/projects/cli.js"
+    "gke": "./dist/tools/cli.js"
   },
   "engines": {
     "node": ">=22.5"
@@ -18,18 +18,27 @@
     "dev:mcp:http": "tsx tools/kb-mcp-server/server-http.ts",
     "search": "tsx tools/grounding/local-grounding-search.ts",
     "eval": "tsx tools/grounding/evaluate-retrieval.ts",
+    "eval:workspace": "tsx tools/grounding/evaluate-retrieval.ts --file tools/grounding/eval/workspace-shapes.json --repo-root tools/grounding/eval/workspace-fixtures --scan-root kb --refresh --deterministic",
+    "test:evaluator": "tsx tools/grounding/evaluate-retrieval-test.ts",
+    "test:retrieval": "npm run test:evaluator && npm run eval:workspace -- --backend bm25 && npm run eval:workspace -- --backend sqlite",
     "smoke:mcp": "tsx tools/kb-mcp-server/smoke-test.ts",
     "test:mcp:catalog": "tsx tools/kb-mcp-server/schema-budget-test.ts",
     "test:mcp:transport": "tsx tools/kb-mcp-server/transport-test.ts",
     "test:mcp:http": "tsx tools/kb-mcp-server/http-integration-test.ts",
+    "test:workspaces": "tsx tools/workspaces/workspace-policy-test.ts",
+    "test:workspaces:mcp": "tsx tools/workspaces/workspace-mcp-integration-test.ts",
     "test:loop": "tsx tools/kb-mcp-server/loop-integration-test.ts",
     "test:projects": "tsx tools/projects/project-context-test.ts",
     "test:project-service": "tsx tools/projects/project-service-test.ts",
+    "test:project-review": "tsx tools/projects/project-review-test.ts",
     "test:document-core": "tsx tools/grounding/document-core-test.ts",
+    "test:answer-service": "tsx tools/grounding/answer-service-test.ts",
+    "test:questions": "tsx tools/questions/open-question-service-test.ts",
+    "test:capture": "tsx tools/capture/capture-service-test.ts && tsx tools/capture/capture-routing-test.ts && tsx tools/capture/grounded-capture-service-test.ts && tsx tools/capture/ask-capture-loop-test.ts",
     "demo:project": "tsx tools/projects/demo-resume.ts",
     "test:ingest:unit": "tsx tools/ingest/unit-test.ts",
-    "test:ingest": "tsx tools/ingest/ingest-integration-test.ts",
-    "test:gke": "npm run test:mcp:catalog && npm run test:mcp:transport && npm run test:projects && npm run test:project-service && npm run test:document-core && npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run eval",
+    "test:ingest": "tsx tools/ingest/ingest-integration-test.ts && tsx tools/ingest/source-aware-integration-test.ts",
+    "test:gke": "npm run test:mcp:catalog && npm run test:mcp:transport && npm run test:mcp:http && npm run test:workspaces && npm run test:workspaces:mcp && npm run test:projects && npm run test:project-service && npm run test:project-review && npm run test:document-core && npm run test:answer-service && npm run test:questions && npm run test:capture && npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run test:retrieval",
     "project": "tsx tools/projects/cli.ts",
     "export:demo-projects": "tsx tools/projects/export-demo.ts",
     "ingest": "tsx tools/ingest/ingest.ts",
