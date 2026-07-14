@@ -86,13 +86,25 @@ async function main(): Promise<void> {
     const code = await runIngestCli(repoRoot);
     assert.equal(code, 0, "Ingest CLI exited non-zero.");
 
-    // The three documents became distinct, non-colliding notes on disk.
+    // The documents became distinct, non-colliding notes on disk.
+    const firstCapture = new Map<string, string>();
     for (const slug of ["sample-pdf", "sample-docx", "sample-xlsx", "sample-md"]) {
       const p = path.join(repoRoot, "kb", "topics", `${slug}.md`);
       await fs.access(p).catch(() => {
         throw new Error(`Expected ingested note not found: kb/topics/${slug}.md`);
       });
+      firstCapture.set(slug, await fs.readFile(p, "utf8"));
     }
+
+    const secondCode = await runIngestCli(repoRoot);
+    assert.equal(secondCode, 0, "Repeated ingest CLI run exited non-zero.");
+    for (const [slug, expected] of firstCapture) {
+      const actual = await fs.readFile(path.join(repoRoot, "kb", "topics", `${slug}.md`), "utf8");
+      assert.equal(actual, expected, `Repeated ingestion changed deterministic note ${slug}.md.`);
+    }
+    const proposalDirectory = path.join(repoRoot, ".gke", "capture-proposals");
+    const proposalFiles = await fs.readdir(proposalDirectory).catch(() => [] as string[]);
+    assert.deepEqual(proposalFiles, [], "Unchanged re-ingestion must not queue capture proposals.");
 
     const { child, client } = spawnKbServer({
       KB_MCP_REPO_ROOT: repoRoot,

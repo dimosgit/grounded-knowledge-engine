@@ -1,7 +1,10 @@
 # Consultant Features — Implementation Roadmap
 
-**Status:** In progress — Project Context delivered. **Repository:** Grounded Knowledge Engine.
-**Last updated:** 2026-06-23.
+**Status:** In progress — MCP Core Modernization, Project Context, the Leakage
+Guard, and the read-only loopback HTTP bridge are delivered. Tunnel and
+Copilot-adapter work remain planned. **Repository:** Grounded
+Knowledge Engine. **Last updated:** 2026-07-14. **Current execution:**
+[Current Hardening and Operator Execution Plan](../planning/2026-07-14-current-hardening-and-operator-execution-plan.md).
 
 ## Product goal
 
@@ -12,7 +15,8 @@ clients, projects, agents, and Microsoft development environments.
 The roadmap contains three connected features:
 
 1. [Project Context](../../README.md#structured-project-context) — implemented
-2. [Workspace Vaults and Leakage Guard](2026-06-21-workspace-vaults-leakage-guard.md)
+2. [Workspace Vaults and Leakage Guard](2026-06-21-workspace-vaults-leakage-guard.md) —
+   thin local leakage guard implemented
 3. [Remote MCP Gateway for Microsoft and GitHub Copilot](2026-06-21-remote-mcp-microsoft-copilot.md)
 
 All three must implement the shared
@@ -20,14 +24,20 @@ All three must implement the shared
 normative contract for paths, record schemas, IDs, relationships, runtime data,
 workspace boundaries, and migration.
 
-Decision Replay is planned separately because it is a new product workflow,
-not one of the three consultant-foundation features:
+Decision Replay is tracked separately as remaining work because it is a new
+product workflow, not one of the three consultant-foundation features:
 [Decision Replay](2026-06-21-decision-replay.md).
 
-Before any of them, complete
-[MCP Core Modernization](2026-06-21-mcp-core-modernization.md). It establishes
-the small semantic tool catalog, profiles, typed outputs, safety annotations,
-resources, and schema-budget gate that all later features must extend.
+Capture integrity and the local operator review loop are also tracked
+separately. Their capture-planning and local-review foundations are
+implemented, including source-aware re-ingestion and Cockpit daily attention.
+Cockpit scaling remains planned. Together, they strengthen how grounded evidence becomes
+canonical knowledge without expanding the four-tool core MCP surface:
+[Capture Integrity and Operator Workflow Roadmap](../planning/2026-07-13-capture-integrity-and-operator-workflow-roadmap.md).
+
+[MCP Core Modernization](2026-06-21-mcp-core-modernization.md) is delivered.
+It established the small semantic tool catalog, profiles, typed outputs, safety
+annotations, resources, and schema-budget gate that later features extend.
 
 ## Why these three belong together
 
@@ -54,7 +64,7 @@ flowchart LR
 
 ## Delivery order
 
-### Phase 0 — MCP Core Modernization
+### Phase 0 — MCP Core Modernization — delivered
 
 Complete the shared MCP foundation before adding feature-specific tools.
 
@@ -72,6 +82,8 @@ Exit gate:
 > The default MCP catalog remains intentionally small, every result is typed,
 > and later features have a semantic extension pattern that does not require
 > one low-level tool per file operation.
+
+Status: passed by the MCP catalog, transport, and full GKE test suites.
 
 ### Phase 1 — Shared Project Context model — delivered
 
@@ -120,6 +132,11 @@ Exit gate:
 ### Phase 3 — Local Microsoft Copilot tunnel proof and Copilot adapters
 
 Add new agent surfaces only after the workspace policy is reusable.
+
+Implementation note: the read-only loopback HTTP bridge is already
+implemented and covered by integration tests. The authenticated tunnel and
+Copilot adapters in this phase remain planned until the Leakage Guard is
+complete.
 
 Deliver:
 

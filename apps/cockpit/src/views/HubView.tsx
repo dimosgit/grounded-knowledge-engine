@@ -1,5 +1,14 @@
-import { AlertTriangle, ArrowRight, BookOpen, FileText, HelpCircle, Target } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  BookOpen,
+  CalendarClock,
+  FileText,
+  HelpCircle,
+  Target,
+} from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
+import { LocalProjectDelta } from "../components/LocalProjectDelta";
 import { OperatorFrame } from "../components/OperatorFrame";
 
 export function HubView({
@@ -28,6 +37,10 @@ export function HubView({
   recentDocs,
   onOpenDoc,
   getDocBadge,
+  attentionCounts,
+  attentionProjects,
+  onAttentionFilter,
+  onOpenProject,
 }) {
   return (
     <OperatorFrame
@@ -65,6 +78,95 @@ export function HubView({
             Open learning library
           </button>
         </section>
+
+        <section aria-labelledby="daily-attention-title">
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <h2 id="daily-attention-title" className="font-display text-headline-sm">
+                Daily attention
+              </h2>
+              <p className="mt-1 text-body-md text-on-surface-variant">
+                Reviews, blockers, and project questions derived from canonical Markdown.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onAttentionFilter("needs-attention")}
+              className="text-label-caps uppercase text-primary"
+            >
+              View attention queue
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <button
+              type="button"
+              aria-label={`Reviews due: ${attentionCounts.dueOrOverdue}; ${attentionCounts.overdue} overdue and ${attentionCounts.due} due today`}
+              onClick={() =>
+                onAttentionFilter(attentionCounts.overdue ? "overdue" : "needs-attention")
+              }
+              className="rounded-lg border border-border-subtle bg-surface-container p-4 text-left hover:border-primary"
+            >
+              <span className="flex items-center gap-2 text-label-caps uppercase text-on-surface-variant">
+                <CalendarClock size={16} /> Reviews due
+              </span>
+              <span className="mt-2 block font-display text-headline-md text-on-surface">
+                {attentionCounts.dueOrOverdue}
+              </span>
+              <span className="text-metadata text-on-surface-variant">
+                {attentionCounts.overdue} overdue · {attentionCounts.due} due today
+              </span>
+            </button>
+            <button
+              type="button"
+              aria-label={`Blocked: ${attentionCounts.blocked} project contexts`}
+              onClick={() => onAttentionFilter("blocked")}
+              className="rounded-lg border border-border-subtle bg-surface-container p-4 text-left hover:border-status-blocked"
+            >
+              <span className="flex items-center gap-2 text-label-caps uppercase text-on-surface-variant">
+                <AlertTriangle size={16} /> Blocked
+              </span>
+              <span className="mt-2 block font-display text-headline-md text-on-surface">
+                {attentionCounts.blocked}
+              </span>
+              <span className="text-metadata text-on-surface-variant">project contexts</span>
+            </button>
+            <button
+              type="button"
+              aria-label={`Open questions: ${attentionCounts.openQuestions} project contexts`}
+              onClick={() => onAttentionFilter("open-questions")}
+              className="rounded-lg border border-border-subtle bg-surface-container p-4 text-left hover:border-status-waiting"
+            >
+              <span className="flex items-center gap-2 text-label-caps uppercase text-on-surface-variant">
+                <HelpCircle size={16} /> Open questions
+              </span>
+              <span className="mt-2 block font-display text-headline-md text-on-surface">
+                {attentionCounts.openQuestions}
+              </span>
+              <span className="text-metadata text-on-surface-variant">project contexts</span>
+            </button>
+          </div>
+          {attentionProjects.length > 0 && (
+            <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
+              {attentionProjects.slice(0, 3).map((project) => (
+                <button
+                  key={project.id}
+                  type="button"
+                  onClick={() => onOpenProject(project.id)}
+                  className="rounded border border-border-subtle bg-surface px-4 py-3 text-left hover:border-primary"
+                >
+                  <span className="block text-body-md font-semibold text-on-surface">
+                    {project.title}
+                  </span>
+                  <span className="mt-1 block text-metadata text-on-surface-variant">
+                    {project.attentionReasons.join(" · ")}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {import.meta.env.DEV && <LocalProjectDelta onOpenDoc={onOpenDoc} />}
 
         <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <article className="relative overflow-hidden rounded-lg border border-border-subtle bg-surface-container-low p-6 lg:col-span-2">

@@ -51,9 +51,10 @@ project in public spaces.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to the maintainer at **dimobskn@gmail.com**. All complaints will be
-reviewed and investigated promptly and fairly. The maintainer is obligated to
-respect the privacy and security of the reporter of any incident.
+reported privately to the maintainer by following the reporting guidance in
+[`SECURITY.md`](SECURITY.md). All complaints will be reviewed and investigated
+promptly and fairly. The maintainer is obligated to respect the privacy and
+security of the reporter of any incident.
 
 ## Attribution
 
