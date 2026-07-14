@@ -75,6 +75,16 @@ export interface GroundingGate {
   };
 }
 
+export interface GroundedTokenUsage {
+  kind: "estimate";
+  scope: "gke-visible-text";
+  requestTokens: number;
+  evidenceTokens: number;
+  answerTokens: number;
+  totalTokens: number;
+  method: "characters-divided-by-4";
+}
+
 export interface GroundedAnswerResult {
   question: string;
   answer: string;
@@ -106,7 +116,10 @@ export interface GroundedAnswerResult {
     captureMs: null;
     totalMs: number;
   };
+  tokenUsage: GroundedTokenUsage;
 }
+
+type GroundedAnswerWithoutTokenUsage = Omit<GroundedAnswerResult, "tokenUsage">;
 
 export interface GroundedAnswerDependencies {
   search: (args: SearchArgs & { backend?: unknown }) => Promise<SearchResult>;
@@ -172,7 +185,7 @@ export async function answerGrounded(
         dominantSourceShare: 1,
       },
     };
-    return {
+    return attachTokenUsage({
       question,
       answer:
         "No grounded answer available from local KB evidence for this query. Broaden the query or remove filters.",
@@ -196,7 +209,7 @@ export async function answerGrounded(
         captureMs: null,
         totalMs: roundMs(now() - startedAt),
       },
-    };
+    });
   }
 
   const bestEvidence = searchResult.hits.slice(0, Math.min(6, searchResult.hits.length));
@@ -238,7 +251,7 @@ export async function answerGrounded(
       "\n\nNote: This synthesis is extractive from local KB evidence.";
   }
 
-  return {
+  return attachTokenUsage({
     question,
     answer,
     strict,
@@ -261,7 +274,7 @@ export async function answerGrounded(
       captureMs: null,
       totalMs: roundMs(now() - startedAt),
     },
-  };
+  });
 }
 
 async function tryBuildFastAnswer({
@@ -419,7 +432,7 @@ function buildFastResult({
   startedAt: number;
   now: () => number;
 }): GroundedAnswerResult {
-  return {
+  return attachTokenUsage({
     question,
     answer,
     strict,
@@ -474,7 +487,34 @@ function buildFastResult({
       captureMs: null,
       totalMs: roundMs(now() - startedAt),
     },
+  });
+}
+
+function attachTokenUsage(result: GroundedAnswerWithoutTokenUsage): GroundedAnswerResult {
+  const requestTokens = estimateTokens(result.question);
+  const evidenceTokens = estimateTokens(
+    result.evidence
+      .map((item) => [item.title, item.path, item.snippet, ...(item.context || [])].join("\n"))
+      .join("\n"),
+  );
+  const answerTokens = estimateTokens(result.answer);
+  return {
+    ...result,
+    tokenUsage: {
+      kind: "estimate",
+      scope: "gke-visible-text",
+      requestTokens,
+      evidenceTokens,
+      answerTokens,
+      totalTokens: requestTokens + evidenceTokens + answerTokens,
+      method: "characters-divided-by-4",
+    },
   };
+}
+
+function estimateTokens(value: string): number {
+  const characters = Array.from(value.trim()).length;
+  return characters ? Math.max(1, Math.ceil(characters / 4)) : 0;
 }
 
 function toAnswerDocument(document: IndexedDocument): AnswerDocument {

@@ -36,6 +36,14 @@ describe("grounded Ask drawer", () => {
                 snippet: "Explicit route fields take precedence.",
               },
             ],
+            tokenUsage: {
+              kind: "estimate",
+              scope: "gke-visible-text",
+              requestTokens: 8,
+              evidenceTokens: 22,
+              answerTokens: 14,
+              totalTokens: 44,
+            },
           },
         });
       }
@@ -70,6 +78,7 @@ describe("grounded Ask drawer", () => {
     expect(screen.getByText("Evidence gate passed")).toBeInTheDocument();
     expect(screen.getAllByText(/capture-routing\.md:12 · score 18\.4/)).toHaveLength(2);
     expect(screen.getByText("Explicit route fields take precedence.")).toBeInTheDocument();
+    expect(screen.getByText(/Token usage: ~44 visible tokens/)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await user.clear(screen.getByLabelText("Question"));

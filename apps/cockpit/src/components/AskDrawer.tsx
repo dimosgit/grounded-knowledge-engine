@@ -182,6 +182,18 @@ export function AskDrawer({ projectId, onCapture }: AskDrawerProps) {
                     <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-6 text-on-surface">
                       {answer.answer}
                     </pre>
+                    {answer.tokenUsage && (
+                      <p className="mt-3 border-t border-border-subtle pt-3 font-mono text-xs text-on-surface-variant">
+                        Token usage: {answer.tokenUsage.kind === "estimate" ? "~" : ""}
+                        {answer.tokenUsage.totalTokens} visible tokens · request{" "}
+                        {answer.tokenUsage.requestTokens}
+                        {" · evidence "}
+                        {answer.tokenUsage.evidenceTokens}
+                        {" · answer "}
+                        {answer.tokenUsage.answerTokens}
+                        {answer.tokenUsage.kind === "estimate" ? " (estimate)" : ""}
+                      </p>
+                    )}
                   </section>
 
                   <section className="rounded border border-border-subtle bg-surface-container p-4">

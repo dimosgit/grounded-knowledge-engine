@@ -86,6 +86,15 @@ async function testNoEvidenceAndForwarding(): Promise<void> {
   assert.equal(answer.sourceTier, "no-local-evidence");
   assert.equal(answer.gate.pass, false);
   assert.deepEqual(answer.citations, []);
+  assert.deepEqual(answer.tokenUsage, {
+    kind: "estimate",
+    scope: "gke-visible-text",
+    requestTokens: 8,
+    evidenceTokens: 0,
+    answerTokens: 26,
+    totalTokens: 34,
+    method: "characters-divided-by-4",
+  });
   assert.ok(received);
   const forwarded = received as SearchArgs & { backend?: unknown };
   assert.equal(forwarded.limit, 30);
@@ -111,6 +120,13 @@ async function testEvidenceGate(): Promise<void> {
   assert.equal(answer.confidence.label, "high");
   assert.equal(answer.citations.length, 3);
   assert.match(answer.answer, /Grounded answer \(retrieval-based\)/);
+  assert.ok(answer.tokenUsage.evidenceTokens > 0);
+  assert.equal(
+    answer.tokenUsage.totalTokens,
+    answer.tokenUsage.requestTokens +
+      answer.tokenUsage.evidenceTokens +
+      answer.tokenUsage.answerTokens,
+  );
 
   const weak = result([hit(0)]);
   weak.signals = {
