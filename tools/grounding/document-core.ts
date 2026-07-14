@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { CandidateFile, Frontmatter } from "./types.js";
+import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 
 const SKIP_DIRECTORIES = new Set([".git", ".gke", "node_modules", "dist", "content", ".cache"]);
 
@@ -13,6 +15,7 @@ export interface ParsedFrontmatter {
 export async function gatherCandidateFiles(
   repoRoot: string,
   scanRoots: string[],
+  workspace?: WorkspaceContext,
 ): Promise<CandidateFile[]> {
   const candidates: CandidateFile[] = [];
   for (const root of scanRoots) {
@@ -24,8 +27,9 @@ export async function gatherCandidateFiles(
     } catch {
       continue;
     }
+    if (workspace) await authorizeWorkspaceRead(workspace, absRoot);
     if (stat.isDirectory()) {
-      await walk(absRoot, repoRoot, candidates);
+      await walk(absRoot, repoRoot, candidates, workspace);
       continue;
     }
     const relPath = toPosix(path.relative(repoRoot, absRoot));
@@ -135,7 +139,12 @@ export function toPosix(value: string): string {
   return value.split(path.sep).join("/");
 }
 
-async function walk(dir: string, repoRoot: string, out: CandidateFile[]): Promise<void> {
+async function walk(
+  dir: string,
+  repoRoot: string,
+  out: CandidateFile[],
+  workspace?: WorkspaceContext,
+): Promise<void> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const absPath = path.join(dir, entry.name);
@@ -143,7 +152,8 @@ async function walk(dir: string, repoRoot: string, out: CandidateFile[]): Promis
     if (isOperationalStatePath(relPath)) continue;
     if (entry.isDirectory()) {
       if (SKIP_DIRECTORIES.has(entry.name)) continue;
-      await walk(absPath, repoRoot, out);
+      if (workspace) await authorizeWorkspaceRead(workspace, absPath);
+      await walk(absPath, repoRoot, out, workspace);
       continue;
     }
     if (!entry.isFile() || !isSearchableTextFile(relPath)) continue;
@@ -153,6 +163,7 @@ async function walk(dir: string, repoRoot: string, out: CandidateFile[]): Promis
     } catch {
       continue;
     }
+    if (workspace) await authorizeWorkspaceRead(workspace, absPath);
     out.push({ absPath, relPath, size: stat.size, mtimeMs: stat.mtimeMs });
   }
 }

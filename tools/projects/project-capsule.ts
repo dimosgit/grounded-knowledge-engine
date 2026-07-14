@@ -1,6 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getKbRetriever } from "../grounding/retriever.js";
+import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 import {
   meaningfulSectionItems,
   parseProjectDocument,
@@ -14,11 +16,13 @@ export async function resumeProject(
   args: { projectId: string },
   repoRoot: string,
   scanRoots: string[],
+  workspace?: WorkspaceContext,
 ): Promise<{ contentText: string; structured: ProjectCapsule }> {
   const requestedProjectId = `${args.projectId || ""}`.trim();
   if (!requestedProjectId) throw new Error("Missing required argument: projectId");
 
   const retriever = await getKbRetriever({
+    workspace,
     repoRoot,
     scanRoots,
     cacheTtlMs: 15000,
@@ -28,7 +32,9 @@ export async function resumeProject(
   const manifestDoc = resolveProjectDocument(allDocs, requestedProjectId);
   if (!manifestDoc) throw new Error(`Unknown project ID: ${requestedProjectId}`);
 
-  const rawProject = await fs.readFile(path.resolve(repoRoot, manifestDoc.relPath), "utf8");
+  const projectPath = path.resolve(repoRoot, manifestDoc.relPath);
+  if (workspace) await authorizeWorkspaceRead(workspace, projectPath);
+  const rawProject = await fs.readFile(projectPath, "utf8");
   const parsed = parseProjectDocument(rawProject, manifestDoc.relPath, manifestDoc.title);
   const projectDocs = allDocs.filter((doc) =>
     isDocumentInProject(

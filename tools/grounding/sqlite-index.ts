@@ -3,6 +3,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+import {
+  authorizeWorkspaceRead,
+  authorizeWorkspaceRuntimePath,
+  authorizeWorkspaceWrite,
+} from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 import { DEFAULT_SCAN_ROOTS } from "./retriever.js";
 import {
   buildManifestHash,
@@ -223,13 +229,18 @@ export async function getSqliteKbRetriever(options: RetrieverOptions = {}): Prom
 }
 
 function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
-  const repoRoot = path.resolve(
-    options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
-  );
-  const scanRoots = normalizeScanRoots(
-    options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS,
-    DEFAULT_SCAN_ROOTS,
-  );
+  const workspace = options.workspace;
+  const repoRoot = workspace
+    ? workspace.realRepoRoot
+    : path.resolve(
+        options.repoRoot || process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
+      );
+  const scanRoots = workspace
+    ? [...workspace.scanRoots]
+    : normalizeScanRoots(
+        options.scanRoots || process.env.KB_MCP_SCAN_ROOTS || DEFAULT_SCAN_ROOTS,
+        DEFAULT_SCAN_ROOTS,
+      );
   const cachePath = path.resolve(
     repoRoot,
     options.cachePath || process.env.KB_MCP_SQLITE_PATH || DEFAULT_SQLITE_INDEX_FILE,
@@ -249,6 +260,7 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
   const forceRefresh = Boolean(options.forceRefresh);
   const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}`;
   return {
+    workspace,
     repoRoot,
     scanRoots,
     cachePath,
@@ -261,19 +273,27 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
 }
 
 async function loadOrBuildDatabase(options: ResolvedRetrieverOptions): Promise<DatabaseSync> {
-  const files = await gatherCandidateFiles(options.repoRoot, options.scanRoots);
+  const files = await gatherCandidateFiles(options.repoRoot, options.scanRoots, options.workspace);
   const manifestHash = buildManifestHash(files);
-  await fs.mkdir(path.dirname(options.cachePath), { recursive: true });
+  if (options.workspace) {
+    await authorizeWorkspaceRuntimePath(options.workspace, options.cachePath);
+  }
+  if (!options.workspace?.readOnly) {
+    if (options.workspace) await authorizeWorkspaceWrite(options.workspace, options.cachePath);
+    await fs.mkdir(path.dirname(options.cachePath), { recursive: true });
+  }
 
-  const db = new DatabaseSync(options.cachePath);
+  const db = new DatabaseSync(options.workspace?.readOnly ? ":memory:" : options.cachePath);
   db.exec("PRAGMA foreign_keys = ON;");
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA synchronous = NORMAL;");
 
-  const valid = !options.forceRefresh && isDatabaseCurrent(db, manifestHash);
+  const valid =
+    !options.workspace?.readOnly && !options.forceRefresh && isDatabaseCurrent(db, manifestHash);
   if (!valid) {
     await rebuildDatabase(db, {
       repoRoot: options.repoRoot,
+      workspace: options.workspace,
       files,
       manifestHash,
       scanRoots: options.scanRoots,
@@ -303,8 +323,10 @@ async function rebuildDatabase(
     files,
     manifestHash,
     scanRoots,
+    workspace,
   }: {
     repoRoot: string;
+    workspace?: WorkspaceContext;
     files: CandidateFile[];
     manifestHash: string;
     scanRoots: string[];
@@ -434,6 +456,7 @@ async function rebuildDatabase(
     for (const file of files) {
       let raw;
       try {
+        if (workspace) await authorizeWorkspaceRead(workspace, file.absPath);
         raw = await fs.readFile(file.absPath, "utf8");
       } catch {
         continue;

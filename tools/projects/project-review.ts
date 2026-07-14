@@ -4,7 +4,9 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { getKbRetriever } from "../grounding/retriever.js";
 import type { IndexedDocument } from "../grounding/types.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 import { meaningfulSectionItems } from "./project-manifest.js";
+import { calculateProjectAttention, isValidIsoDate } from "./project-attention.js";
 import { getProject, listProjects } from "./project-service.js";
 import { isDocumentInProject, resolveProjectDocument } from "./project-scope.js";
 import type {
@@ -16,11 +18,9 @@ import type {
 } from "./types.js";
 
 const execFileAsync = promisify(execFile);
-const COMPLETED_STATUSES = new Set(["completed", "complete", "done", "shipped", "delivered"]);
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const TIMESTAMP_PATTERN =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface ReviewWorkspaceArgs {
   asOf?: string;
@@ -33,6 +33,7 @@ export async function reviewWorkspace(
   args: ReviewWorkspaceArgs,
   repoRootInput: string,
   scanRoots: string[],
+  workspace?: WorkspaceContext,
 ): Promise<{ contentText: string; structured: WorkspaceReviewReport }> {
   const repoRoot = path.resolve(repoRootInput);
   const asOf = normalizeIsoInput(args.asOf, "asOf", new Date().toISOString());
@@ -46,7 +47,7 @@ export async function reviewWorkspace(
   }
 
   const requestedProjectId = `${args.projectId || ""}`.trim();
-  const summaries = await listProjects({ repoRoot, scanRoots });
+  const summaries = await listProjects({ repoRoot, scanRoots, workspace });
   const projectIds = [...new Set(summaries.map((project) => project.projectId))].filter(
     (projectId) => !requestedProjectId || projectId === requestedProjectId,
   );
@@ -55,6 +56,7 @@ export async function reviewWorkspace(
   }
 
   const retriever = await getKbRetriever({
+    workspace,
     repoRoot,
     scanRoots,
     cacheTtlMs: 15000,
@@ -65,7 +67,7 @@ export async function reviewWorkspace(
   const projects: ProjectReviewEntry[] = [];
 
   for (const projectId of projectIds) {
-    const loaded = await getProject(projectId, { repoRoot, scanRoots });
+    const loaded = await getProject(projectId, { repoRoot, scanRoots, workspace });
     const manifestDocument = resolveProjectDocument(allDocuments, projectId);
     if (!manifestDocument) throw new Error(`Unknown project ID: ${projectId}`);
     const scopedDocuments = allDocuments.filter((document) =>
@@ -121,17 +123,16 @@ async function buildProjectReview({
   parsed: Awaited<ReturnType<typeof getProject>>["parsed"];
 }): Promise<ProjectReviewEntry> {
   const manifest = parsed.manifest;
-  const completed = COMPLETED_STATUSES.has(manifest.status.toLowerCase());
-  const { reviewState, daysUntilReview } = calculateReviewState(
-    manifest.reviewAfter,
-    asOf,
-    completed,
-  );
   const blockers = meaningfulSectionItems(parsed.sections.get("blockers"));
   const openQuestions = meaningfulSectionItems(parsed.sections.get("open-questions"));
-  const attentionReasons = completed
-    ? []
-    : buildAttentionReasons(reviewState, manifest.reviewAfter, blockers, openQuestions);
+  const { reviewState, daysUntilReview, needsAttention, attentionReasons } =
+    calculateProjectAttention({
+      reviewAfter: manifest.reviewAfter,
+      asOf,
+      status: manifest.status,
+      blockers,
+      openQuestions,
+    });
   const changedDocuments = since
     ? await findChangedDocuments({ repoRoot, since, gitAvailable, documents: scopedDocuments })
     : [];
@@ -150,49 +151,13 @@ async function buildProjectReview({
     reviewAfter: manifest.reviewAfter,
     reviewState,
     daysUntilReview,
-    needsAttention: attentionReasons.length > 0,
+    needsAttention,
     attentionReasons,
     blockers,
     openQuestions,
     changedDocuments,
     citations,
   };
-}
-
-function calculateReviewState(
-  reviewAfter: string,
-  asOf: string,
-  completed: boolean,
-): { reviewState: ProjectReviewState; daysUntilReview: number | null } {
-  if (completed) return { reviewState: "not-applicable", daysUntilReview: null };
-  if (!isValidDate(reviewAfter)) {
-    return { reviewState: "unscheduled", daysUntilReview: null };
-  }
-  const reviewMs = Date.parse(`${reviewAfter}T00:00:00.000Z`);
-  const asOfDate = asOf.slice(0, 10);
-  const asOfMs = Date.parse(`${asOfDate}T00:00:00.000Z`);
-  const daysUntilReview = Math.round((reviewMs - asOfMs) / DAY_MS);
-  return {
-    reviewState: daysUntilReview < 0 ? "overdue" : daysUntilReview === 0 ? "due" : "scheduled",
-    daysUntilReview,
-  };
-}
-
-function buildAttentionReasons(
-  reviewState: ProjectReviewState,
-  reviewAfter: string,
-  blockers: string[],
-  openQuestions: string[],
-): string[] {
-  const reasons: string[] = [];
-  if (reviewState === "overdue") reasons.push(`Review overdue since ${reviewAfter}`);
-  if (reviewState === "due") reasons.push(`Review due ${reviewAfter}`);
-  if (blockers.length)
-    reasons.push(`${blockers.length} blocker${blockers.length === 1 ? "" : "s"}`);
-  if (openQuestions.length) {
-    reasons.push(`${openQuestions.length} open question${openQuestions.length === 1 ? "" : "s"}`);
-  }
-  return reasons;
 }
 
 async function findChangedDocuments({
@@ -239,7 +204,7 @@ async function fallbackChangedDocument(
 ): Promise<ProjectChangedDocument | null> {
   const sinceMs = Date.parse(since);
   const updated = document.frontmatter.updated;
-  if (isValidDate(updated) && updated >= since.slice(0, 10)) {
+  if (isValidIsoDate(updated) && updated >= since.slice(0, 10)) {
     return changedDocument(document, updated, "frontmatter", await citationLine(absPath));
   }
   try {
@@ -432,7 +397,7 @@ function renderWorkspaceReview(report: WorkspaceReviewReport): string {
 
 function normalizeIsoInput(value: string | undefined, field: string, fallback?: string): string {
   const raw = `${value || fallback || ""}`.trim();
-  if (DATE_PATTERN.test(raw) && isValidDate(raw)) return `${raw}T00:00:00.000Z`;
+  if (DATE_PATTERN.test(raw) && isValidIsoDate(raw)) return `${raw}T00:00:00.000Z`;
   if (!TIMESTAMP_PATTERN.test(raw)) {
     throw new Error(`${field} must be an ISO date or timestamp`);
   }
@@ -441,18 +406,12 @@ function normalizeIsoInput(value: string | undefined, field: string, fallback?: 
   return new Date(parsed).toISOString();
 }
 
-function isValidDate(value: string): boolean {
-  if (!DATE_PATTERN.test(value)) return false;
-  const parsed = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
 function dateSortValue(value: string): number {
-  return isValidDate(value) ? Date.parse(`${value}T00:00:00.000Z`) : Number.MAX_SAFE_INTEGER;
+  return isValidIsoDate(value) ? Date.parse(`${value}T00:00:00.000Z`) : Number.MAX_SAFE_INTEGER;
 }
 
 function changeSortValue(value: string): number {
-  if (isValidDate(value)) return Date.parse(`${value}T00:00:00.000Z`);
+  if (isValidIsoDate(value)) return Date.parse(`${value}T00:00:00.000Z`);
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }

@@ -4,11 +4,12 @@ import type {
   CaptureRouteDecision,
   CaptureRoutingDefaults,
 } from "./capture-routing.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 
 export const CAPTURE_PROPOSAL_SCHEMA_VERSION = 1 as const;
 
 export type CaptureSourceOperation = "answer" | "ingest" | "upsert";
-export type CaptureAction = "create" | "append" | "replace" | "open_question";
+export type CaptureAction = "create" | "append" | "replace" | "delete" | "open_question";
 export type CaptureConflictPolicy = "error" | "append" | "replace";
 
 export interface CaptureDuplicateCandidate {
@@ -24,6 +25,12 @@ export interface CaptureCitation {
   path: string;
   line?: number;
   score?: number;
+}
+
+export interface IngestionCandidateReference {
+  candidateId: string;
+  sourceId: string;
+  changeKind: "changed" | "removed" | "conflicting-create";
 }
 
 export interface ProposedCaptureNote {
@@ -53,12 +60,14 @@ export interface CaptureProposal {
   evidenceCitations: CaptureCitation[];
   groundedConfidence: Record<string, unknown> | null;
   routing?: CaptureRouteDecision;
+  ingestionCandidate?: IngestionCandidateReference;
   requiresReview: boolean;
   reviewReasons: string[];
 }
 
 export interface PlanCaptureInput {
   repoRoot: string;
+  workspace?: WorkspaceContext;
   sourceOperation: CaptureSourceOperation;
   kind: "topic" | "term";
   title: string;
@@ -78,6 +87,7 @@ export interface PlanCaptureInput {
   routingDefaults?: CaptureRoutingDefaults;
   evidenceConsensus?: CaptureEvidenceConsensusPolicy;
   groundedConfidence?: Record<string, unknown> | null;
+  ingestionCandidate?: IngestionCandidateReference;
   persist?: boolean;
 }
 
@@ -89,6 +99,7 @@ export interface CapturePlanResult {
 
 export interface ApplyCaptureProposalOptions {
   repoRoot: string;
+  workspace?: WorkspaceContext;
   proposalId: string;
   action?: CaptureAction;
   dryRun?: boolean;
@@ -97,7 +108,7 @@ export interface ApplyCaptureProposalOptions {
 
 export interface ApplyCaptureProposalResult {
   proposalId: string;
-  action: "created" | "appended" | "replaced" | "opened_question";
+  action: "created" | "appended" | "replaced" | "deleted" | "opened_question";
   path: string;
   dryRun: boolean;
   contentHash: string;

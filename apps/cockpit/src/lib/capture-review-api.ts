@@ -1,6 +1,6 @@
 const CAPTURE_REVIEW_ROOT = "/__gke/capture/proposals";
 
-export type CaptureAction = "create" | "append" | "replace" | "open_question";
+export type CaptureAction = "create" | "append" | "replace" | "delete" | "open_question";
 
 export interface CaptureProposalSummary {
   proposalId: string;

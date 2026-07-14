@@ -15,6 +15,7 @@ import {
   planCapture,
   renderCaptureNote,
 } from "../../../../tools/capture/capture-service";
+import { loadWorkspaceContext } from "../../../../tools/workspaces/config";
 
 interface TestServer {
   baseUrl: string;
@@ -216,6 +217,36 @@ describe("capture review dev-server plugin", () => {
     );
   });
 
+  test("rejects reviewed mutations in a read-only workspace", async () => {
+    const repoRoot = await makeWorkspace();
+    const targetPath = "kb/topics/read-only-target.md";
+    const original = "# Read-only Target\n\nOriginal.\n";
+    await writeWorkspaceFile(repoRoot, targetPath, original);
+    const planned = await planCapture({
+      repoRoot,
+      sourceOperation: "answer",
+      kind: "topic",
+      title: "Read-only Target",
+      body: "Blocked replacement.",
+      requestedPath: targetPath,
+      proposedAction: "replace",
+      updated: "2026-07-14",
+    });
+    const server = await startServer(repoRoot, undefined, true);
+
+    const response = await requestJson(
+      server.baseUrl,
+      `/__gke/capture/proposals/${planned.proposal.proposalId}/apply`,
+      { method: "POST", body: { action: "replace" } },
+    );
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("workspace_read_only");
+    expect(await fs.readFile(path.join(repoRoot, targetPath), "utf8")).toBe(original);
+    expect((await getCaptureProposal(repoRoot, planned.proposal.proposalId)).proposalId).toBe(
+      planned.proposal.proposalId,
+    );
+  });
+
   test("rejects non-loopback identity, host, and cross-origin mutations", () => {
     expect(() =>
       assertLocalRequest(
@@ -258,14 +289,23 @@ async function writeWorkspaceFile(
 async function startServer(
   repoRoot: string,
   refreshIndex?: () => Promise<void>,
+  readOnly = false,
 ): Promise<TestServer> {
+  const workspace = await loadWorkspaceContext({
+    repoRoot,
+    scanRoots: ["kb"],
+    writeRoots: ["kb", ".gke"],
+    environment: { KB_MCP_WORKSPACE_READ_ONLY: String(readOnly) },
+  });
   const server = http.createServer((req, res) => {
-    void handleCaptureReviewRequest(req, res, { repoRoot, refreshIndex }).then((handled) => {
-      if (!handled) {
-        res.statusCode = 404;
-        res.end();
-      }
-    });
+    void handleCaptureReviewRequest(req, res, { repoRoot, workspace, refreshIndex }).then(
+      (handled) => {
+        if (!handled) {
+          res.statusCode = 404;
+          res.end();
+        }
+      },
+    );
   });
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);

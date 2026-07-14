@@ -2,6 +2,9 @@ import fs from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin, ViteDevServer } from "vite";
+import { loadWorkspaceContext } from "../../../tools/workspaces/config.js";
+import { authorizeWorkspaceWrite } from "../../../tools/workspaces/path-policy.js";
+import type { WorkspaceContext } from "../../../tools/workspaces/types.js";
 import {
   assertLocalRequest,
   assertOnlyKeys,
@@ -19,16 +22,27 @@ const ALLOWED_ROOTS = ["demo-kb", "kb"] as const;
 
 export interface LifecycleWritebackPluginOptions {
   repoRoot: string;
+  workspace?: WorkspaceContext;
 }
+
+type LifecycleWritebackRequestOptions = Omit<LifecycleWritebackPluginOptions, "workspace"> & {
+  workspace: WorkspaceContext;
+};
 
 export function createLifecycleWritebackPlugin(options: LifecycleWritebackPluginOptions): Plugin {
   const repoRoot = path.resolve(options.repoRoot);
+  let workspacePromise: Promise<WorkspaceContext> | null = null;
+  const getWorkspace = () =>
+    (workspacePromise ??= options.workspace
+      ? Promise.resolve(options.workspace)
+      : loadWorkspaceContext({ repoRoot }));
   return {
     name: "board-lifecycle-writeback",
     apply: "serve",
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
-        void handleLifecycleWritebackRequest(req, res, { repoRoot })
+        void getWorkspace()
+          .then((workspace) => handleLifecycleWritebackRequest(req, res, { repoRoot, workspace }))
           .then((handled) => {
             if (!handled) next();
           })
@@ -53,7 +67,7 @@ export function createLifecycleWritebackPlugin(options: LifecycleWritebackPlugin
 export async function handleLifecycleWritebackRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  options: LifecycleWritebackPluginOptions,
+  options: LifecycleWritebackRequestOptions,
 ): Promise<boolean> {
   let requestUrl: URL;
   try {
@@ -76,10 +90,17 @@ export async function handleLifecycleWritebackRequest(
 
     const normalizedPath = normalizeLifecyclePath(body.path);
     const lifecycle = normalizeLifecycle(body.lifecycle);
-    const targetPath = await resolveLifecycleTarget(options.repoRoot, normalizedPath);
+    const targetPath = await resolveLifecycleTarget(
+      options.repoRoot,
+      normalizedPath,
+      options.workspace,
+    );
     const original = await fs.readFile(targetPath, "utf8");
     const updated = setLifecycle(original, lifecycle);
-    if (updated !== original) await fs.writeFile(targetPath, updated, "utf8");
+    if (updated !== original) {
+      await authorizeWorkspaceWrite(options.workspace, targetPath);
+      await fs.writeFile(targetPath, updated, "utf8");
+    }
 
     sendJson(res, 200, { ok: true, path: normalizedPath, lifecycle });
     return true;
@@ -119,6 +140,7 @@ function normalizeLifecycle(value: unknown): string {
 async function resolveLifecycleTarget(
   repoRootInput: string,
   normalizedPath: string,
+  workspace: WorkspaceContext,
 ): Promise<string> {
   const repoRoot = path.resolve(repoRootInput);
   const candidates = normalizedPath.startsWith("kb/")
@@ -144,6 +166,7 @@ async function resolveLifecycleTarget(
     if (!stat.isFile()) {
       throw new LocalApiRequestError(400, "invalid_path", "Lifecycle path is invalid.");
     }
+    await authorizeWorkspaceWrite(workspace, realTarget);
     return realTarget;
   }
 
@@ -162,6 +185,10 @@ function isNodeError(error: unknown, code: string): error is NodeJS.ErrnoExcepti
 function sendLifecycleError(res: ServerResponse, error: unknown): void {
   if (error instanceof LocalApiRequestError) {
     sendJson(res, error.statusCode, { error: error.message, code: error.code });
+    return;
+  }
+  if (error instanceof Error && /workspace is read-only/i.test(error.message)) {
+    sendJson(res, 403, { error: "Workspace is read-only.", code: "workspace_read_only" });
     return;
   }
   sendJson(res, 500, {

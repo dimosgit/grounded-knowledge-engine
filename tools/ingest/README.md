@@ -15,20 +15,23 @@ file is for developers working on the ingestion code itself.
 npm run ingest -- <folder> [--module <key>] [--project [name]] [--dry-run] [--no-scrub] [--max-chars <n>]
 ```
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `<folder>` (positional) | `./inbox` | Folder to scan recursively for supported files. |
-| `--module <key>` | `general` | Module frontmatter key for the captured topic notes. |
-| `--project [name]` | off | Also create a canonical project record (named after the folder when `name` is omitted) and link every captured note as a key document. Reuses the project if it already exists. |
-| `--dry-run` | off | Extract and preview notes without writing to the KB. |
-| `--no-scrub` | off (scrub on) | Disable secret/API-key redaction. |
-| `--max-chars <n>` | `12000` | Chunk threshold; longer documents split into `(part N)` notes. |
+| Flag                    | Default        | Meaning                                                                                                                                                                         |
+| ----------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `<folder>` (positional) | `./inbox`      | Folder to scan recursively for supported files.                                                                                                                                 |
+| `--module <key>`        | `general`      | Module frontmatter key for the captured topic notes.                                                                                                                            |
+| `--project [name]`      | off            | Also create a canonical project record (named after the folder when `name` is omitted) and link every captured note as a key document. Reuses the project if it already exists. |
+| `--dry-run`             | off            | Extract and preview notes without writing to the KB.                                                                                                                            |
+| `--no-scrub`            | off (scrub on) | Disable secret/API-key redaction.                                                                                                                                               |
+| `--max-chars <n>`       | `12000`        | Chunk threshold; longer documents split into `(part N)` notes.                                                                                                                  |
 
-The CLI runs its own KB MCP server child with writes enabled (unless
-`--dry-run`), captures each note via `kb.upsert_note`, then calls `kb.refresh`.
-Deterministic re-ingestion compares the rendered note with the existing target:
-unchanged input is a no-op, while changed existing content enters the capture
-review queue instead of being replaced blindly.
+The CLI uses the shared Capture Planner and workspace policy directly, then
+refreshes retrieval after accepted writes. It hashes raw bytes before
+conversion and records the converter, converter version, extraction settings,
+accepted hash, and generated note paths in `kb/sources/<source-id>.md`.
+Unchanged bytes and settings skip conversion completely. Changed or removed
+chunks enter the existing capture review queue; `.gke/ingest-candidates/` keeps
+the candidate version pending until every associated proposal is applied or
+rejected.
 With `--project`, the project record is created through the shared
 `tools/projects` service before the index refresh: the ingest folder becomes a
 `source_roots` entry when it lives inside the workspace, and each note is
@@ -55,27 +58,26 @@ use the native pass-through path.
 ## Pipeline
 
 ```text
-detect  →  extract  →  normalize  →  capture  →  index
-(ext)      (per-fmt)   (title/chunk  (kb.upsert  (kb.refresh)
-                        /scrub/        _note)
-                        provenance)
+hash → detect → extract → normalize → capture/review → source record → index
 ```
 
 ## Modules
 
-| File | Responsibility |
-|---|---|
-| `extractors.ts` | `detectFormat`, `extractText`. MarkItDown is preferred for rich documents in `auto` mode; PDF/DOCX/XLSX fall back to `unpdf`, `mammoth` raw text, and `exceljs` sheet-to-Markdown extraction. Markdown/text are pass-through. Returns text + warnings (e.g. scanned PDF with no text layer). |
-| `normalize.ts` | `deriveTitle` (heading → short first line → filename), `scrubSecrets` (AWS keys, JWTs, bearer tokens, private-key blocks, `key=secret` assignments), `chunkText` (split on `##` boundaries / size, hard-split over-long lines), `normalizeDocument` (orchestrates + prepends a `> Source: …` provenance line). |
-| `ingest.ts` | CLI: walk folder, run the pipeline, assign deterministic source-derived note paths (`<slug>.md`, `<slug>-part-N.md`) so distinct files never collide and re-ingest is idempotent, write via the MCP server, print a summary. Exports `runIngest`, `slugifySource`. |
-| `fixtures/` | `tokens.ts` (unique tokens per format) + `make-fixtures.ts` (generates the committed `sample.*` binaries). Regenerate with `npm run ingest:fixtures`. |
+| File                 | Responsibility                                                                                                                                                                                                                                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `extractors.ts`      | `detectFormat`, `extractText`. MarkItDown is preferred for rich documents in `auto` mode; PDF/DOCX/XLSX fall back to `unpdf`, `mammoth` raw text, and `exceljs` sheet-to-Markdown extraction. Markdown/text are pass-through. Returns text, warnings, and cached converter identity/version provenance.        |
+| `normalize.ts`       | `deriveTitle` (heading → short first line → filename), `scrubSecrets` (AWS keys, JWTs, bearer tokens, private-key blocks, `key=secret` assignments), `chunkText` (split on `##` boundaries / size, hard-split over-long lines), `normalizeDocument` (orchestrates + prepends a `> Source: …` provenance line). |
+| `source-record.ts`   | Stable source identity, extraction-settings hashing, canonical source record parsing/rendering, and workspace-authorized atomic writes.                                                                                                                                                                        |
+| `candidate-state.ts` | Operational candidate-run state and capture-proposal resolution; finalizes the accepted source record only after all proposals apply.                                                                                                                                                                          |
+| `ingest.ts`          | CLI orchestration: hash before conversion, skip accepted unchanged sources, create non-conflicting notes, queue changed/removal proposals, preserve topic metadata and project links, and print source-aware counts.                                                                                           |
+| `fixtures/`          | `tokens.ts` (unique tokens per format) + `make-fixtures.ts` (generates the committed `sample.*` binaries). Regenerate with `npm run ingest:fixtures`.                                                                                                                                                          |
 
 ## Tests
 
 ```bash
 npm run test:ingest:unit   # pure functions: detect, title, chunk, scrub, slug, normalize
-npm run test:ingest        # end to end: feed the binary fixtures into a sandbox KB,
-                           # assert each file's unique token is retrievable & cited
+npm run test:ingest        # binary retrieval plus source identity, unchanged short-circuit,
+                           # one/many chunk transitions, proposal apply/reject, and links
 ```
 
 Both are plain `node:assert` scripts (the convention for `tools/` tests). The
@@ -84,8 +86,11 @@ temp-dir sandbox, so it never writes to the real `kb/`.
 
 ## Design notes / boundaries
 
-- **Provenance lives in the note body**, not frontmatter, because
-  `kb.upsert_note` renders a fixed frontmatter schema.
+- **Canonical provenance lives in source records.** Generated topic notes also
+  carry `source_id`, ingest-root-relative `source_uri`, and `source_chunk`
+  frontmatter while preserving unknown existing fields.
+- **Candidate state is operational.** `.gke/ingest-candidates/` is never scanned,
+  synchronized into the Cockpit content bundle, or exported as knowledge.
 - **MarkItDown is optional but preferred** for rich documents because it gives a
   consistent Markdown conversion layer across Office, web, archive, and ebook
   inputs. It runs with the current process privileges, so only ingest documents

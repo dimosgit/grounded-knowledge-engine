@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildProjectAttentionCounts,
+  buildProjectColumns,
   buildProjectLinkedDocs,
   buildProjectSummaries,
   compactProjectText,
+  filterProjectSummaries,
 } from "../domain/projects";
 
 function doc(path, title, frontmatter, content) {
@@ -169,5 +172,82 @@ Completed.
         54,
       ),
     ).toBe("Stand up the public cockpit and attach the final…");
+  });
+
+  it("shares deterministic review semantics and composes attention filters with lanes", () => {
+    const projects = buildProjectSummaries(
+      [
+        doc(
+          "kb/projects/overdue/project.md",
+          "Overdue Project",
+          {
+            record_type: "project",
+            project_id: "overdue",
+            status: "active",
+            review_after: "2026-07-10",
+          },
+          "# Overdue\n\n## Blockers\n- Approval pending.\n",
+        ),
+        doc(
+          "kb/projects/questions/project.md",
+          "Questions Project",
+          {
+            record_type: "project",
+            project_id: "questions",
+            status: "planned",
+            review_after: "2026-07-14",
+          },
+          "# Questions\n\n## Open questions\n- Who owns rollout?\n",
+        ),
+        doc(
+          "kb/projects/done/project.md",
+          "Done Project",
+          {
+            record_type: "project",
+            project_id: "done",
+            status: "completed",
+            review_after: "2026-07-01",
+          },
+          "# Done\n\n## Blockers\n- Historical blocker.\n",
+        ),
+      ],
+      {},
+      { asOf: "2026-07-14T17:00:00.000Z" },
+    );
+
+    const overdue = projects.find((project) => project.id === "overdue");
+    const due = projects.find((project) => project.id === "questions");
+    const done = projects.find((project) => project.id === "done");
+    expect(overdue).toEqual(
+      expect.objectContaining({
+        reviewState: "overdue",
+        daysUntilReview: -4,
+        needsAttention: true,
+      }),
+    );
+    expect(due).toEqual(
+      expect.objectContaining({ reviewState: "due", daysUntilReview: 0, needsAttention: true }),
+    );
+    expect(done).toEqual(
+      expect.objectContaining({ reviewState: "not-applicable", needsAttention: false }),
+    );
+
+    expect(buildProjectAttentionCounts(projects)).toEqual({
+      due: 1,
+      overdue: 1,
+      dueOrOverdue: 2,
+      blocked: 1,
+      openQuestions: 1,
+      needsAttention: 2,
+    });
+    expect(filterProjectSummaries(projects, "overdue").map((project) => project.id)).toEqual([
+      "overdue",
+    ]);
+    expect(filterProjectSummaries(projects, "open-questions").map((project) => project.id)).toEqual(
+      ["questions"],
+    );
+    const filteredColumns = buildProjectColumns(filterProjectSummaries(projects, "blocked"));
+    expect(filteredColumns.active.map((project) => project.id)).toEqual(["overdue"]);
+    expect(Object.values(filteredColumns).flat()).toHaveLength(1);
   });
 });
