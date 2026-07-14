@@ -69,6 +69,7 @@ async function collectMarkdownStats(rootPath: string, relPrefix = ""): Promise<F
   const dirEntries = await fs.readdir(rootPath, { withFileTypes: true });
 
   for (const entry of dirEntries) {
+    if (entry.name.toLowerCase() === ".gke") continue;
     const absolutePath = path.join(rootPath, entry.name);
     const relativePath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
 
@@ -96,6 +97,7 @@ async function buildSignature(): Promise<Signature> {
   const entries: FileEntry[] = [];
 
   for (const { from } of sourceFolders) {
+    if (from.split(/[\\/]/).some((segment) => segment.toLowerCase() === ".gke")) continue;
     const absolute = path.join(repoRoot, from);
     if (!(await exists(absolute))) continue;
     entries.push(...(await collectMarkdownStats(absolute, from)));

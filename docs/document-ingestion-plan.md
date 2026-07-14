@@ -35,7 +35,7 @@ Ingestion must not add a second source of truth. Per
 > (`tools/kb-mcp-server/`), and the cockpit graph (`apps/cockpit`) — works
 > **unchanged**.
 
-So ingestion is only ever an *input adapter* that ends in a `kb.upsert_note`
+So ingestion is only ever an _input adapter_ that ends in a `kb.upsert_note`
 (or an equivalent direct Markdown write). It never touches grounding or
 visualization. This is what keeps the surface area small and is why the
 end-to-end loop test (`npm run test:loop`) already covers the "after capture"
@@ -77,9 +77,9 @@ next question is grounded in it.
   `false`, see `tools/kb-mcp-server/server.ts:71`). Document this clearly and
   ship a one-line setup note: real ingestion needs `KB_MCP_ENABLE_WRITES=true`.
 - **A capture prompt / recipe.** A short, copy-pasteable instruction block:
-  *"Read the attached document and capture it to the KB as a topic note: derive
+  _"Read the attached document and capture it to the KB as a topic note: derive
   a title, summarize the key facts as bullet points, preserve any IDs/dates
-  verbatim, then call `kb.upsert_note`."*
+  verbatim, then call `kb.upsert_note`."_
 - **A guardrail note.** Remind users that desktop-app extraction quality varies
   and that captured notes should be reviewed (the engine is grounded, not
   authoritative).
@@ -109,14 +109,14 @@ mode, then falls back to native Node extractors for PDF/DOCX/XLSX when needed.
 `GKE_INGEST_CONVERTER=native` keeps the old path, while
 `GKE_INGEST_CONVERTER=markitdown` makes MarkItDown mandatory.
 
-| Format | Extension | Converter | Notes |
-|---|---|---|---|
-| PDF | `.pdf` | MarkItDown; native `unpdf` fallback | Text-layer PDFs work directly. Scanned/image PDFs need OCR (see risks). |
-| Word | `.docx` | MarkItDown; native `mammoth.extractRawText` fallback | MarkItDown can preserve richer Markdown structure; native fallback prioritizes reliability. |
-| Excel | `.xlsx`, `.xls` | MarkItDown; native `exceljs` fallback | Native fallback emits each sheet as a Markdown table and keeps sheet names as headings. |
-| PowerPoint | `.pptx` | MarkItDown | Slide extraction is now covered by the shared converter instead of a custom parser. |
-| Web/data/archive/ebook | `.html`, `.csv`, `.json`, `.xml`, `.zip`, `.epub` | MarkItDown | Supported when the MarkItDown CLI is installed. |
-| Markdown / text | `.md`, `.txt` | built-in | Pass-through; minimal normalization. |
+| Format                 | Extension                                         | Converter                                            | Notes                                                                                       |
+| ---------------------- | ------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| PDF                    | `.pdf`                                            | MarkItDown; native `unpdf` fallback                  | Text-layer PDFs work directly. Scanned/image PDFs need OCR (see risks).                     |
+| Word                   | `.docx`                                           | MarkItDown; native `mammoth.extractRawText` fallback | MarkItDown can preserve richer Markdown structure; native fallback prioritizes reliability. |
+| Excel                  | `.xlsx`, `.xls`                                   | MarkItDown; native `exceljs` fallback                | Native fallback emits each sheet as a Markdown table and keeps sheet names as headings.     |
+| PowerPoint             | `.pptx`                                           | MarkItDown                                           | Slide extraction is now covered by the shared converter instead of a custom parser.         |
+| Web/data/archive/ebook | `.html`, `.csv`, `.json`, `.xml`, `.zip`, `.epub` | MarkItDown                                           | Supported when the MarkItDown CLI is installed.                                             |
+| Markdown / text        | `.md`, `.txt`                                     | built-in                                             | Pass-through; minimal normalization.                                                        |
 
 **Pipeline specifics for v1.1:**
 
@@ -178,10 +178,14 @@ mode, then falls back to native Node extractors for PDF/DOCX/XLSX when needed.
 - [x] v1.1: fixtures + ingestion integration test asserting binary-doc content is
       grounded and cited (`npm run test:ingest`).
 - [x] Detect-and-warn for scanned PDFs (OCR deferred).
+- [x] Source-aware re-ingestion: stable source IDs, raw hashes, converter and
+      settings provenance, canonical `kb/sources/` records, and reviewable
+      changed/removed chunks.
 
 Notes vs. the original plan:
-- Provenance lives in the note **body** (a `> Source: …` line), not frontmatter,
-  because `kb.upsert_note` renders a fixed frontmatter schema (no arbitrary
-  fields). Same effect, no server change.
+
+- Canonical provenance now lives in `source` records. Generated topics retain a
+  readable provenance line and add source identity/chunk frontmatter while
+  preserving unknown existing fields.
 - DOCX native fallback uses `mammoth.extractRawText` (raw text) for reliability;
   MarkItDown is preferred when installed for richer Markdown conversion.

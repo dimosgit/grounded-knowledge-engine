@@ -31,18 +31,19 @@ npm run scrub                # sanitization gate; requires gitleaks installed
 There is no test framework at the root: each suite is a standalone `tsx`
 script, so "run a single test" means running its npm script directly:
 
-| Script                                     | Covers                                                       |
-| ------------------------------------------ | ------------------------------------------------------------ |
-| `npm run test:mcp:catalog`                 | MCP profiles, output schemas, annotations, size budgets      |
-| `npm run test:mcp:transport`               | NDJSON + legacy Content-Length framing                       |
-| `npm run test:mcp:http`                    | loopback HTTP bridge + API-key auth                          |
-| `npm run test:projects`                    | strict project resolution, isolation, resource parity        |
-| `npm run test:project-service`             | project CLI service (create/update/link/validate)            |
-| `npm run test:document-core`               | shared document parsing                                      |
-| `npm run smoke:mcp`                        | end-to-end MCP discovery, grounding, capture, resume         |
-| `npm run test:loop`                        | ground → capture → re-ground → cite loop                     |
-| `npm run test:ingest:unit` / `test:ingest` | ingestion pipeline (PDF/DOCX/XLSX fixtures)                  |
-| `npm run eval`                             | retrieval quality against `tools/grounding/eval/qa-set.json` |
+| Script                                     | Covers                                                  |
+| ------------------------------------------ | ------------------------------------------------------- |
+| `npm run test:mcp:catalog`                 | MCP profiles, output schemas, annotations, size budgets |
+| `npm run test:mcp:transport`               | NDJSON + legacy Content-Length framing                  |
+| `npm run test:mcp:http`                    | loopback HTTP bridge + API-key auth                     |
+| `npm run test:projects`                    | strict project resolution, isolation, resource parity   |
+| `npm run test:project-service`             | project CLI service (create/update/link/validate)       |
+| `npm run test:document-core`               | shared document parsing                                 |
+| `npm run smoke:mcp`                        | end-to-end MCP discovery, grounding, capture, resume    |
+| `npm run test:loop`                        | ground → capture → re-ground → cite loop                |
+| `npm run test:ingest:unit` / `test:ingest` | ingestion pipeline (PDF/DOCX/XLSX fixtures)             |
+| `npm run eval`                             | exploratory retrieval quality against the demo QA set   |
+| `npm run test:retrieval`                   | isolated category floors across BM25 and SQLite         |
 
 Other frequently used entry points: `npm run search -- --query "…"`,
 `npm run project -- <create|list|show|validate|update|link>`,

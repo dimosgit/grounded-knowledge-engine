@@ -1,6 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  authorizeWorkspaceOperationalRead,
+  authorizeWorkspaceWrite,
+} from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
+import {
   normalizeProjectId,
   parseProjectDocument,
   parseProjectFrontmatter,
@@ -42,6 +47,7 @@ const DATE_FIELDS = ["started_at", "updated", "review_after"] as const;
 export interface ProjectServiceOptions {
   repoRoot?: string;
   scanRoots?: string[];
+  workspace?: WorkspaceContext;
 }
 
 export interface CreateProjectOptions extends ProjectServiceOptions {
@@ -99,6 +105,26 @@ export interface LinkProjectSourceOptions extends ProjectServiceOptions {
   dryRun?: boolean;
 }
 
+export type ProjectTaskSize = "XS" | "S" | "M" | "L" | "XL";
+export type ProjectTaskStatus = "todo" | "in-progress" | "gated" | "done";
+
+export interface AddProjectTaskOptions extends ProjectServiceOptions {
+  projectId: string;
+  text: string;
+  size?: ProjectTaskSize | Lowercase<ProjectTaskSize>;
+  status?: ProjectTaskStatus;
+  dryRun?: boolean;
+}
+
+export interface AddedProjectTask extends UpdatedProject {
+  task: {
+    text: string;
+    size: ProjectTaskSize;
+    status: ProjectTaskStatus;
+    markdown: string;
+  };
+}
+
 export type ProjectSectionKey =
   | "outcome"
   | "current-focus"
@@ -107,7 +133,8 @@ export type ProjectSectionKey =
   | "blockers"
   | "open-questions"
   | "next-actions"
-  | "key-documents";
+  | "key-documents"
+  | "delivery-checklist";
 
 export interface LoadedProject {
   raw: string;
@@ -136,12 +163,12 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
     tags: normalizeCsvValues(options.tags || []),
   };
   const relPath = `kb/projects/${projectId}/project.md`;
-  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath);
+  const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, options.workspace, "write");
   if (await exists(absPath)) {
     throw new Error(`Project already exists: ${relPath}`);
   }
 
-  const duplicates = await listProjects({ repoRoot });
+  const duplicates = await listProjects({ repoRoot, workspace: options.workspace });
   if (duplicates.some((project) => project.projectId === projectId)) {
     throw new Error(`Project ID already exists: ${projectId}`);
   }
@@ -162,11 +189,13 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   });
   const sourceDirectories = options.createSourceDirectory === false ? [] : sourceRoots;
   const sourceDirectoryPaths = await Promise.all(
-    sourceDirectories.map((sourceRoot) => resolveSafeWorkspacePath(repoRoot, sourceRoot)),
+    sourceDirectories.map((sourceRoot) =>
+      resolveSafeWorkspacePath(repoRoot, sourceRoot, options.workspace, "write"),
+    ),
   );
 
   if (!options.dryRun) {
-    await atomicWrite(absPath, content);
+    await atomicWrite(absPath, content, options.workspace);
     for (const sourceAbs of sourceDirectoryPaths) {
       await fs.mkdir(sourceAbs, { recursive: true });
     }
@@ -177,10 +206,16 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
 
 export async function listProjects(options: ProjectServiceOptions = {}): Promise<ProjectSummary[]> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
-  const records = await discoverProjectRecords(repoRoot, options.scanRoots || DEFAULT_SCAN_ROOTS);
+  const records = await discoverProjectRecords(
+    repoRoot,
+    options.scanRoots || DEFAULT_SCAN_ROOTS,
+    options.workspace,
+  );
   const summaries: ProjectSummary[] = [];
 
   for (const record of records) {
+    if (options.workspace)
+      await authorizeWorkspaceOperationalRead(options.workspace, record.absPath);
     const raw = await fs.readFile(record.absPath, "utf8");
     const parsed = parseProjectDocument(raw, record.relPath, "");
     summaries.push({
@@ -206,10 +241,16 @@ export async function getProject(
 ): Promise<LoadedProject> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const projectId = requireCanonicalProjectId(projectIdInput);
-  const records = await discoverProjectRecords(repoRoot, options.scanRoots || DEFAULT_SCAN_ROOTS);
+  const records = await discoverProjectRecords(
+    repoRoot,
+    options.scanRoots || DEFAULT_SCAN_ROOTS,
+    options.workspace,
+  );
   const matches: LoadedProject[] = [];
 
   for (const record of records) {
+    if (options.workspace)
+      await authorizeWorkspaceOperationalRead(options.workspace, record.absPath);
     const raw = await fs.readFile(record.absPath, "utf8");
     const parsed = parseProjectDocument(raw, record.relPath, "");
     if (parsed.manifest.projectId === projectId) {
@@ -232,10 +273,16 @@ export async function validateProject(
 ): Promise<ProjectValidationResult> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const projectId = requireCanonicalProjectId(projectIdInput);
-  const records = await discoverProjectRecords(repoRoot, options.scanRoots || DEFAULT_SCAN_ROOTS);
+  const records = await discoverProjectRecords(
+    repoRoot,
+    options.scanRoots || DEFAULT_SCAN_ROOTS,
+    options.workspace,
+  );
   const matches: LoadedProject[] = [];
 
   for (const record of records) {
+    if (options.workspace)
+      await authorizeWorkspaceOperationalRead(options.workspace, record.absPath);
     const raw = await fs.readFile(record.absPath, "utf8");
     const parsed = parseProjectDocument(raw, record.relPath, "");
     if (parsed.manifest.projectId === projectId) {
@@ -267,6 +314,7 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
   const loaded = await getProject(options.projectId, {
     repoRoot,
     scanRoots: options.scanRoots,
+    workspace: options.workspace,
   });
   let content = loaded.raw;
   const frontmatterUpdates: Record<string, string> = {};
@@ -306,8 +354,13 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
 
   const changed = content !== loaded.raw;
   if (changed && !options.dryRun) {
-    const target = await resolveSafeWorkspacePath(repoRoot, loaded.path);
-    await atomicWrite(target, content);
+    const target = await resolveSafeWorkspacePath(
+      repoRoot,
+      loaded.path,
+      options.workspace,
+      "write",
+    );
+    await atomicWrite(target, content, options.workspace);
   }
   return {
     projectId: loaded.parsed.manifest.projectId,
@@ -318,6 +371,65 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
   };
 }
 
+export async function addProjectTask(options: AddProjectTaskOptions): Promise<AddedProjectTask> {
+  const repoRoot = path.resolve(options.repoRoot || process.cwd());
+  const lockPath = options.dryRun
+    ? null
+    : await acquireProjectTaskLock(repoRoot, options.projectId, options.workspace);
+  try {
+    const loaded = await getProject(options.projectId, {
+      repoRoot,
+      scanRoots: options.scanRoots,
+      workspace: options.workspace,
+    });
+    const text = requireNonEmpty(options.text, "task text");
+    const size = normalizeTaskSize(options.size || "M");
+    const status = normalizeTaskStatus(options.status || "todo");
+    const duplicateKey = normalizeTaskTextForComparison(text);
+
+    for (const existingTask of extractProjectTaskTexts(loaded.raw)) {
+      if (normalizeTaskTextForComparison(existingTask) === duplicateKey) {
+        throw new Error(`Project task already exists: ${text}`);
+      }
+    }
+
+    const markdown = renderProjectTask(text, size, status);
+    const existingChecklist = loaded.parsed.sections.get("delivery-checklist")?.content || "";
+    const checklistLines = existingChecklist
+      .split(/\r?\n/)
+      .map((line) => line.trimEnd())
+      .filter((line) => line.trim() && !/^(?:[-*]\s+)?None recorded\.?$/i.test(line.trim()));
+    checklistLines.push(markdown);
+
+    let content = updateMarkdownSection(
+      loaded.raw,
+      "delivery-checklist",
+      checklistLines.join("\n"),
+    );
+    content = updateFrontmatter(content, { updated: todayIso() });
+    if (!options.dryRun) {
+      const target = await resolveSafeWorkspacePath(
+        repoRoot,
+        loaded.path,
+        options.workspace,
+        "write",
+      );
+      await atomicWrite(target, content, options.workspace);
+    }
+
+    return {
+      projectId: loaded.parsed.manifest.projectId,
+      path: loaded.path,
+      content,
+      changed: true,
+      dryRun: Boolean(options.dryRun),
+      task: { text, size, status, markdown },
+    };
+  } finally {
+    if (lockPath) await fs.rm(lockPath, { force: true });
+  }
+}
+
 export async function linkProjectSource(
   options: LinkProjectSourceOptions,
 ): Promise<UpdatedProject> {
@@ -325,9 +437,10 @@ export async function linkProjectSource(
   const loaded = await getProject(options.projectId, {
     repoRoot,
     scanRoots: options.scanRoots,
+    workspace: options.workspace,
   });
   const sourcePath = normalizeWorkspaceRelativePath(options.sourcePath);
-  const sourceAbs = await resolveSafeWorkspacePath(repoRoot, sourcePath);
+  const sourceAbs = await resolveSafeWorkspacePath(repoRoot, sourcePath, options.workspace);
   if (!(await exists(sourceAbs))) throw new Error(`Source path does not exist: ${sourcePath}`);
   const sourceStat = await fs.stat(sourceAbs);
   if (!sourceStat.isFile()) throw new Error(`Source path is not a file: ${sourcePath}`);
@@ -350,6 +463,7 @@ export async function linkProjectSource(
   return updateProject({
     repoRoot,
     scanRoots: options.scanRoots,
+    workspace: options.workspace,
     projectId: options.projectId,
     sections: { "key-documents": items },
     dryRun: options.dryRun,
@@ -592,6 +706,7 @@ function sectionAliases(key: ProjectSectionKey): Set<string> {
     "open-questions": ["open questions"],
     "next-actions": ["next actions", "next 3 actions"],
     "key-documents": ["key documents"],
+    "delivery-checklist": ["delivery checklist"],
   };
   return new Set(aliases[key]);
 }
@@ -606,6 +721,7 @@ function sectionHeading(key: ProjectSectionKey): string {
     "open-questions": "Open questions",
     "next-actions": "Next actions",
     "key-documents": "Key documents",
+    "delivery-checklist": "Delivery checklist",
   };
   return headings[key];
 }
@@ -617,17 +733,66 @@ function isListSection(key: ProjectSectionKey): boolean {
     "open-questions",
     "next-actions",
     "key-documents",
+    "delivery-checklist",
   ].includes(key);
+}
+
+function normalizeTaskSize(value: string): ProjectTaskSize {
+  const normalized = cleanScalar(value).toUpperCase();
+  if (!(["XS", "S", "M", "L", "XL"] as const).includes(normalized as ProjectTaskSize)) {
+    throw new Error("Task size must be one of: XS, S, M, L, XL.");
+  }
+  return normalized as ProjectTaskSize;
+}
+
+function normalizeTaskStatus(value: string): ProjectTaskStatus {
+  const normalized = cleanScalar(value).toLowerCase();
+  if (
+    !(["todo", "in-progress", "gated", "done"] as const).includes(normalized as ProjectTaskStatus)
+  ) {
+    throw new Error("Task status must be one of: todo, in-progress, gated, done.");
+  }
+  return normalized as ProjectTaskStatus;
+}
+
+function renderProjectTask(text: string, size: ProjectTaskSize, status: ProjectTaskStatus): string {
+  const checkbox = status === "done" ? "[x]" : "[ ]";
+  const marker = status === "in-progress" ? "🟡 " : status === "gated" ? "🔴 " : "";
+  return `- ${checkbox} ${marker}${text} [${size}]`;
+}
+
+function extractProjectTaskTexts(raw: string): string[] {
+  const tasks: string[] = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const match = line.match(/^\s*-\s+\[[ xX]\]\s+(.+?)\s*$/);
+    if (!match) continue;
+    tasks.push(
+      match[1]
+        .replace(/^(?:🟢|🟡|🔴|⚪)\s*/u, "")
+        .replace(/\s*[[(](?:XS|S|M|L|XL)[\])]\s*$/i, "")
+        .trim(),
+    );
+  }
+  return tasks;
+}
+
+function normalizeTaskTextForComparison(value: string): string {
+  return cleanScalar(value).toLowerCase().replace(/\s+/g, " ");
 }
 
 async function discoverProjectRecords(
   repoRoot: string,
   scanRoots: string[],
+  workspace?: WorkspaceContext,
 ): Promise<Array<{ absPath: string; relPath: string }>> {
   const records: Array<{ absPath: string; relPath: string }> = [];
   for (const scanRoot of scanRoots) {
     const normalizedRoot = normalizeWorkspaceRelativePath(scanRoot);
-    const projectsRoot = await resolveSafeWorkspacePath(repoRoot, `${normalizedRoot}/projects`);
+    const projectsRoot = await resolveSafeWorkspacePath(
+      repoRoot,
+      `${normalizedRoot}/projects`,
+      workspace,
+    );
     let entries;
     try {
       entries = await fs.readdir(projectsRoot, { withFileTypes: true });
@@ -637,14 +802,19 @@ async function discoverProjectRecords(
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const relPath = `${normalizedRoot}/projects/${entry.name}/project.md`;
-      const absPath = await resolveSafeWorkspacePath(repoRoot, relPath);
+      const absPath = await resolveSafeWorkspacePath(repoRoot, relPath, workspace);
       if (await exists(absPath)) records.push({ absPath, relPath });
     }
   }
   return records.sort((a, b) => a.relPath.localeCompare(b.relPath));
 }
 
-async function resolveSafeWorkspacePath(repoRoot: string, relPath: string): Promise<string> {
+async function resolveSafeWorkspacePath(
+  repoRoot: string,
+  relPath: string,
+  workspace?: WorkspaceContext,
+  access: "read" | "write" = "read",
+): Promise<string> {
   const normalized = normalizeWorkspaceRelativePath(relPath);
   const root = path.resolve(repoRoot);
   const target = path.resolve(root, normalized);
@@ -663,10 +833,19 @@ async function resolveSafeWorkspacePath(repoRoot: string, relPath: string): Prom
   if (existingReal !== rootReal && !existingReal.startsWith(`${rootReal}${path.sep}`)) {
     throw new Error(`Path resolves outside the workspace root through a symlink: ${relPath}`);
   }
+  if (workspace) {
+    if (access === "write") await authorizeWorkspaceWrite(workspace, target);
+    else if (await exists(target)) await authorizeWorkspaceOperationalRead(workspace, target);
+  }
   return target;
 }
 
-async function atomicWrite(target: string, content: string): Promise<void> {
+async function atomicWrite(
+  target: string,
+  content: string,
+  workspace?: WorkspaceContext,
+): Promise<void> {
+  if (workspace) await authorizeWorkspaceWrite(workspace, target);
   await fs.mkdir(path.dirname(target), { recursive: true });
   const temporary = `${target}.tmp-${process.pid}-${Date.now()}`;
   try {
@@ -676,6 +855,41 @@ async function atomicWrite(target: string, content: string): Promise<void> {
     await fs.rm(temporary, { force: true });
     throw error;
   }
+}
+
+async function acquireProjectTaskLock(
+  repoRoot: string,
+  projectIdInput: string,
+  workspace?: WorkspaceContext,
+): Promise<string> {
+  const projectId = normalizeProjectId(projectIdInput);
+  const lockPath = await resolveSafeWorkspacePath(
+    repoRoot,
+    `.gke/project-task-locks/${projectId}.lock`,
+    workspace,
+    "write",
+  );
+  await fs.mkdir(path.dirname(lockPath), { recursive: true });
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      const handle = await fs.open(lockPath, "wx", 0o600);
+      await handle.writeFile(`${process.pid}\n`, "utf8");
+      await handle.close();
+      return lockPath;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const stat = await fs.stat(lockPath).catch((): null => null);
+      if (stat && Date.now() - stat.mtimeMs > 30_000) {
+        await fs.rm(lockPath, { force: true });
+        continue;
+      }
+      if (attempt === 49) {
+        throw new Error(`Project tasks are already being updated: ${projectId}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+  throw new Error(`Unable to acquire project task lock: ${projectId}`);
 }
 
 function normalizeWorkspaceRelativePath(value: string): string {

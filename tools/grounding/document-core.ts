@@ -2,8 +2,10 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { CandidateFile, Frontmatter } from "./types.js";
+import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 
-const SKIP_DIRECTORIES = new Set([".git", "node_modules", "dist", "content", ".cache"]);
+const SKIP_DIRECTORIES = new Set([".git", ".gke", "node_modules", "dist", "content", ".cache"]);
 
 export interface ParsedFrontmatter {
   frontmatter: Frontmatter;
@@ -13,9 +15,11 @@ export interface ParsedFrontmatter {
 export async function gatherCandidateFiles(
   repoRoot: string,
   scanRoots: string[],
+  workspace?: WorkspaceContext,
 ): Promise<CandidateFile[]> {
   const candidates: CandidateFile[] = [];
   for (const root of scanRoots) {
+    if (isOperationalStatePath(root)) continue;
     const absRoot = path.resolve(repoRoot, root);
     let stat;
     try {
@@ -23,11 +27,13 @@ export async function gatherCandidateFiles(
     } catch {
       continue;
     }
+    if (workspace) await authorizeWorkspaceRead(workspace, absRoot);
     if (stat.isDirectory()) {
-      await walk(absRoot, repoRoot, candidates);
+      await walk(absRoot, repoRoot, candidates, workspace);
       continue;
     }
     const relPath = toPosix(path.relative(repoRoot, absRoot));
+    if (isOperationalStatePath(relPath)) continue;
     if (!isSearchableTextFile(relPath)) continue;
     candidates.push({ absPath: absRoot, relPath, size: stat.size, mtimeMs: stat.mtimeMs });
   }
@@ -102,6 +108,12 @@ export function isSearchableTextFile(relPath: string): boolean {
   return lower.endsWith(".md") || lower.endsWith(".txt");
 }
 
+export function isOperationalStatePath(relPath: string): boolean {
+  return toPosix(relPath)
+    .split("/")
+    .some((segment) => segment.toLowerCase() === ".gke");
+}
+
 export function normalizeScalar(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.trim().replace(/^['"]|['"]$/g, "");
@@ -127,14 +139,21 @@ export function toPosix(value: string): string {
   return value.split(path.sep).join("/");
 }
 
-async function walk(dir: string, repoRoot: string, out: CandidateFile[]): Promise<void> {
+async function walk(
+  dir: string,
+  repoRoot: string,
+  out: CandidateFile[],
+  workspace?: WorkspaceContext,
+): Promise<void> {
   const entries = await fs.readdir(dir, { withFileTypes: true });
   for (const entry of entries) {
     const absPath = path.join(dir, entry.name);
     const relPath = toPosix(path.relative(repoRoot, absPath));
+    if (isOperationalStatePath(relPath)) continue;
     if (entry.isDirectory()) {
       if (SKIP_DIRECTORIES.has(entry.name)) continue;
-      await walk(absPath, repoRoot, out);
+      if (workspace) await authorizeWorkspaceRead(workspace, absPath);
+      await walk(absPath, repoRoot, out, workspace);
       continue;
     }
     if (!entry.isFile() || !isSearchableTextFile(relPath)) continue;
@@ -144,6 +163,7 @@ async function walk(dir: string, repoRoot: string, out: CandidateFile[]): Promis
     } catch {
       continue;
     }
+    if (workspace) await authorizeWorkspaceRead(workspace, absPath);
     out.push({ absPath, relPath, size: stat.size, mtimeMs: stat.mtimeMs });
   }
 }
