@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { BookOpenCheck, Check, LoaderCircle, Search, X } from "lucide-react";
+import { ArrowRight, BookOpenCheck, Check, LoaderCircle, Search, X } from "lucide-react";
 import {
   askGrounded,
   captureGroundedAnswer,
@@ -9,10 +9,17 @@ import {
 
 interface AskDrawerProps {
   projectId?: string;
+  projectTitle?: string;
   onCapture?: (capture: GroundedCaptureResult) => void;
+  onReviewProposal?: (proposalId: string) => void;
 }
 
-export function AskDrawer({ projectId, onCapture }: AskDrawerProps) {
+export function AskDrawer({
+  projectId,
+  projectTitle,
+  onCapture,
+  onReviewProposal,
+}: AskDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [question, setQuestion] = useState("");
   const [answeredQuestion, setAnsweredQuestion] = useState("");
@@ -33,7 +40,7 @@ export function AskDrawer({ projectId, onCapture }: AskDrawerProps) {
     setAnswer(null);
     setCapture(null);
     try {
-      const next = await askGrounded(normalizedQuestion);
+      const next = await askGrounded(normalizedQuestion, projectId ? { projectId } : {});
       setAnswer(next);
       setAnsweredQuestion(normalizedQuestion);
       setCaptureTitle(defaultCaptureTitle(normalizedQuestion));
@@ -43,6 +50,15 @@ export function AskDrawer({ projectId, onCapture }: AskDrawerProps) {
       setAsking(false);
     }
   }
+
+  function reviewProposedCapture() {
+    const proposalId = capture?.proposal?.proposalId;
+    if (!proposalId) return;
+    setIsOpen(false);
+    onReviewProposal?.(proposalId);
+  }
+
+  const scopeLabel = projectId ? `${projectTitle || "Project"} (${projectId})` : "Workspace";
 
   async function submitCapture() {
     const normalizedTitle = captureTitle.trim();
@@ -113,9 +129,12 @@ export function AskDrawer({ projectId, onCapture }: AskDrawerProps) {
 
             <div className="min-h-0 flex-1 overflow-y-auto p-5">
               <form onSubmit={submitQuestion} className="space-y-3">
-                <label htmlFor="grounded-question" className="text-sm font-semibold">
-                  Question
-                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <label htmlFor="grounded-question" className="font-semibold">
+                    Question
+                  </label>
+                  <span className="font-normal text-on-surface-variant">Scope: {scopeLabel}</span>
+                </div>
                 <textarea
                   id="grounded-question"
                   value={question}
@@ -274,10 +293,24 @@ export function AskDrawer({ projectId, onCapture }: AskDrawerProps) {
                         </button>
                       </div>
                       {capture && (
-                        <div role="status" className="mt-3 text-sm text-primary">
-                          {capture.action === "created"
-                            ? `Captured to ${capture.path}.`
-                            : `Queued for review at ${capture.path}.`}
+                        <div
+                          role="status"
+                          className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm text-primary"
+                        >
+                          <span>
+                            {capture.action === "created"
+                              ? `Captured to ${capture.path}.`
+                              : `Queued for review at ${capture.path}.`}
+                          </span>
+                          {capture.action === "proposed" && capture.proposal?.proposalId && (
+                            <button
+                              type="button"
+                              onClick={reviewProposedCapture}
+                              className="inline-flex items-center gap-1.5 rounded border border-primary px-3 py-1.5 font-semibold hover:bg-primary-container hover:text-on-primary-container"
+                            >
+                              Review now <ArrowRight size={15} />
+                            </button>
+                          )}
                         </div>
                       )}
                     </section>

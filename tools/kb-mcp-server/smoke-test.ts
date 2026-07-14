@@ -318,6 +318,45 @@ try {
   assert.equal(openQuestionDryRun.structuredContent?.dryRun, true);
   assert.equal(openQuestionDryRun.structuredContent?.status, "open");
 
+  const sharedQuestion = "zzzzzzzzzzzzzzzzzzzz shared open-question smoke test";
+  const openQuestionCreated = await request("tools/call", {
+    name: "kb.add_open_question",
+    arguments: {
+      question: sharedQuestion,
+      whyOpen: "No grounded evidence is available for this synthetic question.",
+      whatWouldResolve: "Add a synthetic grounded source for this exact question.",
+      owner: "mcp-smoke",
+      source: "smoke-test",
+    },
+  });
+  assert.ok(["created", "appended"].includes(openQuestionCreated.structuredContent?.action));
+  assert.match(
+    openQuestionCreated.structuredContent?.entryId || "",
+    /^open-question-[a-f0-9]{16}$/,
+  );
+
+  const abstainedDuplicate = await request("tools/call", {
+    name: "kb.answer_and_capture",
+    arguments: {
+      question: sharedQuestion,
+      mode: "generic",
+      track: "__no_such_track__",
+      strict: true,
+    },
+  });
+  assert.equal(abstainedDuplicate.structuredContent?.answer?.abstained, true);
+  assert.equal(abstainedDuplicate.structuredContent?.strategy, "open_question");
+  assert.equal(abstainedDuplicate.structuredContent?.capture?.action, "unchanged");
+  assert.equal(
+    abstainedDuplicate.structuredContent?.capture?.entryId,
+    openQuestionCreated.structuredContent?.entryId,
+  );
+  const openQuestionRaw = await fs.readFile(
+    path.join(smokeRepoRoot, "kb/open_questions.md"),
+    "utf8",
+  );
+  assert.equal(openQuestionRaw.split(`- question: ${sharedQuestion}`).length - 1, 1);
+
   const reviewTarget = "kb/topics/mcp-primitive-decision.md";
   const beforeReview = await fs.readFile(path.join(smokeRepoRoot, reviewTarget), "utf8");
   const captureToken = "MCP_CAPTURE_REVIEW_QUEUE_SMOKE";

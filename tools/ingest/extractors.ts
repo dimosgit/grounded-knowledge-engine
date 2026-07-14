@@ -9,6 +9,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile } from "node:child_process";
+import { createRequire } from "node:module";
 import mammoth from "mammoth";
 import ExcelJS from "exceljs";
 
@@ -32,7 +33,11 @@ export interface ExtractResult {
   format: SupportedFormat;
   text: string;
   warnings: string[];
+  converter: string;
+  converterVersion: string;
 }
+
+type RawExtractResult = Omit<ExtractResult, "converter" | "converterVersion">;
 
 const EXTENSION_MAP: Record<string, SupportedFormat> = {
   ".pdf": "pdf",
@@ -61,6 +66,9 @@ const MARKITDOWN_MAX_BUFFER = 50 * 1024 * 1024;
 // Caps so a giant workbook does not explode into retrieval noise.
 const MAX_SHEETS = 50;
 const MAX_ROWS_PER_SHEET = 500;
+const require = createRequire(import.meta.url);
+const packageVersionCache = new Map<string, Promise<string>>();
+const markItDownVersionCache = new Map<string, Promise<string>>();
 
 /** Map a file path to a supported format, or null if unsupported. */
 export function detectFormat(filePath: string): SupportedFormat | null {
@@ -83,7 +91,7 @@ export async function extractText(filePath: string): Promise<ExtractResult> {
       if (converter === "markitdown" || !NATIVE_FORMATS.has(format)) {
         throw new Error(markItDownErrorMessage(filePath, error));
       }
-      const native = await extractNative(filePath, format);
+      const native = await withNativeProvenance(await extractNative(filePath, format), format);
       native.warnings.unshift(
         `MarkItDown conversion failed; fell back to native ${format} extractor.`,
       );
@@ -91,16 +99,16 @@ export async function extractText(filePath: string): Promise<ExtractResult> {
       return native;
     }
   }
-  return extractNative(filePath, format);
+  return withNativeProvenance(await extractNative(filePath, format), format);
 }
 
-function getIngestConverter(): IngestConverter {
+export function getIngestConverter(): IngestConverter {
   const raw = (process.env.GKE_INGEST_CONVERTER || "auto").toLowerCase();
   if (raw === "auto" || raw === "native" || raw === "markitdown") return raw;
   throw new Error(`Invalid GKE_INGEST_CONVERTER '${raw}'. Use auto, native, or markitdown.`);
 }
 
-async function extractNative(filePath: string, format: SupportedFormat): Promise<ExtractResult> {
+async function extractNative(filePath: string, format: SupportedFormat): Promise<RawExtractResult> {
   switch (format) {
     case "pdf":
       return extractPdf(filePath);
@@ -123,6 +131,7 @@ async function extractWithMarkItDown(
   format: SupportedFormat,
 ): Promise<ExtractResult> {
   const command = process.env.GKE_MARKITDOWN_BIN || "markitdown";
+  const converterVersion = await getMarkItDownVersion(command);
   const timeout = Number.parseInt(
     process.env.GKE_MARKITDOWN_TIMEOUT_MS || `${MARKITDOWN_TIMEOUT_MS}`,
     10,
@@ -147,7 +156,7 @@ async function extractWithMarkItDown(
           reject(new Error("MarkItDown returned no extractable Markdown."));
           return;
         }
-        resolve({ format, text, warnings });
+        resolve({ format, text, warnings, converter: "markitdown", converterVersion });
       },
     );
   });
@@ -164,7 +173,7 @@ function markItDownErrorMessage(filePath: string, error: unknown): string {
   return `MarkItDown conversion failed for ${filePath}: ${err.message || String(error)}`;
 }
 
-async function extractPdf(filePath: string): Promise<ExtractResult> {
+async function extractPdf(filePath: string): Promise<RawExtractResult> {
   const warnings: string[] = [];
   // unpdf is ESM-only; import dynamically so this module stays loadable from CJS callers.
   const { extractText: pdfExtract, getDocumentProxy } = await import("unpdf");
@@ -180,7 +189,7 @@ async function extractPdf(filePath: string): Promise<ExtractResult> {
   return { format: "pdf", text: cleaned, warnings };
 }
 
-async function extractDocx(filePath: string): Promise<ExtractResult> {
+async function extractDocx(filePath: string): Promise<RawExtractResult> {
   const warnings: string[] = [];
   const { value, messages } = await mammoth.extractRawText({ path: filePath });
   for (const message of messages) {
@@ -203,7 +212,7 @@ function cellToString(value: unknown): string {
   return String(value);
 }
 
-async function extractXlsx(filePath: string): Promise<ExtractResult> {
+async function extractXlsx(filePath: string): Promise<RawExtractResult> {
   const warnings: string[] = [];
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
@@ -254,7 +263,92 @@ async function extractXlsx(filePath: string): Promise<ExtractResult> {
   return { format: "xlsx", text: sections.join("\n\n").trim(), warnings };
 }
 
-async function extractPlainText(filePath: string, format: SupportedFormat): Promise<ExtractResult> {
+async function extractPlainText(
+  filePath: string,
+  format: SupportedFormat,
+): Promise<RawExtractResult> {
   const text = await fs.readFile(filePath, "utf8");
   return { format, text: text.trim(), warnings: [] };
+}
+
+export async function getCurrentConverterVersion(
+  converter: string,
+  format: SupportedFormat,
+): Promise<string> {
+  if (converter === "markitdown") {
+    return getMarkItDownVersion(process.env.GKE_MARKITDOWN_BIN || "markitdown");
+  }
+  const expected = nativeConverterName(format);
+  if (converter !== expected) return "converter-changed";
+  const packageName = nativePackageName(format);
+  return packageName ? packageVersion(packageName) : `node-${process.versions.node}`;
+}
+
+async function withNativeProvenance(
+  result: RawExtractResult,
+  format: SupportedFormat,
+): Promise<ExtractResult> {
+  const converter = nativeConverterName(format);
+  return {
+    ...result,
+    converter,
+    converterVersion: await getCurrentConverterVersion(converter, format),
+  };
+}
+
+function nativeConverterName(format: SupportedFormat): string {
+  if (format === "pdf") return "unpdf";
+  if (format === "docx") return "mammoth";
+  if (format === "xlsx") return "exceljs";
+  return "node-text";
+}
+
+function nativePackageName(format: SupportedFormat): string | null {
+  if (format === "pdf") return "unpdf";
+  if (format === "docx") return "mammoth";
+  if (format === "xlsx") return "exceljs";
+  return null;
+}
+
+function packageVersion(packageName: string): Promise<string> {
+  const cached = packageVersionCache.get(packageName);
+  if (cached) return cached;
+  const pending = (async () => {
+    let directory = path.dirname(require.resolve(packageName));
+    while (true) {
+      try {
+        const parsed = JSON.parse(
+          await fs.readFile(path.join(directory, "package.json"), "utf8"),
+        ) as {
+          name?: string;
+          version?: string;
+        };
+        if (parsed.name === packageName && parsed.version) return parsed.version;
+      } catch {
+        // Continue toward the package root.
+      }
+      const parent = path.dirname(directory);
+      if (parent === directory) return "unreported";
+      directory = parent;
+    }
+  })();
+  packageVersionCache.set(packageName, pending);
+  return pending;
+}
+
+function getMarkItDownVersion(command: string): Promise<string> {
+  const cached = markItDownVersionCache.get(command);
+  if (cached) return cached;
+  const pending = new Promise<string>((resolve) => {
+    execFile(command, ["--version"], { timeout: 5_000 }, (error, stdout, stderr) => {
+      if (error) {
+        resolve("unreported");
+        return;
+      }
+      const version = `${stdout || stderr}`.trim().split(/\r?\n/, 1)[0]?.trim();
+      resolve(version || "unreported");
+    });
+  });
+  markItDownVersionCache.set(command, pending);
+  return pending;
 }

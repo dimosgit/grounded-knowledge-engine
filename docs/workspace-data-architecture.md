@@ -76,13 +76,13 @@ flowchart TB
 
 The core architecture separates five concerns:
 
-| Surface | Responsibility |
-|---|---|
-| Skill | When and why an agent should retrieve, capture, resume, or review |
-| Prompt | User-triggered workflow template |
-| Tool | Search, synthesis, or state-changing action |
-| Resource | Addressable workspace knowledge |
-| CLI/core | Deterministic implementation and automation |
+| Surface  | Responsibility                                                    |
+| -------- | ----------------------------------------------------------------- |
+| Skill    | When and why an agent should retrieve, capture, resume, or review |
+| Prompt   | User-triggered workflow template                                  |
+| Tool     | Search, synthesis, or state-changing action                       |
+| Resource | Addressable workspace knowledge                                   |
+| CLI/core | Deterministic implementation and automation                       |
 
 Catalog rules:
 
@@ -206,13 +206,13 @@ Every structured record uses:
 
 Identifiers:
 
-| Record | Identifier | Example |
-|---|---|---|
-| Workspace | `workspace_id` | `client-alpha` |
-| Project | `project_id` | `erp-cutover` |
-| Checkpoint | `checkpoint_id` | `cp-20260621-handover` |
-| Decision | `decision_id` | `pilot-location` |
-| Source | `source_id` | `eurostat-regional-report-2026` |
+| Record     | Identifier      | Example                         |
+| ---------- | --------------- | ------------------------------- |
+| Workspace  | `workspace_id`  | `client-alpha`                  |
+| Project    | `project_id`    | `erp-cutover`                   |
+| Checkpoint | `checkpoint_id` | `cp-20260621-handover`          |
+| Decision   | `decision_id`   | `pilot-location`                |
+| Source     | `source_id`     | `eurostat-regional-report-2026` |
 
 Rules:
 
@@ -466,10 +466,16 @@ source_id: eurostat-regional-report-2026
 project_id: ai-tutor
 title: Eurostat Regional Report 2026
 source_kind: pdf
+format: pdf
 source_uri: artifacts/ai-tutor/eurostat-regional-report-2026.pdf
 captured_at: 2026-05-30
 source_date: 2026-04-15
 content_hash: sha256:<digest>
+accepted_at: 2026-05-30T14:20:00.000Z
+converter: markitdown
+converter_version: 0.1.3
+extraction_settings_hash: sha256:<digest>
+generated_note_paths: kb/topics/eurostat-regional-report-2026.md
 updated: 2026-05-30
 tags: economics, regional-data
 ---
@@ -496,6 +502,10 @@ Rules:
 4. A source can belong to one project, multiple explicitly listed projects, or
    the workspace generally.
 5. Secrets and disallowed personal data are scrubbed before canonical capture.
+6. A changed candidate keeps its accepted `content_hash` until all associated
+   capture proposals are applied. Candidate state lives under
+   `.gke/ingest-candidates/`, not in canonical knowledge.
+7. Rejecting any candidate proposal leaves the accepted source hash unchanged.
 
 The existing ingestion path writes topic notes. Migration to source records is
 incremental: old topic outputs remain valid, while new ingestion gains explicit
@@ -531,6 +541,12 @@ New entries should carry an explicit project reference when project-scoped:
 A later schema version may split open questions into individual records. That is
 not required for the first consultant-feature milestone.
 
+The compatibility document now has a shared atomic mutation service. It
+normalizes and deduplicates exact questions, holds a workspace lock across the
+read/decision/write critical section, and preserves the existing Markdown
+syntax. MCP write and abstention paths reuse that service rather than mutating
+the file independently.
+
 ## Relationships and citations
 
 Use explicit links and IDs:
@@ -565,6 +581,7 @@ Rules:
 ```text
 .gke/
 ├── workspace.json
+├── ingest-candidates/
 ├── audit/
 │   └── events.jsonl
 └── runtime/
@@ -583,7 +600,15 @@ Rules:
   "label": "Client Alpha",
   "repoRoot": ".",
   "scanRoots": ["kb"],
-  "writeRoots": ["kb/projects", "kb/decisions", "kb/topics", "kb/terms", "kb/sources"],
+  "writeRoots": [
+    "kb/projects",
+    "kb/decisions",
+    "kb/topics",
+    "kb/terms",
+    "kb/sources",
+    ".gke",
+    ".cache"
+  ],
   "readOnly": true,
   "sensitivity": "sensitive",
   "auditLogPath": ".gke/audit/events.jsonl"
@@ -593,11 +618,14 @@ Rules:
 Rules:
 
 1. `.gke/` and `.cache/` are gitignored by default.
-2. Workspace configuration contains policy, not secrets.
-3. Authentication secrets come from environment variables or a secret store.
-4. Audit logging is optional in the first local milestone and never contains
+2. Operational roots used for proposals, locks, or derived indexes must be
+   listed in `writeRoots`, including for a read-only workspace that may reuse an
+   existing cache without modifying it.
+3. Workspace configuration contains policy, not secrets.
+4. Authentication secrets come from environment variables or a secret store.
+5. Audit logging is optional in the first local milestone and never contains
    document bodies or full prompts by default.
-5. Optional audit failure does not block ordinary local writes. A future
+6. Optional audit failure does not block ordinary local writes. A future
    restricted-workspace profile may explicitly require fail-closed audit.
 
 ## Ingestion lifecycle
@@ -687,6 +715,10 @@ Migration must remain incremental:
    is available.
 10. Remove compatibility paths only in a later major schema version.
 
+Implemented migration slices now include project records, source records,
+workspace configuration, workspace-local derived caches, and source-aware
+ingestion. Checkpoints and decision records remain planned.
+
 No bulk migration should occur without:
 
 - A dry-run report.
@@ -723,16 +755,16 @@ Before the architecture is considered implemented, automated tests must prove:
 
 The resulting model is intentionally simple:
 
-| Concern | Owner |
-|---|---|
-| Client or personal trust boundary | Workspace |
-| Current work and next actions | Project |
-| Historical progress | Checkpoint |
-| Recommendation and rationale | Decision |
-| Imported evidence and provenance | Source |
-| Reusable knowledge | Topic / term |
-| Retrieval acceleration | `.cache/` |
-| Policy and audit | `.gke/` |
+| Concern                           | Owner        |
+| --------------------------------- | ------------ |
+| Client or personal trust boundary | Workspace    |
+| Current work and next actions     | Project      |
+| Historical progress               | Checkpoint   |
+| Recommendation and rationale      | Decision     |
+| Imported evidence and provenance  | Source       |
+| Reusable knowledge                | Topic / term |
+| Retrieval acceleration            | `.cache/`    |
+| Policy and audit                  | `.gke/`      |
 
 This structure allows GKE to grow without losing its central promise: local
 files remain understandable, portable, and under the user's control.

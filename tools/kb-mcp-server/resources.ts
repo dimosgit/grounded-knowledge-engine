@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import { normalizeScalar } from "../grounding/document-core.js";
 import { resumeProject, reviewWorkspace } from "../projects/index.js";
+import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 
 export const MCP_RESOURCES = [
   {
@@ -47,7 +49,7 @@ export interface ResourceDocument {
 
 export interface ResourceDependencies {
   repoRoot: string;
-  workspaceId: string;
+  workspace: WorkspaceContext;
   profile: string;
   writesEnabled: boolean;
   scanRoots: string[];
@@ -69,10 +71,14 @@ export async function readMcpResource(
           mimeType: "application/json",
           text: JSON.stringify(
             {
-              workspaceId: dependencies.workspaceId,
+              workspaceId: dependencies.workspace.id,
+              label: dependencies.workspace.label,
+              sensitivity: dependencies.workspace.sensitivity,
+              readOnly: dependencies.workspace.readOnly,
               profile: dependencies.profile,
               writesEnabled: dependencies.writesEnabled,
-              scanRoots: dependencies.scanRoots,
+              scanRoots: dependencies.workspace.scanRoots,
+              writeRoots: dependencies.workspace.writeRoots,
             },
             null,
             2,
@@ -84,7 +90,12 @@ export async function readMcpResource(
 
   if (uri === "gke://workspace/review") {
     try {
-      const result = await reviewWorkspace({}, dependencies.repoRoot, dependencies.scanRoots);
+      const result = await reviewWorkspace(
+        {},
+        dependencies.repoRoot,
+        dependencies.scanRoots,
+        dependencies.workspace,
+      );
       return {
         contents: [
           {
@@ -113,6 +124,7 @@ export async function readMcpResource(
         { projectId },
         dependencies.repoRoot,
         dependencies.scanRoots,
+        dependencies.workspace,
       );
       return {
         contents: [
@@ -143,6 +155,7 @@ export async function readMcpResource(
   const documents = await dependencies.getDocuments();
   const document = documents.find((item) => item.relPath === relPath);
   if (!document) throw rpcError(-32602, `Indexed record not found: ${relPath}`);
+  await authorizeWorkspaceRead(dependencies.workspace, document.absPath);
   const raw = await fs.readFile(document.absPath, "utf8");
   return {
     contents: [

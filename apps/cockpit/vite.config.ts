@@ -5,16 +5,21 @@ import { fileURLToPath } from "node:url";
 import { createCaptureReviewPlugin } from "./scripts/capture-review-plugin";
 import { createGroundedAskPlugin } from "./scripts/grounded-ask-plugin";
 import { createLifecycleWritebackPlugin } from "./scripts/lifecycle-writeback-plugin";
+import { createWorkspaceReviewPlugin } from "./scripts/workspace-review-plugin";
+import { loadWorkspaceContext } from "../../tools/workspaces/config";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, "../..");
+const workspace = await loadWorkspaceContext({ repoRoot });
 
 export default defineConfig({
   plugins: [
     react(),
-    createLifecycleWritebackPlugin({ repoRoot: path.resolve(__dirname, "../..") }),
-    createGroundedAskPlugin({ repoRoot: path.resolve(__dirname, "../..") }),
-    createCaptureReviewPlugin({ repoRoot: path.resolve(__dirname, "../..") }),
+    createLifecycleWritebackPlugin({ repoRoot, workspace }),
+    createGroundedAskPlugin({ repoRoot, workspace }),
+    createCaptureReviewPlugin({ repoRoot, workspace }),
+    createWorkspaceReviewPlugin({ repoRoot, workspace }),
   ],
   server: process.env.PORT ? { port: Number(process.env.PORT), strictPort: true } : undefined,
   resolve: {

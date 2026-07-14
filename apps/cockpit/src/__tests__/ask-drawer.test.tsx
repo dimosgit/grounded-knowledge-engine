@@ -16,7 +16,11 @@ describe("grounded Ask drawer", () => {
         expect(init).toEqual(
           expect.objectContaining({
             method: "POST",
-            body: JSON.stringify({ question: "How does capture routing work?", strict: true }),
+            body: JSON.stringify({
+              question: "How does capture routing work?",
+              strict: true,
+              projectId: "gke-roadmap",
+            }),
           }),
         );
         return jsonResponse({
@@ -66,10 +70,19 @@ describe("grounded Ask drawer", () => {
     });
 
     const onCapture = vi.fn();
+    const onReviewProposal = vi.fn();
     const user = userEvent.setup();
-    render(<AskDrawer projectId="gke-roadmap" onCapture={onCapture} />);
+    render(
+      <AskDrawer
+        projectId="gke-roadmap"
+        projectTitle="GKE Roadmap"
+        onCapture={onCapture}
+        onReviewProposal={onReviewProposal}
+      />,
+    );
 
     await user.click(screen.getByRole("button", { name: "Ask grounded knowledge" }));
+    expect(screen.getByText("Scope: GKE Roadmap (gke-roadmap)")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Question"), "How does capture routing work?");
     await user.click(screen.getByRole("button", { name: "Ask local knowledge" }));
 
@@ -94,6 +107,8 @@ describe("grounded Ask drawer", () => {
         expect.objectContaining({ action: "proposed", path: expect.stringContaining("topics/") }),
       ),
     );
+    await user.click(screen.getByRole("button", { name: "Review now" }));
+    expect(onReviewProposal).toHaveBeenCalledWith("capture-20260713-abcdef123456");
   });
 
   test("shows gate reasons and never offers capture for an abstained answer", async () => {
@@ -113,6 +128,7 @@ describe("grounded Ask drawer", () => {
     const user = userEvent.setup();
     render(<AskDrawer />);
     await user.click(screen.getByRole("button", { name: "Ask grounded knowledge" }));
+    expect(screen.getByText("Scope: Workspace")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Question"), "What is not documented?");
     await user.click(screen.getByRole("button", { name: "Ask local knowledge" }));
 

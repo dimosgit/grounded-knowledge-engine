@@ -5,6 +5,8 @@ import { performance } from "node:perf_hooks";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { loadWorkspaceContext } from "../workspaces/config.js";
+import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
 import { negotiateProtocolVersion } from "./protocol.js";
 import { MCP_RESOURCES, MCP_RESOURCE_TEMPLATES, readMcpResource } from "./resources.js";
@@ -15,14 +17,10 @@ import {
   inferSourceKind,
   inferTrack,
   normalizeScalar,
-  normalizeScanRoots,
   parseFrontmatter,
   parsePositiveInt,
 } from "../grounding/document-core.js";
-import {
-  DEFAULT_SCAN_ROOTS as RETRIEVER_DEFAULT_SCAN_ROOTS,
-  getKbRetriever,
-} from "../grounding/retriever.js";
+import { getKbRetriever } from "../grounding/retriever.js";
 import { answerGrounded, type GroundedTokenUsage } from "../grounding/answer-service.js";
 import { resumeProject } from "../projects/index.js";
 import {
@@ -39,10 +37,14 @@ import type {
   SearchHit,
   SearchResult,
 } from "../grounding/types.js";
+import { mutateOpenQuestion } from "../questions/open-question-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."));
+const workspace = await loadWorkspaceContext({
+  repoRoot: process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."),
+});
+const repoRoot = workspace.realRepoRoot;
 
 const SERVER_INFO = {
   name: "kb-mcp-server",
@@ -79,7 +81,8 @@ const DEFAULT_CACHE_TTL_MS = parsePositiveInt(
 );
 const DEFAULT_SLO_MS = parsePositiveInt(process.env.KB_MCP_SLO_MS, 3000, 50, 120 * 1000);
 const DEFAULT_REQUIRE_CAPTURE = parseBooleanEnv(process.env.KB_MCP_REQUIRE_CAPTURE, true);
-const DEFAULT_ENABLE_WRITES = parseBooleanEnv(process.env.KB_MCP_ENABLE_WRITES, false);
+const DEFAULT_ENABLE_WRITES =
+  !workspace.readOnly && parseBooleanEnv(process.env.KB_MCP_ENABLE_WRITES, false);
 const DEFAULT_MCP_PROFILE = normalizeMcpProfile(process.env.KB_MCP_PROFILE);
 const DEFAULT_RETRIEVAL_BACKEND = normalizeRetrievalBackend(
   process.env.KB_MCP_RETRIEVAL_BACKEND || "bm25",
@@ -93,7 +96,6 @@ const WRITE_REFRESH_DEBOUNCE_MS = parsePositiveInt(
   0,
   2000,
 );
-const DEFAULT_SCAN_ROOTS = RETRIEVER_DEFAULT_SCAN_ROOTS;
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
 const MAX_CONTEXT = 3;
@@ -104,13 +106,13 @@ let docCache = {
   loadedAt: 0,
   docs: [] as LocalDocument[],
 };
-let writeQueue = Promise.resolve();
 let pendingDocRefresh: Promise<void> | null = null;
 
 async function getRetriever(forceRefresh = false): Promise<KbRetriever> {
   return getKbRetriever({
+    workspace,
     repoRoot,
-    scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+    scanRoots: [...workspace.scanRoots],
     cacheTtlMs: DEFAULT_CACHE_TTL_MS,
     forceRefresh,
   });
@@ -119,8 +121,9 @@ async function getRetriever(forceRefresh = false): Promise<KbRetriever> {
 async function getSqliteRetriever(forceRefresh = false): Promise<KbRetriever> {
   const { getSqliteKbRetriever } = await import("../grounding/sqlite-index.js");
   return getSqliteKbRetriever({
+    workspace,
     repoRoot,
-    scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+    scanRoots: [...workspace.scanRoots],
     forceRefresh,
   });
 }
@@ -154,8 +157,7 @@ async function handleKbResumeProject(args: JsonObject): Promise<ToolPayload> {
   if (!projectId) {
     throw new Error("Missing required argument: projectId");
   }
-  const scanRoots = parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS);
-  const result = await resumeProject({ projectId }, repoRoot, scanRoots);
+  const result = await resumeProject({ projectId }, repoRoot, [...workspace.scanRoots], workspace);
   return result;
 }
 
@@ -200,10 +202,10 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
     case "resources/read":
       return await readMcpResource(params, {
         repoRoot,
-        workspaceId: normalizeScalar(process.env.KB_MCP_WORKSPACE_ID) || "default",
+        workspace,
         profile: DEFAULT_MCP_PROFILE,
         writesEnabled: DEFAULT_ENABLE_WRITES,
-        scanRoots: parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+        scanRoots: [...workspace.scanRoots],
         getDocuments: () => getDocuments(false),
       });
     case "prompts/list":
@@ -472,6 +474,8 @@ async function handleKbAddOpenQuestion(args: JsonObject): Promise<ToolPayload> {
     status: normalizeScalar(args?.status) || "open",
     resolvedBy: normalizeScalar(args?.resolvedBy),
     relatedPath: normalizeScalar(args?.relatedPath),
+    owner: normalizeScalar(args?.owner),
+    source: normalizeScalar(args?.source) || "kb.add_open_question",
     dryRun: Boolean(args?.dryRun),
   });
 
@@ -576,6 +580,8 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
       status: "open",
       resolvedBy: "",
       relatedPath: "",
+      owner: normalizeScalar(args?.noteOwner) || "kb-mcp-server",
+      source: "kb.answer_and_capture",
       dryRun,
     });
     captureMs = roundMs(performance.now() - captureStartedAt);
@@ -751,12 +757,6 @@ function scoreDocumentMatch(doc: LocalDocument, normalizedQuery: string): number
   return score;
 }
 
-function enqueueWrite(work: () => Promise<void>): Promise<void> {
-  const run = async () => await work();
-  writeQueue = writeQueue.then(run, run);
-  return writeQueue;
-}
-
 function scheduleDocumentRefresh(): Promise<void> {
   if (pendingDocRefresh) return pendingDocRefresh;
   pendingDocRefresh = new Promise<void>((resolve, reject) => {
@@ -814,6 +814,7 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
     : "upsert";
   const plan = await planCapture({
     repoRoot,
+    workspace,
     sourceOperation,
     kind,
     title,
@@ -845,16 +846,17 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
     sourceOperation === "ingest" &&
     plan.targetExists &&
     plan.proposal.proposedAction === "replace" &&
-    (await isCaptureProposalUnchanged(repoRoot, plan.proposal));
+    (await isCaptureProposalUnchanged(repoRoot, plan.proposal, workspace));
   let action = "unchanged";
   let proposalPath: string | null = null;
   if (!unchanged && plan.proposal.requiresReview) {
-    if (!dryRun) proposalPath = await persistCaptureProposal(repoRoot, plan.proposal);
+    if (!dryRun) proposalPath = await persistCaptureProposal(repoRoot, plan.proposal, workspace);
     action = "proposed";
   } else if (!unchanged) {
     const applied = await applyUnreviewedCapture(repoRoot, plan.proposal, {
       dryRun,
       refresh: scheduleDocumentRefresh,
+      workspace,
     });
     action = applied.action;
   }
@@ -905,60 +907,36 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
 }
 
 async function addOpenQuestion(options: JsonObject): Promise<any> {
-  const question = singleLine(options?.question);
-  const whyOpen = singleLine(options?.whyOpen);
-  const whatWouldResolve = singleLine(options?.whatWouldResolve);
-  const status = normalizeScalar(options?.status).toLowerCase() || "open";
-  if (status !== "open" && status !== "resolved") {
-    throw new Error("Invalid open-question status. Expected 'open' or 'resolved'.");
-  }
-  if (!question || !whyOpen || !whatWouldResolve) {
-    throw new Error("Open question requires question, whyOpen, and whatWouldResolve.");
-  }
-
-  const openQuestionsPath = "kb/open_questions.md";
-  const absPath = resolveRepoPath(openQuestionsPath);
   const dryRun = Boolean(options?.dryRun);
   assertWriteAllowed({ dryRun, toolName: "kb.add_open_question" });
-  const resolvedBy = singleLine(options?.resolvedBy);
-  const relatedPath = normalizeScalar(options?.relatedPath);
+  return mutateOpenQuestion(
+    {
+      question: options?.question,
+      whyOpen: options?.whyOpen,
+      whatWouldResolve: options?.whatWouldResolve,
+      status: options?.status,
+      resolvedBy: options?.resolvedBy,
+      relatedPath: options?.relatedPath,
+      owner: options?.owner,
+      source: options?.source,
+      dryRun,
+    },
+    {
+      repoRoot,
+      workspace,
+      writesEnabled: DEFAULT_ENABLE_WRITES,
+      refresh: refreshOpenQuestionRetrieval,
+    },
+  );
+}
 
-  const relatedLink = relatedPath ? toOpenQuestionRelativeLink(relatedPath) : "";
-  const entryLines = [
-    `- question: ${question}`,
-    `  why it's open: ${whyOpen}`,
-    `  what would resolve it: ${whatWouldResolve}`,
-    `  status: ${status}`,
-  ];
-  if (resolvedBy) entryLines.push(`  resolved by: ${resolvedBy}`);
-  if (relatedLink) entryLines.push(`  related: ${relatedLink}`);
-  entryLines.push(`  added: ${getTodayIsoDate()}`);
-  const entry = entryLines.join("\n");
-
-  let current = "# Open Questions\n";
-  let exists = false;
-  if (await fileExists(absPath)) {
-    exists = true;
-    current = await fs.readFile(absPath, "utf8");
+async function refreshOpenQuestionRetrieval(): Promise<void> {
+  await getDocuments(true);
+  if (DEFAULT_RETRIEVAL_BACKEND === "sqlite") {
+    await getSqliteRetriever(true);
+  } else {
+    await getRetriever(true);
   }
-
-  const separator = current.trimEnd().endsWith("# Open Questions") ? "\n\n" : "\n\n";
-  const next = `${current.trimEnd()}${separator}${entry}\n`;
-  if (!dryRun) {
-    await enqueueWrite(async () => {
-      await fs.mkdir(path.dirname(absPath), { recursive: true });
-      await fs.writeFile(absPath, next, "utf8");
-    });
-    await scheduleDocumentRefresh();
-  }
-
-  return {
-    action: exists ? "appended" : "created",
-    dryRun,
-    path: openQuestionsPath,
-    status,
-    question,
-  };
 }
 
 function buildCapturedNoteBody({
@@ -1056,36 +1034,6 @@ function singleLine(value: unknown): string {
   return `${value || ""}`.replace(/\s+/g, " ").trim();
 }
 
-function sanitizeRelativePath(relPath: unknown): string {
-  const raw = normalizeScalar(relPath);
-  if (!raw) return "";
-  const normalized = toPosix(raw.replace(/^\.\/+/, "").replace(/^\/+/, ""));
-  if (!normalized) return "";
-  if (normalized.split("/").some((part) => part === "..")) {
-    throw new Error("Path traversal is not allowed.");
-  }
-  return normalized;
-}
-
-function resolveRepoPath(relPath: unknown): string {
-  const normalized = sanitizeRelativePath(relPath);
-  if (!normalized) throw new Error("Missing relative path.");
-  const absPath = path.resolve(repoRoot, normalized);
-  if (absPath !== repoRoot && !absPath.startsWith(`${repoRoot}${path.sep}`)) {
-    throw new Error("Resolved path is outside repository root.");
-  }
-  return absPath;
-}
-
-async function fileExists(filePath: string): Promise<boolean> {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 let ownershipCache = {
   loadedAt: 0,
   moduleTracks: {} as Record<string, string>,
@@ -1107,14 +1055,6 @@ async function resolveTrackForModule(module: unknown, fallbackTrack: string): Pr
     };
   }
   return normalizeScalar(ownershipCache.moduleTracks[moduleKey]) || fallbackTrack || "domain";
-}
-
-function toOpenQuestionRelativeLink(relatedPath: unknown): string {
-  const rel = sanitizeRelativePath(relatedPath);
-  if (!rel) return "";
-  if (!rel.startsWith("kb/")) return rel;
-  const fromKbRoot = rel.slice(3);
-  return `[${rel}](./${fromKbRoot})`;
 }
 
 function toTitleCase(text: unknown): string {
@@ -1141,13 +1081,13 @@ async function getDocuments(forceRefresh: boolean): Promise<LocalDocument[]> {
 }
 
 async function loadDocuments(): Promise<LocalDocument[]> {
-  const roots = parseScanRoots(process.env.KB_MCP_SCAN_ROOTS, DEFAULT_SCAN_ROOTS);
-  const candidates = await gatherKnowledgeFiles(repoRoot, roots);
+  const candidates = await gatherKnowledgeFiles(repoRoot, [...workspace.scanRoots], workspace);
   const docs: LocalDocument[] = [];
 
   for (const file of candidates) {
     let raw;
     try {
+      await authorizeWorkspaceRead(workspace, file.absPath);
       raw = await fs.readFile(file.absPath, "utf8");
     } catch {
       continue;
@@ -1177,10 +1117,6 @@ async function loadDocuments(): Promise<LocalDocument[]> {
 
   docs.sort((a, b) => a.relPath.localeCompare(b.relPath));
   return docs;
-}
-
-function parseScanRoots(raw: string | undefined, defaults: string[]): string[] {
-  return normalizeScanRoots(raw || defaults, defaults);
 }
 
 function normalizeForMatch(value: unknown): string {
@@ -1271,10 +1207,6 @@ function parseBooleanEnv(raw: unknown, fallback: boolean): boolean {
   if (normalized === "0" || normalized === "false" || normalized === "no" || normalized === "off")
     return false;
   return fallback;
-}
-
-function toPosix(value: string): string {
-  return value.split(path.sep).join("/");
 }
 
 function normalizeRetrievalBackend(value: unknown): "bm25" | "sqlite" {

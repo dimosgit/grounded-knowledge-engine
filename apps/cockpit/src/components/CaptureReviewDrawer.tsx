@@ -4,41 +4,40 @@ import {
   applyCaptureProposal,
   CaptureReviewApiError,
   getCaptureProposal,
-  listCaptureProposals,
   rejectCaptureProposal,
   type CaptureAction,
   type CaptureProposalPreview,
   type CaptureProposalSummary,
 } from "../lib/capture-review-api";
 
-export function CaptureReviewDrawer() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [proposals, setProposals] = useState<CaptureProposalSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+interface CaptureReviewDrawerProps {
+  isOpen: boolean;
+  proposals: CaptureProposalSummary[];
+  selectedId: string | null;
+  queueLoading: boolean;
+  queueError: string;
+  onOpen: (proposalId?: string | null) => void;
+  onClose: () => void;
+  onSelect: (proposalId: string) => void;
+  onRefresh: (preferredId?: string | null) => Promise<void>;
+}
+
+export function CaptureReviewDrawer({
+  isOpen,
+  proposals,
+  selectedId,
+  queueLoading,
+  queueError,
+  onOpen,
+  onClose,
+  onSelect,
+  onRefresh,
+}: CaptureReviewDrawerProps) {
   const [preview, setPreview] = useState<CaptureProposalPreview | null>(null);
   const [action, setAction] = useState<CaptureAction | "">("");
-  const [loading, setLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-
-  async function refresh(preferredId?: string | null) {
-    setLoading(true);
-    setError("");
-    try {
-      const next = await listCaptureProposals();
-      setProposals(next);
-      const nextId =
-        (preferredId && next.some((item) => item.proposalId === preferredId) && preferredId) ||
-        next[0]?.proposalId ||
-        null;
-      setSelectedId(nextId);
-      setPreview(null);
-    } catch (requestError) {
-      setError(toMessage(requestError));
-    } finally {
-      setLoading(false);
-    }
-  }
 
   useEffect(() => {
     if (!isOpen || !selectedId) {
@@ -46,7 +45,7 @@ export function CaptureReviewDrawer() {
       return;
     }
     let active = true;
-    setLoading(true);
+    setPreviewLoading(true);
     setError("");
     void getCaptureProposal(selectedId)
       .then((value) => {
@@ -58,17 +57,12 @@ export function CaptureReviewDrawer() {
         if (active) setError(toMessage(requestError));
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active) setPreviewLoading(false);
       });
     return () => {
       active = false;
     };
   }, [isOpen, selectedId]);
-
-  function open() {
-    setIsOpen(true);
-    void refresh(selectedId);
-  }
 
   async function submit(kind: "apply" | "reject") {
     if (!selectedId || (kind === "apply" && !action)) return;
@@ -77,7 +71,7 @@ export function CaptureReviewDrawer() {
     try {
       if (kind === "apply") await applyCaptureProposal(selectedId, action as CaptureAction);
       else await rejectCaptureProposal(selectedId);
-      await refresh(null);
+      await onRefresh(null);
     } catch (requestError) {
       const message = toMessage(requestError);
       setError(
@@ -93,12 +87,14 @@ export function CaptureReviewDrawer() {
   const proposal = preview?.proposal;
   const currentContent = preview?.preview.currentContent;
   const route = proposal?.routing;
+  const loading = queueLoading || previewLoading;
+  const visibleError = error || queueError;
 
   return (
     <>
       <button
         type="button"
-        onClick={open}
+        onClick={() => onOpen(selectedId)}
         className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded border border-border-subtle bg-surface-container px-3 py-2 text-on-surface-variant hover:border-primary hover:text-primary"
         aria-label="Open capture review queue"
       >
@@ -117,7 +113,7 @@ export function CaptureReviewDrawer() {
             type="button"
             className="absolute inset-0 bg-black/65"
             aria-label="Close capture review queue"
-            onClick={() => setIsOpen(false)}
+            onClick={onClose}
           />
           <section className="relative flex h-full w-full max-w-6xl flex-col border-l border-border-subtle bg-background shadow-2xl">
             <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-subtle px-5">
@@ -133,7 +129,7 @@ export function CaptureReviewDrawer() {
                 <button
                   type="button"
                   className="rounded border border-border-subtle p-2 text-on-surface-variant hover:text-primary"
-                  onClick={() => void refresh(selectedId)}
+                  onClick={() => void onRefresh(selectedId)}
                   aria-label="Refresh capture proposals"
                   disabled={loading}
                 >
@@ -142,7 +138,7 @@ export function CaptureReviewDrawer() {
                 <button
                   type="button"
                   className="rounded border border-border-subtle p-2 text-on-surface-variant hover:text-primary"
-                  onClick={() => setIsOpen(false)}
+                  onClick={onClose}
                   aria-label="Close capture review queue"
                 >
                   <X size={18} />
@@ -156,7 +152,7 @@ export function CaptureReviewDrawer() {
                   <button
                     key={item.proposalId}
                     type="button"
-                    onClick={() => setSelectedId(item.proposalId)}
+                    onClick={() => onSelect(item.proposalId)}
                     className={`mb-2 w-full rounded border p-3 text-left transition ${
                       selectedId === item.proposalId
                         ? "border-primary bg-surface-container-high"
@@ -172,7 +168,7 @@ export function CaptureReviewDrawer() {
                     </div>
                   </button>
                 ))}
-                {!loading && proposals.length === 0 && !error && (
+                {!loading && proposals.length === 0 && !visibleError && (
                   <div className="p-5 text-center text-body-md text-on-surface-variant">
                     No pending capture proposals.
                   </div>
@@ -185,12 +181,12 @@ export function CaptureReviewDrawer() {
                     <LoaderCircle className="animate-spin" size={18} /> Loading capture review…
                   </div>
                 )}
-                {error && (
+                {visibleError && (
                   <div
                     role="alert"
                     className="mb-4 rounded border border-red-500/40 bg-red-950/30 p-3 text-sm text-red-200"
                   >
-                    {error}
+                    {visibleError}
                   </div>
                 )}
                 {proposal && (
@@ -299,6 +295,7 @@ export function CaptureReviewDrawer() {
                         {allowedActions(
                           proposal.proposedNote.path,
                           preview.preview.targetExists,
+                          proposal.proposedAction,
                         ).map((value) => (
                           <option key={value} value={value}>
                             {value.replace("_", " ")}
@@ -353,8 +350,13 @@ function PreviewPane({ title, content }) {
   );
 }
 
-function allowedActions(path: string, targetExists: boolean): CaptureAction[] {
+function allowedActions(
+  path: string,
+  targetExists: boolean,
+  proposedAction: CaptureAction,
+): CaptureAction[] {
   if (path === "kb/open_questions.md") return ["open_question"];
+  if (proposedAction === "delete") return ["delete"];
   return targetExists ? ["append", "replace"] : ["create"];
 }
 

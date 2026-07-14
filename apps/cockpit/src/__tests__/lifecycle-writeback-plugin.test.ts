@@ -9,6 +9,7 @@ import {
   createLifecycleWritebackPlugin,
   handleLifecycleWritebackRequest,
 } from "../../scripts/lifecycle-writeback-plugin";
+import { loadWorkspaceContext } from "../../../../tools/workspaces/config";
 
 interface TestServer {
   baseUrl: string;
@@ -156,6 +157,22 @@ describe("project lifecycle writeback dev-server plugin", () => {
     expect(await fs.readFile(outsideFile, "utf8")).toBe("# Outside\n");
   });
 
+  test("rejects lifecycle mutations in a read-only workspace", async () => {
+    const repoRoot = await makeWorkspace();
+    const relPath = "kb/projects/read-only/project.md";
+    const original = "---\nlifecycle: next\n---\n\n# Read only\n";
+    await writeWorkspaceFile(repoRoot, relPath, original);
+    const server = await startServer(repoRoot, true);
+
+    const response = await requestJson(server.baseUrl, "/__board/lifecycle", {
+      method: "POST",
+      body: { path: relPath, lifecycle: "active" },
+    });
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe("workspace_read_only");
+    expect(await fs.readFile(path.join(repoRoot, relPath), "utf8")).toBe(original);
+  });
+
   test("does not expose filesystem errors or intercept unrelated routes", async () => {
     const repoRoot = await makeWorkspace();
     const server = await startServer(repoRoot);
@@ -201,9 +218,15 @@ async function writeWorkspaceFile(
   await fs.writeFile(target, content, "utf8");
 }
 
-async function startServer(repoRoot: string): Promise<TestServer> {
+async function startServer(repoRoot: string, readOnly = false): Promise<TestServer> {
+  const workspace = await loadWorkspaceContext({
+    repoRoot,
+    scanRoots: ["demo-kb", "kb"],
+    writeRoots: ["demo-kb", "kb", ".gke"],
+    environment: { KB_MCP_WORKSPACE_READ_ONLY: String(readOnly) },
+  });
   const server = http.createServer((req, res) => {
-    void handleLifecycleWritebackRequest(req, res, { repoRoot }).then((handled) => {
+    void handleLifecycleWritebackRequest(req, res, { repoRoot, workspace }).then((handled) => {
       if (!handled) {
         res.statusCode = 404;
         res.end();
