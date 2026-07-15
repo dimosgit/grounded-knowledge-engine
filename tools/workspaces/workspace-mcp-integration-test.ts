@@ -77,6 +77,7 @@ async function testWorkspaceProcessIsolation(): Promise<void> {
         writesEnabled: false,
         scanRoots: ["kb"],
         writeRoots: ["kb", ".gke", ".cache"],
+        projects: [],
       },
       "workspace metadata is logical and includes the active read-only state",
     );
