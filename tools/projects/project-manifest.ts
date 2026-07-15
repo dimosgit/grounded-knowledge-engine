@@ -153,18 +153,27 @@ function fileStem(relPath: string): string {
   return base.replace(/\.[^.]+$/, "");
 }
 
+const LIST_ITEM_MARKER = /^([-*]\s+|\d+[.)]\s+|\[[ xX]\]\s+)/;
+
 export function sectionItems(section: ProjectSection | undefined): string[] {
   if (!section?.content) return [];
-  return section.content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .map((line) =>
-      line
-        .replace(/^[-*]\s+/, "")
-        .replace(/^\d+[.)]\s+/, "")
-        .replace(/^\[[ xX]\]\s+/, ""),
-    )
-    .filter((line) => Boolean(line) && !line.startsWith("#"));
+  const items: string[] = [];
+  for (const rawLine of section.content.split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const text = trimmed
+      .replace(/^[-*]\s+/, "")
+      .replace(/^\d+[.)]\s+/, "")
+      .replace(/^\[[ xX]\]\s+/, "");
+    if (LIST_ITEM_MARKER.test(trimmed) || items.length === 0) {
+      items.push(text);
+    } else {
+      // Soft-wrapped continuation line: fold it back into the bullet it belongs
+      // to instead of emitting it as a standalone (fragmentary) item.
+      items[items.length - 1] = `${items[items.length - 1]} ${text}`.trim();
+    }
+  }
+  return items.filter(Boolean);
 }
 
 export function meaningfulSectionItems(section: ProjectSection | undefined): string[] {
