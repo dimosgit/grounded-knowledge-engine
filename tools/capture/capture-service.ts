@@ -5,6 +5,8 @@ import {
   authorizeWorkspaceOperationalRead,
   authorizeWorkspaceWrite,
 } from "../workspaces/path-policy.js";
+import { DEFAULT_DOMAIN_PROFILE } from "../workspaces/domain-profile.js";
+import type { DomainProfile } from "../workspaces/types.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
 import {
   assertCandidateProposalReady,
@@ -67,6 +69,7 @@ export class CaptureConflictError extends Error {
 export async function planCapture(input: PlanCaptureInput): Promise<CapturePlanResult> {
   const repoRoot = path.resolve(input.repoRoot);
   const workspace = input.workspace;
+  const domainProfile = workspace?.domain ?? DEFAULT_DOMAIN_PROFILE;
   const deterministicPath = resolveCapturePath(input.kind, input.title);
   const routing = await resolveCaptureRoute({
     repoRoot,
@@ -78,7 +81,12 @@ export async function planCapture(input: PlanCaptureInput): Promise<CapturePlanR
     evidence: input.evidenceRoutes,
     defaults: {
       path: deterministicPath,
-      ...(input.kind === "topic" ? { track: "domain", module: "general" } : {}),
+      ...(input.kind === "topic"
+        ? {
+            track: domainProfile.captureDefaults.track,
+            module: domainProfile.captureDefaults.module,
+          }
+        : {}),
       ...input.routingDefaults,
     },
     evidenceConsensus: input.evidenceConsensus,
@@ -248,7 +256,7 @@ export async function previewCaptureProposal(
     proposal,
     targetExists,
     currentContent: currentBytes.toString("utf8"),
-    proposedContent: renderCaptureNote(proposal.proposedNote),
+    proposedContent: renderCaptureNote(proposal.proposedNote, workspace?.domain),
     currentContentHash,
     stale: Boolean(proposal.baseContentHash && currentContentHash !== proposal.baseContentHash),
   };
@@ -297,7 +305,7 @@ async function applyCaptureProposalValue(
   const currentBytes = targetExists ? await fs.readFile(absTarget) : Buffer.alloc(0);
   const currentContent = currentBytes.toString("utf8");
   const currentHash = targetExists ? sha256(currentBytes) : null;
-  const rendered = renderCaptureNote(proposal.proposedNote);
+  const rendered = renderCaptureNote(proposal.proposedNote, options?.workspace?.domain);
   const renderedHash = sha256(rendered);
 
   if (action === "delete" && !targetExists && proposal.baseContentHash) {
@@ -437,7 +445,7 @@ export async function applyUnreviewedCapture(
   if (await exists(absTarget)) {
     throw new CaptureConflictError(`Capture target already exists: ${proposal.proposedNote.path}`);
   }
-  const content = renderCaptureNote(proposal.proposedNote);
+  const content = renderCaptureNote(proposal.proposedNote, options?.workspace?.domain);
   const result: ApplyCaptureProposalResult = {
     proposalId: proposal.proposalId,
     action: "created",
@@ -466,7 +474,10 @@ export async function isCaptureProposalUnchanged(
     workspace,
   );
   if (!(await exists(absTarget))) return false;
-  return (await sha256File(absTarget)) === sha256(renderCaptureNote(proposal.proposedNote));
+  return (
+    (await sha256File(absTarget)) ===
+    sha256(renderCaptureNote(proposal.proposedNote, workspace?.domain))
+  );
 }
 
 export async function hashCaptureTarget(
@@ -479,7 +490,10 @@ export async function hashCaptureTarget(
   return (await exists(absPath)) ? sha256File(absPath) : null;
 }
 
-export function renderCaptureNote(note: ProposedCaptureNote): string {
+export function renderCaptureNote(
+  note: ProposedCaptureNote,
+  domain: DomainProfile = DEFAULT_DOMAIN_PROFILE,
+): string {
   const body = note.body.trim();
   if (note.kind === "term") {
     return ensureTrailingNewline(body.startsWith("# ") ? body : `# ${note.title}\n\n${body}`);
@@ -487,14 +501,14 @@ export function renderCaptureNote(note: ProposedCaptureNote): string {
   if (body.startsWith("---\n")) return ensureTrailingNewline(body);
   const frontmatter = [
     "---",
-    `module: ${note.module || "general"}`,
+    `module: ${note.module || domain.captureDefaults.module}`,
     `track: ${note.track || "domain"}`,
     ...(note.projectId ? [`project_id: ${note.projectId}`] : []),
     `status: ${note.status || "draft"}`,
     `type: ${note.type || "concept"}`,
     `owner: ${note.owner || "kb-mcp-server"}`,
     `updated: ${note.updated}`,
-    `tags: ${note.tags.join(", ") || "domain, kb-captured"}`,
+    `tags: ${note.tags.join(", ") || domain.captureDefaults.tags.join(", ")}`,
     "---",
     "",
   ].join("\n");

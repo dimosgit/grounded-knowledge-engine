@@ -8,7 +8,13 @@ import {
   authorizeWorkspaceRuntimePath,
   authorizeWorkspaceWrite,
 } from "../workspaces/path-policy.js";
-import type { WorkspaceContext } from "../workspaces/types.js";
+import {
+  DEFAULT_DOMAIN_PROFILE,
+  applyDomainScoringRules,
+  domainFingerprint,
+  resolveModeAlias,
+} from "../workspaces/domain-profile.js";
+import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 import { DEFAULT_SCAN_ROOTS } from "./retriever.js";
 import {
   buildManifestHash,
@@ -128,11 +134,6 @@ const STOPWORDS = new Set([
   "any",
 ]);
 
-const QUERY_EXPANSIONS: Record<string, string[]> = {
-  mcp: ["model", "context", "protocol"],
-  kb: ["knowledge", "base"],
-};
-
 let runtimeCache = {
   cacheKey: "",
   retriever: null as KbRetriever | null,
@@ -202,6 +203,7 @@ interface RerankRowArgs {
   mode: string;
   tokenWeights: QueryWeights;
   debug: boolean;
+  domain: DomainProfile;
 }
 
 interface AnchorLine {
@@ -258,9 +260,11 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
     2000,
   );
   const forceRefresh = Boolean(options.forceRefresh);
-  const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}`;
+  const domain = workspace?.domain ?? DEFAULT_DOMAIN_PROFILE;
+  const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}::${domainFingerprint(domain)}`;
   return {
     workspace,
+    domain,
     repoRoot,
     scanRoots,
     cachePath,
@@ -274,7 +278,7 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
 
 async function loadOrBuildDatabase(options: ResolvedRetrieverOptions): Promise<DatabaseSync> {
   const files = await gatherCandidateFiles(options.repoRoot, options.scanRoots, options.workspace);
-  const manifestHash = buildManifestHash(files);
+  const manifestHash = `${buildManifestHash(files)}::${domainFingerprint(options.domain)}`;
   if (options.workspace) {
     await authorizeWorkspaceRuntimePath(options.workspace, options.cachePath);
   }
@@ -294,6 +298,7 @@ async function loadOrBuildDatabase(options: ResolvedRetrieverOptions): Promise<D
     await rebuildDatabase(db, {
       repoRoot: options.repoRoot,
       workspace: options.workspace,
+      domain: options.domain,
       files,
       manifestHash,
       scanRoots: options.scanRoots,
@@ -324,9 +329,11 @@ async function rebuildDatabase(
     manifestHash,
     scanRoots,
     workspace,
+    domain,
   }: {
     repoRoot: string;
     workspace?: WorkspaceContext;
+    domain: DomainProfile;
     files: CandidateFile[];
     manifestHash: string;
     scanRoots: string[];
@@ -471,8 +478,8 @@ async function rebuildDatabase(
 
       const frontmatter = parsed.frontmatter || {};
       const title = getDocumentTitle(body, file.relPath);
-      const sourceKind = inferSourceKind(file.relPath);
-      const track = inferTrack(file.relPath, frontmatter);
+      const sourceKind = inferSourceKind(file.relPath, domain);
+      const track = inferTrack(file.relPath, frontmatter, domain);
       const module = normalizeScalar(frontmatter.module);
       const status = normalizeScalar(frontmatter.status);
       const type = normalizeScalar(frontmatter.type);
@@ -516,7 +523,7 @@ async function rebuildDatabase(
       const pieces = chunkDocument(body.split(/\r?\n/));
       let chunkIndex = 0;
       for (const piece of pieces) {
-        const tokens = tokenizeQuery(piece.text);
+        const tokens = tokenizeQuery(piece.text, domain);
         if (!tokens.length) continue;
         insertChunk.run(
           chunkId,
@@ -562,7 +569,7 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
     const query = normalizeScalar(args.query);
     if (!query) throw new Error("Missing required argument: query");
 
-    const mode = inferMode(query, normalizeScalar(args.mode) || "auto");
+    const mode = inferMode(query, normalizeScalar(args.mode) || "auto", options.domain);
     const limit = parsePositiveInt(args.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
     const contextRadius = parsePositiveInt(args.context, 1, 0, MAX_CONTEXT);
     const maxPerPath = parsePositiveInt(
@@ -607,7 +614,7 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
       queryCacheMisses += 1;
     }
 
-    const tokenWeights = buildWeightedQueryTokens(query);
+    const tokenWeights = buildWeightedQueryTokens(query, options.domain);
     const ftsQuery = buildFtsQuery([...tokenWeights.keys()]);
     const sqlRows = runFtsQuery(db, {
       ftsQuery,
@@ -620,7 +627,9 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
     });
 
     const ranked: RankedSqliteRow[] = sqlRows
-      .map((row: SqliteChunkRow) => rerankRow({ row, query, mode, tokenWeights, debug }))
+      .map((row: SqliteChunkRow) =>
+        rerankRow({ row, query, mode, tokenWeights, debug, domain: options.domain }),
+      )
       .sort(
         (a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.startLine - b.startLine,
       );
@@ -887,7 +896,14 @@ function seedFallbackRows(
   }));
 }
 
-function rerankRow({ row, query, mode, tokenWeights, debug }: RerankRowArgs): RankedSqliteRow {
+function rerankRow({
+  row,
+  query,
+  mode,
+  tokenWeights,
+  debug,
+  domain,
+}: RerankRowArgs): RankedSqliteRow {
   const textLower = `${row.text || ""}`.toLowerCase();
   const pathLower = `${row.path || ""}`.toLowerCase();
   const titleLower = `${row.title || ""}`.toLowerCase();
@@ -931,11 +947,11 @@ function rerankRow({ row, query, mode, tokenWeights, debug }: RerankRowArgs): Ra
       score += 2.4;
       if (debug) adjustments.push({ reason: "mode_domain_source_preference", delta: 2.4 });
     }
-    if (row.track === "domain") {
+    if (row.track === domain.defaultTrack) {
       score += 1.1;
       if (debug) adjustments.push({ reason: "mode_domain_track_preference", delta: 1.1 });
     }
-    if (row.sourceKind === "project" && !/\bproject\b/i.test(query)) {
+    if (row.sourceKind === "project" && !domain.projectQueryPattern.test(query)) {
       score -= 420;
       if (debug) adjustments.push({ reason: "mode_domain_project_penalty", delta: -420 });
     }
@@ -944,6 +960,18 @@ function rerankRow({ row, query, mode, tokenWeights, debug }: RerankRowArgs): Ra
       score += 2.8;
       if (debug) adjustments.push({ reason: "mode_project_source_preference", delta: 2.8 });
     }
+  }
+
+  for (const rule of applyDomainScoringRules(domain, {
+    backend: "sqlite",
+    mode,
+    query,
+    sourceKind: normalizeScalar(row.sourceKind),
+    module: normalizeScalar(row.module),
+    track: normalizeScalar(row.track),
+  })) {
+    score += rule.boost;
+    if (debug) adjustments.push({ reason: rule.id, delta: rule.boost });
   }
 
   if (row.isArchive) {
@@ -1095,14 +1123,14 @@ function trimWindow(text: string, index: number, length: number, maxChars: numbe
   return snippet;
 }
 
-function buildWeightedQueryTokens(query: string): QueryWeights {
-  const tokens = tokenizeQuery(query);
+function buildWeightedQueryTokens(query: string, domain: DomainProfile): QueryWeights {
+  const tokens = tokenizeQuery(query, domain);
   const weighted: QueryWeights = new Map();
   for (const token of tokens) weighted.set(token, 1);
   for (const token of tokens) {
-    const expansions = QUERY_EXPANSIONS[token] || [];
+    const expansions = domain.queryExpansions[token] || [];
     for (const expanded of expansions) {
-      for (const expandedToken of tokenizeQuery(expanded)) {
+      for (const expandedToken of tokenizeQuery(expanded, domain)) {
         if (!expandedToken || STOPWORDS.has(expandedToken)) continue;
         weighted.set(expandedToken, Math.max(weighted.get(expandedToken) || 0, 0.58));
       }
@@ -1165,8 +1193,8 @@ function chunkDocument(lines: string[]): ChunkDraft[] {
   return chunks;
 }
 
-function tokenizeQuery(text: string): string[] {
-  const normalized = normalizeForTokenization(text);
+function tokenizeQuery(text: string, domain: DomainProfile): string[] {
+  const normalized = normalizeForTokenization(text, domain);
   const raw = normalized
     .split(/[^a-z0-9_]+/)
     .map((token) => token.trim())
@@ -1181,13 +1209,17 @@ function tokenizeQuery(text: string): string[] {
   return out;
 }
 
-function normalizeForTokenization(text: string): string {
-  return `${text || ""}`
+function normalizeForTokenization(text: string, domain: DomainProfile): string {
+  let normalized = `${text || ""}`
     .toLowerCase()
     .replace(/\bbrown[\s-]+field\b/g, " brownfield ")
     .replace(/\bgreen[\s-]+field\b/g, " greenfield ")
     .replace(/[’']/g, "")
     .replace(/[\u2013\u2014]/g, "-");
+  for (const rule of domain.textNormalizations) {
+    normalized = normalized.replace(rule.pattern, rule.replacement);
+  }
+  return normalized;
 }
 
 function extractFastTermSummary(body: string): string {
@@ -1216,11 +1248,12 @@ function extractFastTermSummary(body: string): string {
   return "";
 }
 
-function inferMode(query: string, explicitMode: string): SearchMode {
-  if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic")
-    return explicitMode;
+function inferMode(query: string, explicitMode: string, domain: DomainProfile): SearchMode {
+  const resolved = resolveModeAlias(domain, explicitMode);
+  if (resolved === "domain" || resolved === "project" || resolved === "generic") return resolved;
   const q = query.toLowerCase();
-  if (/\bproject\b|\btask\s*\d+\b/.test(q)) return "project";
+  if (domain.inferModeProject.some((pattern) => pattern.test(q))) return "project";
+  if (domain.inferModeDomain.some((pattern) => pattern.test(q))) return "domain";
   return "generic";
 }
 

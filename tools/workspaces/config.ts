@@ -1,10 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { resolveDomainProfile } from "./domain-profile.js";
 import {
   type LoadWorkspaceContextOptions,
   type WorkspaceConfigFile,
   type WorkspaceContext,
   type WorkspaceSensitivity,
+  type WorkspaceUiConfig,
 } from "./types.js";
 
 const DEFAULT_SCAN_ROOTS = ["demo-kb", "kb"];
@@ -58,6 +60,9 @@ export async function loadWorkspaceContext(
       ? config.readOnly
       : parseBoolean(environment.KB_MCP_WORKSPACE_READ_ONLY, false);
 
+  const domain = resolveDomainProfile(config?.domain);
+  const ui = normalizeUiConfig(config?.ui);
+
   return Object.freeze({
     id,
     label,
@@ -69,6 +74,8 @@ export async function loadWorkspaceContext(
     realWriteRoots: Object.freeze(realWriteRoots),
     readOnly,
     sensitivity,
+    domain,
+    ui,
   });
 }
 
@@ -103,7 +110,39 @@ function validateWorkspaceConfig(value: object): WorkspaceConfigFile {
   if ("readOnly" in config && typeof config.readOnly !== "boolean") {
     throw new Error("Workspace configuration readOnly must be a boolean.");
   }
+  assertOptionalObject(config, "domain");
+  assertOptionalObject(config, "ui");
   return config as WorkspaceConfigFile;
+}
+
+function assertOptionalObject(config: Record<string, unknown>, field: string): void {
+  if (!(field in config)) return;
+  const value = config[field];
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Workspace configuration ${field} must be an object.`);
+  }
+}
+
+function normalizeUiConfig(value: unknown): WorkspaceUiConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return Object.freeze({});
+  const config = value as WorkspaceUiConfig;
+  const sourceFolders = Array.isArray(config.sourceFolders)
+    ? config.sourceFolders
+        .filter((item) => item && typeof item.from === "string" && item.from.trim())
+        .map((item) => Object.freeze({ from: item.from.trim(), to: (item.to ?? item.from).trim() }))
+    : undefined;
+  const rootFiles = Array.isArray(config.rootFiles)
+    ? config.rootFiles.map((item) => `${item}`.trim()).filter(Boolean)
+    : undefined;
+  const defaultActiveTrack =
+    typeof config.defaultActiveTrack === "string" && config.defaultActiveTrack.trim()
+      ? config.defaultActiveTrack.trim()
+      : undefined;
+  return Object.freeze({
+    ...(sourceFolders ? { sourceFolders: Object.freeze(sourceFolders) } : {}),
+    ...(rootFiles ? { rootFiles: Object.freeze(rootFiles) } : {}),
+    ...(defaultActiveTrack ? { defaultActiveTrack } : {}),
+  });
 }
 
 function assertOptionalString(config: Record<string, unknown>, field: string): void {

@@ -29,6 +29,7 @@ import { normalizeDocument } from "./normalize.js";
 import { normalizeProjectId } from "../projects/project-manifest.js";
 import { createProject, getProject, linkProjectSource } from "../projects/project-service.js";
 import { loadWorkspaceContext } from "../workspaces/config.js";
+import type { DomainProfile } from "../workspaces/types.js";
 import {
   authorizeWorkspaceOperationalRead,
   authorizeWorkspaceWrite,
@@ -142,6 +143,7 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
     failures: [],
   };
   const workspace = options.workspace ?? (await loadWorkspaceContext());
+  if (!options.module) options.module = workspace.domain.captureDefaults.module;
   const repoRoot = workspace.repoRoot;
   const now = options.now ?? (() => new Date());
   const extractor = options.extractor ?? extractText;
@@ -243,7 +245,7 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
         const suffix = note.chunkIndex > 0 ? `-part-${note.chunkIndex + 1}` : "";
         const notePath = `kb/topics/${slug}${suffix}.md`;
         const existingRaw = await readCanonicalNote(repoRoot, notePath, workspace);
-        const proposedNote = buildProposedTopic({
+        const proposedNote = buildProposedTopic(workspace.domain, {
           title: note.title,
           body: note.body,
           path: notePath,
@@ -254,11 +256,15 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
         desiredNotes.push({
           title: note.title,
           path: notePath,
-          content: mergeSourceMetadata(renderCaptureNote(proposedNote), existingRaw, {
-            source_id: sourceId,
-            source_uri: sourceUri,
-            source_chunk: `${note.chunkIndex + 1}`,
-          }),
+          content: mergeSourceMetadata(
+            renderCaptureNote(proposedNote, workspace.domain),
+            existingRaw,
+            {
+              source_id: sourceId,
+              source_uri: sourceUri,
+              source_chunk: `${note.chunkIndex + 1}`,
+            },
+          ),
         });
       }
 
@@ -407,19 +413,22 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
   return summary;
 }
 
-function buildProposedTopic(options: {
-  title: string;
-  body: string;
-  path: string;
-  module: string;
-  projectId: string | null;
-  updated: string;
-}): ProposedCaptureNote {
+function buildProposedTopic(
+  domain: DomainProfile,
+  options: {
+    title: string;
+    body: string;
+    path: string;
+    module: string;
+    projectId: string | null;
+    updated: string;
+  },
+): ProposedCaptureNote {
   return {
     kind: "topic",
     title: options.title,
     path: options.path,
-    track: "domain",
+    track: domain.captureDefaults.track,
     module: options.module,
     projectId: options.projectId,
     type: "concept",
@@ -603,7 +612,7 @@ async function captureProjectRecord(
 }
 
 function parseArgs(argv: string[]): IngestOptions {
-  const opts: IngestOptions = { folder: "./inbox", module: "general", dryRun: false, scrub: true };
+  const opts: IngestOptions = { folder: "./inbox", module: "", dryRun: false, scrub: true };
   const positionals: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];

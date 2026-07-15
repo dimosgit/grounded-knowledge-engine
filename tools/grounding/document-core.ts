@@ -2,8 +2,9 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { CandidateFile, Frontmatter } from "./types.js";
+import { DEFAULT_DOMAIN_PROFILE } from "../workspaces/domain-profile.js";
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
-import type { WorkspaceContext } from "../workspaces/types.js";
+import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 
 const SKIP_DIRECTORIES = new Set([".git", ".gke", "node_modules", "dist", "content", ".cache"]);
 
@@ -72,23 +73,31 @@ export function getDocumentTitle(body: string, relPath: string): string {
   return path.basename(relPath, path.extname(relPath));
 }
 
-export function inferSourceKind(relPath: string): string {
-  if (relPath.startsWith("source-docs/")) return "reference-source";
+export function inferSourceKind(
+  relPath: string,
+  domain: DomainProfile = DEFAULT_DOMAIN_PROFILE,
+): string {
+  for (const mapping of domain.pathMappings) {
+    if (mapping.sourceKind && relPath.startsWith(mapping.prefix)) return mapping.sourceKind;
+  }
   if (relPath.startsWith("kb/topics/")) return "kb-topic";
   if (relPath.startsWith("kb/terms/")) return "kb-term";
   if (relPath.startsWith("kb/modules/")) return "kb-module";
   if (relPath.startsWith("kb/digests/")) return "kb-digest";
   if (relPath.startsWith("kb/clients/")) return "kb-client";
-  if (relPath.startsWith("project/")) return "project";
   return "doc";
 }
 
-export function inferTrack(relPath: string, frontmatter: Frontmatter): string {
+export function inferTrack(
+  relPath: string,
+  frontmatter: Frontmatter,
+  domain: DomainProfile = DEFAULT_DOMAIN_PROFILE,
+): string {
   const explicit = normalizeScalar(frontmatter.track);
   if (explicit) return explicit;
-  if (relPath.startsWith("source-docs/")) return "domain";
-  if (relPath.startsWith("project/")) return "domain";
-  if (relPath.startsWith("kb/")) return "domain";
+  for (const mapping of domain.pathMappings) {
+    if (mapping.track && relPath.startsWith(mapping.prefix)) return mapping.track;
+  }
   return "";
 }
 
