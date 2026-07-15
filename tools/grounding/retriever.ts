@@ -6,7 +6,13 @@ import {
   authorizeWorkspaceRuntimePath,
   authorizeWorkspaceWrite,
 } from "../workspaces/path-policy.js";
-import type { WorkspaceContext } from "../workspaces/types.js";
+import {
+  DEFAULT_DOMAIN_PROFILE,
+  applyDomainScoringRules,
+  domainFingerprint,
+  resolveModeAlias,
+} from "../workspaces/domain-profile.js";
+import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 import {
   buildManifestHash,
   gatherCandidateFiles,
@@ -135,14 +141,6 @@ const STOPWORDS = new Set([
   "any",
 ]);
 
-// Optional query-expansion dictionary: maps an acronym/term to related words so a
-// query can match documents that phrase the same concept differently. Extend this
-// per knowledge base. The defaults below are aligned with the demo KB (MCP docs).
-const QUERY_EXPANSIONS: Record<string, string[]> = {
-  mcp: ["model", "context", "protocol"],
-  kb: ["knowledge", "base"],
-};
-
 let runtimeCache = {
   loadedAt: 0,
   cacheKey: "",
@@ -189,6 +187,7 @@ interface RerankArgs {
   matchedTokenCount: number;
   tokenWeights: QueryWeights;
   debug: boolean;
+  domain: DomainProfile;
 }
 
 interface RerankResult {
@@ -212,6 +211,7 @@ interface FallbackCandidateArgs {
   chunks: IndexedChunk[];
   query: string;
   mode: string;
+  domain: DomainProfile;
   activeChunks: (chunk: IndexedChunk) => boolean;
   outScores: CandidateScoreMap;
   outMatchedTerms: MatchedTermsMap;
@@ -281,10 +281,12 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
     2000,
   );
   const forceRefresh = Boolean(options.forceRefresh);
-  const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}`;
+  const domain = workspace?.domain ?? DEFAULT_DOMAIN_PROFILE;
+  const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}::${domainFingerprint(domain)}`;
 
   return {
     workspace,
+    domain,
     repoRoot,
     scanRoots,
     cachePath,
@@ -298,7 +300,7 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
 
 async function loadOrBuildIndex(options: ResolvedRetrieverOptions): Promise<RetrieverIndex> {
   const files = await gatherCandidateFiles(options.repoRoot, options.scanRoots, options.workspace);
-  const manifestHash = buildManifestHash(files);
+  const manifestHash = `${buildManifestHash(files)}::${domainFingerprint(options.domain)}`;
   if (options.workspace) {
     await authorizeWorkspaceRuntimePath(options.workspace, options.cachePath);
   }
@@ -313,6 +315,7 @@ async function loadOrBuildIndex(options: ResolvedRetrieverOptions): Promise<Retr
   const built = await buildIndex({
     repoRoot: options.repoRoot,
     workspace: options.workspace,
+    domain: options.domain,
     files,
     manifestHash,
     scanRoots: options.scanRoots,
@@ -330,9 +333,11 @@ async function buildIndex({
   manifestHash,
   scanRoots,
   workspace,
+  domain,
 }: {
   repoRoot: string;
   workspace?: WorkspaceContext;
+  domain: DomainProfile;
   files: CandidateFile[];
   manifestHash: string;
   scanRoots: string[];
@@ -365,9 +370,9 @@ async function buildIndex({
       id: docId,
       relPath: file.relPath,
       title: getDocumentTitle(body, file.relPath),
-      track: inferTrack(file.relPath, frontmatter),
+      track: inferTrack(file.relPath, frontmatter, domain),
       module: normalizeScalar(frontmatter.module),
-      sourceKind: inferSourceKind(file.relPath),
+      sourceKind: inferSourceKind(file.relPath, domain),
       frontmatter,
       body,
       isArchive: file.relPath.startsWith("kb/archive/"),
@@ -378,7 +383,7 @@ async function buildIndex({
     const docChunks = chunkDocument(bodyLines);
     for (const piece of docChunks) {
       const chunkId = chunks.length;
-      const tokens = tokenizeForIndex(piece.text);
+      const tokens = tokenizeForIndex(piece.text, domain);
       if (!tokens.length) continue;
 
       const termFreq = new Map<string, number>();
@@ -439,7 +444,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
     const query = normalizeScalar(args.query);
     if (!query) throw new Error("Missing required argument: query");
 
-    const mode = inferMode(query, normalizeScalar(args.mode) || "auto");
+    const mode = inferMode(query, normalizeScalar(args.mode) || "auto", options.domain);
     const limit = parsePositiveInt(args.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
     const contextRadius = parsePositiveInt(args.context, 1, 0, MAX_CONTEXT);
     const maxPerPath = parsePositiveInt(
@@ -488,7 +493,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
       queryCacheMisses += 1;
     }
 
-    const tokenWeights = buildWeightedQueryTokens(query);
+    const tokenWeights = buildWeightedQueryTokens(query, options.domain);
     const candidateScores: CandidateScoreMap = new Map();
     const matchedTerms: MatchedTermsMap = new Map();
     const tokenContributions: TokenContributionMap | null = debug ? new Map() : null;
@@ -532,6 +537,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
         chunks,
         query,
         mode,
+        domain: options.domain,
         activeChunks,
         outScores: candidateScores,
         outMatchedTerms: matchedTerms,
@@ -552,6 +558,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
           matchedTokenCount: terms.size,
           tokenWeights,
           debug,
+          domain: options.domain,
         });
         return {
           chunk,
@@ -834,6 +841,7 @@ function rerankCandidate({
   matchedTokenCount,
   tokenWeights,
   debug,
+  domain,
 }: RerankArgs): RerankResult {
   let score = baseScore;
   const adjustments: RerankAdjustment[] = [];
@@ -868,7 +876,7 @@ function rerankCandidate({
       score += 2.4;
       if (debug) adjustments.push({ reason: "mode_domain_source_preference", delta: 2.4 });
     }
-    if (chunk.track === "domain") {
+    if (chunk.track === domain.defaultTrack) {
       score += 1.1;
       if (debug) adjustments.push({ reason: "mode_domain_track_preference", delta: 1.1 });
     }
@@ -877,6 +885,18 @@ function rerankCandidate({
       score += 2.8;
       if (debug) adjustments.push({ reason: "mode_project_source_preference", delta: 2.8 });
     }
+  }
+
+  for (const rule of applyDomainScoringRules(domain, {
+    backend: "bm25",
+    mode,
+    query,
+    sourceKind: chunk.sourceKind,
+    module: chunk.module,
+    track: chunk.track,
+  })) {
+    score += rule.boost;
+    if (debug) adjustments.push({ reason: rule.id, delta: rule.boost });
   }
 
   if (chunk.isArchive) {
@@ -1007,6 +1027,7 @@ function seedFallbackCandidates({
   chunks,
   query,
   mode,
+  domain,
   activeChunks,
   outScores,
   outMatchedTerms,
@@ -1014,7 +1035,7 @@ function seedFallbackCandidates({
   const queryLower = query.toLowerCase().trim();
   if (!queryLower) return;
 
-  const fallbackTokens = tokenizeQuery(query);
+  const fallbackTokens = tokenizeQuery(query, domain);
   for (const chunk of chunks) {
     if (!activeChunks(chunk)) continue;
     const textLower = chunk.text.toLowerCase();
@@ -1024,7 +1045,7 @@ function seedFallbackCandidates({
     for (const token of fallbackTokens) {
       if (textLower.includes(token)) score += 0.8;
     }
-    if (mode === "domain" && chunk.track === "domain") score += 1;
+    if (mode === "domain" && chunk.track === domain.defaultTrack) score += 1;
     if (mode === "project" && chunk.sourceKind === "project") score += 1.5;
 
     outScores.set(chunk.id, score);
@@ -1035,8 +1056,8 @@ function seedFallbackCandidates({
   }
 }
 
-function buildWeightedQueryTokens(query: string): QueryWeights {
-  const tokens = tokenizeQuery(query);
+function buildWeightedQueryTokens(query: string, domain: DomainProfile): QueryWeights {
+  const tokens = tokenizeQuery(query, domain);
   const weighted: QueryWeights = new Map();
 
   for (const token of tokens) {
@@ -1044,9 +1065,9 @@ function buildWeightedQueryTokens(query: string): QueryWeights {
   }
 
   for (const token of tokens) {
-    const expansions = QUERY_EXPANSIONS[token] || [];
+    const expansions = domain.queryExpansions[token] || [];
     for (const expanded of expansions) {
-      const expandedTokens = tokenizeQuery(expanded);
+      const expandedTokens = tokenizeQuery(expanded, domain);
       for (const expandedToken of expandedTokens) {
         if (!expandedToken || STOPWORDS.has(expandedToken)) continue;
         weighted.set(expandedToken, Math.max(weighted.get(expandedToken) || 0, 0.58));
@@ -1122,16 +1143,20 @@ function chunkDocument(lines: string[]): ChunkDraft[] {
   return chunks;
 }
 
-function tokenizeForIndex(text: string): string[] {
-  return tokenizeCore(text, { keepStopwords: false });
+function tokenizeForIndex(text: string, domain: DomainProfile): string[] {
+  return tokenizeCore(text, domain, { keepStopwords: false });
 }
 
-function tokenizeQuery(text: string): string[] {
-  return tokenizeCore(text, { keepStopwords: false });
+function tokenizeQuery(text: string, domain: DomainProfile): string[] {
+  return tokenizeCore(text, domain, { keepStopwords: false });
 }
 
-function tokenizeCore(text: string, { keepStopwords }: { keepStopwords: boolean }): string[] {
-  const normalized = normalizeForTokenization(text);
+function tokenizeCore(
+  text: string,
+  domain: DomainProfile,
+  { keepStopwords }: { keepStopwords: boolean },
+): string[] {
+  const normalized = normalizeForTokenization(text, domain);
   const raw = normalized
     .split(/[^a-z0-9_]+/)
     .map((token) => token.trim())
@@ -1147,13 +1172,17 @@ function tokenizeCore(text: string, { keepStopwords }: { keepStopwords: boolean 
   return out;
 }
 
-function normalizeForTokenization(text: string): string {
-  return `${text || ""}`
+function normalizeForTokenization(text: string, domain: DomainProfile): string {
+  let normalized = `${text || ""}`
     .toLowerCase()
     .replace(/\bbrown[\s-]+field\b/g, " brownfield ")
     .replace(/\bgreen[\s-]+field\b/g, " greenfield ")
     .replace(/[’']/g, "")
     .replace(/[\u2013\u2014]/g, "-");
+  for (const rule of domain.textNormalizations) {
+    normalized = normalized.replace(rule.pattern, rule.replacement);
+  }
+  return normalized;
 }
 
 async function tryLoadCachedIndex(cachePath: string): Promise<CachedRetrieverIndex | null> {
@@ -1199,10 +1228,11 @@ function deserializeMap<T>(serialized: Array<[string, T]> | Map<string, T>): Map
   return serialized instanceof Map ? serialized : new Map(serialized);
 }
 
-function inferMode(query: string, explicitMode: string): SearchMode {
-  if (explicitMode === "domain" || explicitMode === "project" || explicitMode === "generic")
-    return explicitMode;
+function inferMode(query: string, explicitMode: string, domain: DomainProfile): SearchMode {
+  const resolved = resolveModeAlias(domain, explicitMode);
+  if (resolved === "domain" || resolved === "project" || resolved === "generic") return resolved;
   const q = query.toLowerCase();
-  if (/\bproject\b|\btask\s*\d+\b/.test(q)) return "project";
+  if (domain.inferModeProject.some((pattern) => pattern.test(q))) return "project";
+  if (domain.inferModeDomain.some((pattern) => pattern.test(q))) return "domain";
   return "generic";
 }

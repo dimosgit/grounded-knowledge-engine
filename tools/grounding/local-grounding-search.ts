@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 import { getKbRetriever } from "./retriever.js";
+import { loadWorkspaceContext } from "../workspaces/config.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
 import type { RetrievalBackend, RetrieverOptions, SearchHit, SearchMode } from "./types.js";
 
 const DEFAULT_LIMIT = 12;
@@ -7,7 +9,7 @@ const DEFAULT_CONTEXT = 1;
 
 interface SearchCliArgs {
   query: string;
-  mode: SearchMode;
+  mode: SearchMode | string;
   track: string;
   module: string;
   limit: number;
@@ -55,10 +57,11 @@ interface SearchDebug {
   topCandidates: DebugCandidate[];
 }
 
-function normalizeMode(value: string): SearchMode {
+function normalizeMode(value: string): SearchMode | string {
+  // Alias resolution happens inside the retriever, so any configured domain
+  // mode name passes through; empty input falls back to inference.
   const mode = value.trim().toLowerCase();
-  if (mode === "domain" || mode === "project" || mode === "generic") return mode;
-  return "auto";
+  return mode || "auto";
 }
 
 function parseArgs(argv: string[]): SearchCliArgs {
@@ -270,10 +273,11 @@ async function main() {
     return;
   }
 
+  const workspace = await tryLoadWorkspace();
   const retriever =
     args.backend === "sqlite"
-      ? await getSqliteRetriever({ forceRefresh: args.refresh })
-      : await getKbRetriever({ forceRefresh: args.refresh });
+      ? await getSqliteRetriever({ forceRefresh: args.refresh, workspace })
+      : await getKbRetriever({ forceRefresh: args.refresh, workspace });
   const result = retriever.search({
     query: args.query,
     mode: args.mode,
@@ -344,6 +348,15 @@ async function main() {
         console.log(`   rerank adjustments: ${adjStr}`);
       }
     });
+  }
+}
+
+async function tryLoadWorkspace(): Promise<WorkspaceContext | undefined> {
+  try {
+    return await loadWorkspaceContext();
+  } catch {
+    // Retriever falls back to env/default scan roots without a workspace.
+    return undefined;
   }
 }
 

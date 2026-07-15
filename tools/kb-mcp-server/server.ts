@@ -6,6 +6,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { loadWorkspaceContext } from "../workspaces/config.js";
+import { advertisedModeNames, resolveModeAlias } from "../workspaces/domain-profile.js";
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
 import { negotiateProtocolVersion } from "./protocol.js";
@@ -135,8 +136,20 @@ const tools = buildToolCatalog({
   maxLimit: MAX_LIMIT,
   maxContext: MAX_CONTEXT,
   defaultSloMs: DEFAULT_SLO_MS,
-});
+}).map(adaptToolForDomain);
 const advertisedToolNames = new Set(tools.map((tool) => tool.name));
+
+// Rewrites the advertised mode enum to the workspace's domain vocabulary when
+// mode aliases are configured; without aliases the catalog is untouched.
+function adaptToolForDomain(tool: JsonObject): JsonObject {
+  if (!Object.keys(workspace.domain.modeAliases).length) return tool;
+  const mode = tool?.inputSchema?.properties?.mode;
+  if (mode && typeof mode === "object") {
+    mode.enum = advertisedModeNames(workspace.domain);
+    mode.description = `Scoring mode: ${workspace.domain.label} knowledge, project context, or generic retrieval.`;
+  }
+  return tool;
+}
 
 const toolHandlers: Record<string, ToolHandler> = {
   "kb.search": handleKbSearch,
@@ -661,6 +674,7 @@ async function buildGroundedAnswerPayload(args: JsonObject): Promise<ToolPayload
   const structured = await answerGrounded(args, {
     search: runSearch,
     listDocuments: async () => await getDocuments(false),
+    domain: workspace.domain,
   });
 
   let contentText: string;
@@ -793,9 +807,9 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
   const requestedTrack = normalizeScalar(options?.track);
   const fallbackTrack =
     kind === "topic" && moduleKey
-      ? await resolveTrackForModule(moduleKey, "domain")
+      ? await resolveTrackForModule(moduleKey, workspace.domain.captureDefaults.track)
       : kind === "topic"
-        ? "domain"
+        ? workspace.domain.captureDefaults.track
         : "";
   const conflictPolicy = normalizeScalar(options?.conflictPolicy).toLowerCase();
   if (conflictPolicy && !["error", "append", "replace"].includes(conflictPolicy)) {
@@ -825,13 +839,16 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
     projectId: normalizeScalar(options?.projectId),
     type: normalizeScalar(options?.type) || "concept",
     status: normalizeScalar(options?.status) || "draft",
-    tags: normalizedTags || inferDefaultTags("domain", moduleKey || "general"),
+    tags: normalizedTags || inferDefaultTags("domain", moduleKey || workspace.domain.defaultModule),
     owner: normalizeScalar(options?.owner) || "kb-mcp-server",
     updated: today,
     proposedAction,
     evidenceCitations: Array.isArray(options?.evidenceCitations) ? options.evidenceCitations : [],
     evidenceRoutes: Array.isArray(options?.evidenceRoutes) ? options.evidenceRoutes : [],
-    routingDefaults: kind === "topic" ? { track: fallbackTrack, module: "general" } : undefined,
+    routingDefaults:
+      kind === "topic"
+        ? { track: fallbackTrack, module: workspace.domain.defaultModule }
+        : undefined,
     groundedConfidence:
       options?.groundedConfidence && typeof options.groundedConfidence === "object"
         ? options.groundedConfidence
@@ -976,8 +993,12 @@ function buildCapturedNoteBody({
 
 function inferPrimaryModule(question: unknown, mode: unknown): string {
   const q = normalizeScalar(question).toLowerCase();
-  if (mode === "project" || /\bproject\b|\btask\s*\d+\b/.test(q)) return "project-tracking";
-  return "general";
+  const internalMode = resolveModeAlias(workspace.domain, normalizeScalar(mode).toLowerCase());
+  if (internalMode === "project") return workspace.domain.projectModeModule;
+  for (const rule of workspace.domain.primaryModuleRules) {
+    if (rule.queryRegex.test(q)) return rule.module;
+  }
+  return workspace.domain.defaultModule;
 }
 
 function inferEvidenceProjectId(value: unknown): string {
@@ -993,9 +1014,17 @@ function inferNoteTitle(question: unknown, kind: string): string {
 }
 
 function inferDefaultTags(mode: unknown, module: string): string[] {
+  const domain = workspace.domain;
   const tags = ["kb-captured"];
   if (module) tags.push(module);
-  if (mode === "project") tags.push("project");
+  const internalMode = resolveModeAlias(domain, normalizeScalar(mode).toLowerCase());
+  if (internalMode === "project") {
+    const alias = Object.entries(domain.modeAliases).find(([, value]) => value === "project");
+    tags.push(alias ? alias[0] : "project");
+  }
+  for (const rule of domain.captureDefaults.moduleTagRules) {
+    if (rule.moduleRegex.test(module || "")) tags.push(rule.tag);
+  }
   return [...new Set(tags)];
 }
 
@@ -1041,7 +1070,7 @@ let ownershipCache = {
 
 async function resolveTrackForModule(module: unknown, fallbackTrack: string): Promise<string> {
   const moduleKey = normalizeScalar(module);
-  if (!moduleKey) return fallbackTrack || "domain";
+  if (!moduleKey) return fallbackTrack || workspace.domain.captureDefaults.track;
   const now = Date.now();
   if (!ownershipCache.loadedAt || now - ownershipCache.loadedAt > DEFAULT_CACHE_TTL_MS) {
     const ownershipPath = path.join(repoRoot, "kb", "modules", "topic-ownership.json");
@@ -1054,7 +1083,11 @@ async function resolveTrackForModule(module: unknown, fallbackTrack: string): Pr
           : {},
     };
   }
-  return normalizeScalar(ownershipCache.moduleTracks[moduleKey]) || fallbackTrack || "domain";
+  return (
+    normalizeScalar(ownershipCache.moduleTracks[moduleKey]) ||
+    fallbackTrack ||
+    workspace.domain.captureDefaults.track
+  );
 }
 
 function toTitleCase(text: unknown): string {
