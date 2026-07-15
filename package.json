@@ -38,7 +38,7 @@
     "demo:project": "tsx tools/projects/demo-resume.ts",
     "test:ingest:unit": "tsx tools/ingest/unit-test.ts",
     "test:ingest": "tsx tools/ingest/ingest-integration-test.ts && tsx tools/ingest/source-aware-integration-test.ts",
-    "test:gke": "npm run test:mcp:catalog && npm run test:mcp:transport && npm run test:mcp:http && npm run test:workspaces && npm run test:workspaces:mcp && npm run test:projects && npm run test:project-service && npm run test:project-review && npm run test:document-core && npm run test:answer-service && npm run test:questions && npm run test:capture && npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run test:retrieval",
+    "test:gke": "npm run test:mcp:catalog && npm run test:mcp:transport && npm run test:mcp:http && npm run test:workspaces && npm run test:domain && npm run test:workspaces:mcp && npm run test:projects && npm run test:project-service && npm run test:project-review && npm run test:document-core && npm run test:answer-service && npm run test:questions && npm run test:capture && npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run test:retrieval",
     "project": "tsx tools/projects/cli.ts",
     "export:demo-projects": "tsx tools/projects/export-demo.ts",
     "ingest": "tsx tools/ingest/ingest.ts",
@@ -46,7 +46,8 @@
     "scrub": "bash scripts/scrub-gate.sh",
     "lint": "eslint tools",
     "format": "prettier --write \"tools/**/*.ts\" \"scripts/**/*.{ts,mjs}\" \"*.{ts,json,md}\"",
-    "format:check": "prettier --check \"tools/**/*.ts\" \"scripts/**/*.{ts,mjs}\" \"*.{ts,json,md}\""
+    "format:check": "prettier --check \"tools/**/*.ts\" \"scripts/**/*.{ts,mjs}\" \"*.{ts,json,md}\"",
+    "test:domain": "tsx tools/workspaces/domain-profile-test.ts"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

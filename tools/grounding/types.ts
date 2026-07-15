@@ -1,6 +1,6 @@
 export type SearchMode = "auto" | "domain" | "project" | "generic";
 export type RetrievalBackend = "bm25" | "sqlite";
-import type { WorkspaceContext } from "../workspaces/types.js";
+import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 
 export interface Frontmatter {
   [key: string]: string;
@@ -26,6 +26,7 @@ export interface RetrieverOptions {
 
 export interface ResolvedRetrieverOptions {
   workspace?: WorkspaceContext;
+  domain: DomainProfile;
   repoRoot: string;
   scanRoots: string[];
   cachePath: string;

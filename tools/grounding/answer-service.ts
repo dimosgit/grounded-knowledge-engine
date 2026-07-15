@@ -1,6 +1,8 @@
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { normalizeScalar, parsePositiveInt } from "./document-core.js";
+import { DEFAULT_DOMAIN_PROFILE, resolveModeAlias } from "../workspaces/domain-profile.js";
+import type { DomainProfile } from "../workspaces/types.js";
 import type { IndexedDocument, SearchArgs, SearchHit, SearchResult } from "./types.js";
 
 const DEFAULT_LIMIT = 8;
@@ -126,6 +128,7 @@ export interface GroundedAnswerDependencies {
   search: (args: SearchArgs & { backend?: unknown }) => Promise<SearchResult>;
   listDocuments: () => Promise<IndexedDocument[]>;
   now?: () => number;
+  domain?: DomainProfile;
 }
 
 interface AnswerDocument extends IndexedDocument {
@@ -143,12 +146,14 @@ export async function answerGrounded(
 
   const strict = input.strict !== false;
   const responseMode = normalizeResponseMode(input.responseMode);
-  const mode = normalizeScalar(input.mode).toLowerCase();
+  const domain = dependencies.domain ?? DEFAULT_DOMAIN_PROFILE;
+  const mode = resolveModeAlias(domain, normalizeScalar(input.mode).toLowerCase());
   const fastAnswer = await tryBuildFastAnswer({
     question,
     mode,
     responseMode,
     strict,
+    domain,
     listDocuments: dependencies.listDocuments,
     now,
     startedAt,
@@ -233,7 +238,7 @@ export async function answerGrounded(
     answer =
       "Grounded answer withheld (strict evidence gate):\n" +
       `- Reason: ${reasonText}.\n` +
-      "- Please refine your question with specific Domain object names, transaction codes, or implementation context.\n" +
+      `- Please refine your question with specific ${domain.label} object names, transaction codes, or implementation context.\n` +
       "\nBest matching local evidence:\n" +
       evidenceBullets.map((line) => `- ${line}`).join("\n") +
       "\n\nNote: Strict mode avoids weakly-grounded synthesis.";
@@ -241,7 +246,7 @@ export async function answerGrounded(
     answer =
       "Grounded answer (retrieval-based, low confidence):\n" +
       "- The current evidence is partial or weak for a reliable direct answer.\n" +
-      "- Please refine with more specific Domain object names, transaction codes, or module context.\n" +
+      `- Please refine with more specific ${domain.label} object names, transaction codes, or module context.\n` +
       "\nBest matching local evidence:\n" +
       evidenceBullets.map((line) => `- ${line}`).join("\n") +
       "\n\nNote: This output is extractive and intentionally conservative.";
@@ -283,6 +288,7 @@ async function tryBuildFastAnswer({
   mode,
   responseMode,
   strict,
+  domain,
   listDocuments,
   now,
   startedAt,
@@ -291,12 +297,13 @@ async function tryBuildFastAnswer({
   mode: string;
   responseMode: AnswerResponseMode;
   strict: boolean;
+  domain: DomainProfile;
   listDocuments: () => Promise<IndexedDocument[]>;
   now: () => number;
   startedAt: number;
 }): Promise<GroundedAnswerResult | null> {
   if (responseMode === "curate" || mode === "project") return null;
-  const extractedTerm = extractSimpleTerm(question);
+  const extractedTerm = extractSimpleTerm(question, domain);
   if (!extractedTerm) return null;
   const retrievalStartedAt = now();
   const documents = (await listDocuments()).map(toAnswerDocument);
@@ -311,7 +318,7 @@ async function tryBuildFastAnswer({
       1;
     const shortAnswer =
       extractFastTermSummary(termDoc) ||
-      `${termDoc.title} is a curated Domain term in the local KB.`;
+      `${termDoc.title} is a curated ${domain.label} term in the local KB.`;
     const answer = [
       "Fast grounded answer (term cache hit):",
       `- ${trimSentence(shortAnswer)}`,
@@ -560,17 +567,15 @@ function findFastTopicDocument(
   return best && best.score >= 95 ? best.document : null;
 }
 
-function extractSimpleTerm(question: string): string {
+function extractSimpleTerm(question: string, domain: DomainProfile): string {
   const q = singleLine(question);
-  const patterns = [
-    /^\s*what(?:'s|\s+is)\s+([A-Za-z0-9/_-]{2,24})\s+in\s+domain\s*\??\s*$/i,
-    /^\s*define\s+([A-Za-z0-9/_-]{2,24})\s+(?:in\s+domain)?\s*\??\s*$/i,
-    /^\s*meaning\s+of\s+([A-Za-z0-9/_-]{2,24})\s+in\s+domain\s*\??\s*$/i,
-  ];
-  for (const pattern of patterns) {
+  const excluded = new Set(
+    [domain.label, ...domain.labelTokens].map((token) => normalizeTermKey(token).toLowerCase()),
+  );
+  for (const pattern of domain.termQuestionPatterns) {
     const match = q.match(pattern);
     const candidate = normalizeScalar(match?.[1]).replace(/[^A-Za-z0-9/_-]+/g, "");
-    if (candidate && normalizeTermKey(candidate) !== "Domain") return candidate;
+    if (candidate && !excluded.has(normalizeTermKey(candidate).toLowerCase())) return candidate;
   }
   return "";
 }
