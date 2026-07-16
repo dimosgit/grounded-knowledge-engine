@@ -119,7 +119,7 @@ async function testEvidenceGate(): Promise<void> {
   assert.equal(answer.gate.pass, true);
   assert.equal(answer.confidence.label, "high");
   assert.equal(answer.citations.length, 3);
-  assert.match(answer.answer, /Grounded answer \(retrieval-based\)/);
+  assert.match(answer.answer, /Grounded evidence 0/);
   assert.ok(answer.tokenUsage.evidenceTokens > 0);
   assert.equal(
     answer.tokenUsage.totalTokens,
@@ -146,6 +146,136 @@ async function testEvidenceGate(): Promise<void> {
   assert.equal(strictAnswer.abstained, true);
   assert.match(strictAnswer.answer, /withheld/);
   assert.equal(permissiveAnswer.abstained, false);
+}
+
+async function testDirectExtractiveAnswer(): Promise<void> {
+  const transportDocument = document({
+    relPath: "demo-kb/topics/mcp-source-transports.md",
+    title: "MCP Source Notes: Transports",
+    body: [
+      "# MCP Source Notes: Transports",
+      "",
+      "Two transports are built in:",
+      "- **stdio** communicates over standard input/output streams — the natural fit for command-line tools and local process integrations.",
+      "- **HTTP with SSE** streams server-to-client over Server-Sent Events while the client posts requests over HTTP — suited to networked or restricted-network setups.",
+    ].join("\n"),
+  });
+  const evidence = [
+    hit(0, {
+      path: transportDocument.relPath,
+      title: transportDocument.title,
+      snippet: "The transport layer carries messages between client and server.",
+      matchedTokens: ["stdio", "http", "sse"],
+    }),
+    hit(1, { matchedTokens: ["stdio", "http", "sse"] }),
+    hit(2, { matchedTokens: ["stdio", "http", "sse"] }),
+  ];
+  const transportResult = result(evidence);
+  transportResult.queryTokens = ["stdio", "http", "sse"];
+  transportResult.signals = {
+    tokenCoverage: 1,
+    uniqueSources: 3,
+    topScore: 20,
+    dominantSourceShare: 1 / 3,
+  };
+  const direct = await answerGrounded(
+    {
+      question:
+        "According to MCP Source Notes: Transports, how does stdio differ from HTTP with SSE?",
+      responseMode: "curate",
+    },
+    {
+      search: async () => transportResult,
+      listDocuments: async () => [transportDocument],
+      now: clock(),
+    },
+  );
+
+  assert.equal(
+    direct.answer,
+    [
+      "- stdio: standard input/output for command-line tools and local process integrations.",
+      "- HTTP with SSE: server-to-client events plus HTTP requests for networked or restricted-network setups.",
+    ].join("\n"),
+  );
+}
+
+async function testFocusedCanonicalAnswer(): Promise<void> {
+  const demoCard = document({
+    relPath: "demo-kb/topics/demo-card.md",
+    title: "Demo Card",
+    body: [
+      "# Demo Card",
+      "",
+      "- Status: Ready for review.",
+      "- Owner: Operator Cockpit.",
+      "- Next step: Open Capture review.",
+    ].join("\n"),
+  });
+  const focusedHit = hit(0, {
+    path: demoCard.relPath,
+    title: demoCard.title,
+    snippet: "Status: Ready for review.",
+    matchedTokens: ["demo", "card", "status"],
+    score: 8,
+  });
+  const focusedResult = result([focusedHit]);
+  focusedResult.queryTokens = ["demo", "card", "status"];
+  focusedResult.signals = {
+    tokenCoverage: 1,
+    uniqueSources: 1,
+    topScore: 8,
+    dominantSourceShare: 1,
+  };
+
+  const answer = await answerGrounded(
+    { question: "What is the Demo Card status?", responseMode: "curate" },
+    {
+      search: async () => focusedResult,
+      listDocuments: async () => [demoCard],
+      now: clock(),
+    },
+  );
+
+  assert.equal(answer.abstained, false);
+  assert.equal(answer.gate.pass, true);
+  assert.equal(answer.answer, "- Status: Ready for review.");
+  assert.match(answer.confidence.rationale, /Direct match/);
+}
+
+async function testFocusedCanonicalAnswerRequiresTheTopHit(): Promise<void> {
+  const topResult = result([
+    hit(0, {
+      title: "Unknown Procedure Abstention Boundary",
+      path: "kb/topics/abstention-boundary.md",
+      matchedTokens: ["missing", "zephyr", "procedure", "inferred", "similar", "project"],
+      score: 20,
+    }),
+    hit(1, {
+      title: "Zephyr Active Procedure",
+      path: "kb/topics/zephyr-active-procedure.md",
+      matchedTokens: ["zephyr", "procedure"],
+      score: 12,
+    }),
+  ]);
+  topResult.queryTokens = ["missing", "zephyr", "procedure", "inferred", "similar", "project"];
+  topResult.signals = {
+    tokenCoverage: 1,
+    uniqueSources: 2,
+    topScore: 20,
+    dominantSourceShare: 0.5,
+  };
+
+  const answer = await answerGrounded(
+    {
+      question: "May a missing Zephyr-Null procedure be inferred from a similar project?",
+      responseMode: "curate",
+    },
+    { search: async () => topResult, listDocuments: async () => [], now: clock() },
+  );
+
+  assert.equal(answer.abstained, true);
+  assert.equal(answer.gate.thresholds.minHits, 3);
 }
 
 async function testFastTermAndTopicPaths(): Promise<void> {
@@ -192,6 +322,9 @@ async function testFastTermAndTopicPaths(): Promise<void> {
 async function main(): Promise<void> {
   await testNoEvidenceAndForwarding();
   await testEvidenceGate();
+  await testDirectExtractiveAnswer();
+  await testFocusedCanonicalAnswer();
+  await testFocusedCanonicalAnswerRequiresTheTopHit();
   await testFastTermAndTopicPaths();
   console.log("Grounded answer service tests passed.");
 }
