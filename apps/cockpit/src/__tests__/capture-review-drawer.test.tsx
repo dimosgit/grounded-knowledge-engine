@@ -9,6 +9,22 @@ afterEach(() => {
 });
 
 describe("capture review drawer", () => {
+  test("uses the document modal layer so a sticky header cannot cover it", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ proposals: [] }));
+    const user = userEvent.setup();
+    render(<OperatorActions />);
+
+    await user.click(screen.getByRole("button", { name: "Open capture review queue" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Capture review queue" });
+    expect(dialog.parentElement).toBe(document.body);
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Capture review queue" })).not.toBeInTheDocument();
+    expect(document.body.style.overflow).toBe("");
+  });
+
   test("loads a proposal and requires an explicit action before applying", async () => {
     const proposalId = "capture-20260713090000-abcdef123456";
     let listCount = 0;
