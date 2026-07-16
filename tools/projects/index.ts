@@ -1,5 +1,6 @@
-export { resumeProject } from "./project-capsule.js";
+export { resumeProject, listProjectRecordsForWorkspace } from "./project-capsule.js";
 export { formatTechnicalPeerHandoff, renderProjectCapsule } from "./project-capsule.js";
+export { listProjectRecords, type ProjectRecordSummary } from "./project-scope.js";
 export { reviewWorkspace } from "./project-review.js";
 export * from "./project-attention.js";
 export {

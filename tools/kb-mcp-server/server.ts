@@ -10,7 +10,12 @@ import { advertisedModeNames, resolveModeAlias } from "../workspaces/domain-prof
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
 import { negotiateProtocolVersion } from "./protocol.js";
-import { MCP_RESOURCES, MCP_RESOURCE_TEMPLATES, readMcpResource } from "./resources.js";
+import {
+  MCP_RESOURCE_TEMPLATES,
+  listMcpResources,
+  readMcpResource,
+  type ResourceDependencies,
+} from "./resources.js";
 import { startJsonRpcStdioTransport } from "./transport.js";
 import {
   gatherCandidateFiles as gatherKnowledgeFiles,
@@ -23,7 +28,7 @@ import {
 } from "../grounding/document-core.js";
 import { getKbRetriever } from "../grounding/retriever.js";
 import { answerGrounded, type GroundedTokenUsage } from "../grounding/answer-service.js";
-import { resumeProject } from "../projects/index.js";
+import { listProjectRecordsForWorkspace, resumeProject } from "../projects/index.js";
 import {
   applyUnreviewedCapture,
   isCaptureProposalUnchanged,
@@ -174,6 +179,30 @@ async function handleKbResumeProject(args: JsonObject): Promise<ToolPayload> {
   return result;
 }
 
+// Enumerate projects for discovery surfaces (resources/list, workspace/info).
+// Never throws: project discovery is best-effort and must not break a list call.
+async function listProjectsSafe() {
+  try {
+    return await listProjectRecordsForWorkspace(repoRoot, [...workspace.scanRoots], workspace);
+  } catch (error) {
+    log("warn", `project enumeration failed: ${safeErrorMessage(error)}`);
+    return [];
+  }
+}
+
+// Capability injection for the provider-neutral resource module (resources.ts).
+function resourceDependencies(): ResourceDependencies {
+  return {
+    repoRoot,
+    workspace,
+    profile: DEFAULT_MCP_PROFILE,
+    writesEnabled: DEFAULT_ENABLE_WRITES,
+    scanRoots: [...workspace.scanRoots],
+    getDocuments: () => getDocuments(false),
+    getProjects: listProjectsSafe,
+  };
+}
+
 async function main() {
   startJsonRpcStdioTransport({
     input: process.stdin,
@@ -209,18 +238,11 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
     case "tools/call":
       return await handleToolCall(params);
     case "resources/list":
-      return { resources: MCP_RESOURCES };
+      return { resources: await listMcpResources(resourceDependencies()) };
     case "resources/templates/list":
       return { resourceTemplates: MCP_RESOURCE_TEMPLATES };
     case "resources/read":
-      return await readMcpResource(params, {
-        repoRoot,
-        workspace,
-        profile: DEFAULT_MCP_PROFILE,
-        writesEnabled: DEFAULT_ENABLE_WRITES,
-        scanRoots: [...workspace.scanRoots],
-        getDocuments: () => getDocuments(false),
-      });
+      return await readMcpResource(params, resourceDependencies());
     case "prompts/list":
       return { prompts: [] };
     default:

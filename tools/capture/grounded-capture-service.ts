@@ -81,6 +81,7 @@ export async function captureGroundedAnswer(
       path: item.path,
       track: item.track,
       module: item.module,
+      projectId: inferEvidenceProjectId(item.path),
       score: item.score,
     })),
     groundedConfidence: options.grounded.confidence,
@@ -152,4 +153,8 @@ export function buildGroundedCaptureBody(grounded: GroundedAnswerForCapture): st
 
 function singleLine(value: string): string {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function inferEvidenceProjectId(value: string): string | undefined {
+  return value.replaceAll("\\", "/").match(/(?:^|\/)projects\/([^/]+)(?:\/|$)/)?.[1];
 }
