@@ -15,6 +15,9 @@ interface OwnershipFile {
 }
 
 const { repoRoot } = getPaths();
+// Workspace-specific prefix vocabulary from topic-ownership.json's governance block.
+let governance: { typePrefixes?: Record<string, string>; tagPrefixes?: Record<string, string> } =
+  {};
 const topicsDir = path.join(repoRoot, "kb", "topics");
 const ownershipPath = path.join(repoRoot, "kb", "modules", "topic-ownership.json");
 const today = new Date().toISOString().slice(0, 10);
@@ -53,7 +56,9 @@ function inferStatus(fileName: string, body: string): string {
 
 function inferType(fileName: string, status: string): string {
   if (status === "merged") return "redirect";
-  if (fileName.startsWith("vorwerk-")) return "project";
+  for (const [prefix, type] of Object.entries(governance.typePrefixes ?? {})) {
+    if (fileName.startsWith(prefix)) return type;
+  }
   if (
     /(guide|process|checklist|workflow|playbook|version-control|deletion|table-change|how-to|howto)/i.test(
       fileName,
@@ -78,8 +83,10 @@ function inferTags(fileName: string, moduleName: string, trackName: string): str
   if (trackName === "business-marketing") tags.add("business");
   if (trackName === "knowledge-ops") tags.add("knowledge-ops");
   if (base.startsWith("rap-")) tags.add("rap");
-  if (base.startsWith("vorwerk-")) tags.add("vorwerk");
   if (base.startsWith("sap-")) tags.add("sap");
+  for (const [prefix, tag] of Object.entries(governance.tagPrefixes ?? {})) {
+    if (base.startsWith(prefix)) tags.add(tag);
+  }
   if (parts.includes("workflow") || parts.includes("approval") || parts.includes("approvals"))
     tags.add("workflow");
   if (parts.includes("order") || parts.includes("so") || parts.includes("sales")) tags.add("sales");
@@ -90,6 +97,15 @@ function inferTags(fileName: string, moduleName: string, trackName: string): str
 async function main(): Promise<void> {
   const ownershipRaw = await fs.readFile(ownershipPath, "utf8");
   const ownership: OwnershipFile = JSON.parse(ownershipRaw);
+  governance =
+    (
+      ownership as {
+        governance?: {
+          typePrefixes?: Record<string, string>;
+          tagPrefixes?: Record<string, string>;
+        };
+      }
+    ).governance ?? {};
   const owners = ownership.owners || {};
   const moduleTracks = ownership.moduleTracks || {};
 

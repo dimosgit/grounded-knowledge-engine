@@ -17,7 +17,7 @@ import type { WorkspaceDomainConfig } from "./types.js";
 // A domain block shaped like a real specialized workspace (SAP-style values).
 const SPECIALIZED: WorkspaceDomainConfig = {
   label: "SAP",
-  modeAliases: { sap: "domain", vorwerk: "project" },
+  modeAliases: { sap: "domain", acme: "project" },
   queryExpansions: {
     merge: "replace",
     entries: { rap: ["restful", "abap"], eml: ["entity", "manipulation", "language"] },
@@ -28,15 +28,15 @@ const SPECIALIZED: WorkspaceDomainConfig = {
   ],
   pathMappings: [
     { prefix: "SAP-resources/", sourceKind: "reference-source", track: "sap" },
-    { prefix: "vorwerk/", sourceKind: "project", track: "sap" },
+    { prefix: "acme/", sourceKind: "project", track: "sap" },
     { prefix: "kb/", track: "sap" },
   ],
   defaultTrack: "sap",
   inferMode: {
-    project: ["\\bvorwerk\\b|\\btask\\s*\\d+\\b"],
+    project: ["\\bacme\\b|\\btask\\s*\\d+\\b"],
     domain: ["\\brap\\b|\\babap\\b|\\beml\\b"],
   },
-  projectQueryPattern: "\\bvorwerk\\b",
+  projectQueryPattern: "\\bacme\\b",
   scoringRules: [
     {
       id: "book_priority",
@@ -47,7 +47,7 @@ const SPECIALIZED: WorkspaceDomainConfig = {
       boost: 720,
     },
     { id: "ops_penalty", backend: "sqlite", mode: "domain", module: "knowledge-ops", boost: -360 },
-    { id: "module_pref", mode: "project", module: "vorwerk-cr-so", boost: 2.1 },
+    { id: "module_pref", mode: "project", module: "acme-cr-core", boost: 2.1 },
   ],
   captureDefaults: {
     track: "sap",
@@ -58,7 +58,7 @@ const SPECIALIZED: WorkspaceDomainConfig = {
   primaryModuleRules: [
     { module: "workflow-approvals", queryRegex: "\\bworkflow\\b|\\bapproval\\b" },
   ],
-  projectModeModule: "vorwerk-cr-so",
+  projectModeModule: "acme-cr-core",
   defaultModule: "rap-core",
 };
 
@@ -72,7 +72,7 @@ function testDefaultProfileReproducesHistoricalBehavior(): void {
   assert.equal(profile.textNormalizations.length, 0);
   assert.equal(profile.defaultTrack, "domain");
   assert.equal(profile.projectQueryPattern.test("about the project"), true);
-  assert.equal(profile.projectQueryPattern.test("about vorwerk"), false);
+  assert.equal(profile.projectQueryPattern.test("about acme"), false);
   assert.deepEqual(advertisedModeNames(profile), ["auto", "domain", "project", "generic"]);
   assert.equal(resolveModeAlias(profile, "domain"), "domain");
   assert.equal(resolveModeAlias(profile, "unknown"), "unknown");
@@ -94,8 +94,8 @@ function testDefaultProfileReproducesHistoricalBehavior(): void {
 function testSpecializedProfile(): void {
   const profile = resolveDomainProfile(SPECIALIZED);
   assert.equal(resolveModeAlias(profile, "sap"), "domain");
-  assert.equal(resolveModeAlias(profile, "VORWERK"), "project");
-  assert.deepEqual(advertisedModeNames(profile), ["auto", "sap", "vorwerk", "generic"]);
+  assert.equal(resolveModeAlias(profile, "ACME"), "project");
+  assert.deepEqual(advertisedModeNames(profile), ["auto", "sap", "acme", "generic"]);
 
   // replace-merge drops the built-in dictionary
   assert.equal(profile.queryExpansions.mcp, undefined);
@@ -113,7 +113,7 @@ function testSpecializedProfile(): void {
   assert.match("what is EML in sap?", profile.termQuestionPatterns[0]);
   assert.doesNotMatch("what is EML in domain?", profile.termQuestionPatterns[0]);
 
-  assert.equal(profile.projectQueryPattern.test("vorwerk approval flow"), true);
+  assert.equal(profile.projectQueryPattern.test("acme approval flow"), true);
   assert.equal(profile.projectQueryPattern.test("generic project"), false);
 }
 
@@ -162,7 +162,7 @@ function testScoringRuleGates(): void {
       backend,
       mode: "project",
       query: "task 4",
-      module: "vorwerk-cr-so",
+      module: "acme-cr-core",
     });
     assert.deepEqual(
       pref.map((rule) => rule.id),

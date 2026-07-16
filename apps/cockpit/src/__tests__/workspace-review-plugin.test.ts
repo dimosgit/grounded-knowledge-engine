@@ -119,8 +119,8 @@ function testWorkspace(repoRoot: string): WorkspaceContext {
     realWriteRoots: [repoRoot],
     readOnly: true,
     sensitivity: "internal",
-  domain: DEFAULT_DOMAIN_PROFILE,
-  ui: {},
+    domain: DEFAULT_DOMAIN_PROFILE,
+    ui: {},
   };
 }
 

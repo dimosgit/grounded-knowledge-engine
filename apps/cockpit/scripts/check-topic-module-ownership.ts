@@ -27,36 +27,19 @@ const allowedType = new Set(["concept", "howto", "project", "redirect", "history
 const softMaxTopicLines = 350;
 const minTokenSetForSimilarity = 80;
 const duplicateSimilarityThreshold = 0.82;
-const namingPrefixes = [
-  "rap-",
-  "sap-",
-  "vorwerk-",
-  "ai-",
-  "business-",
-  "marketing-",
-  "kb-",
-  "tutor-",
-];
-const namingPrefixLegacyAllowlist = new Set([
-  "fdo-context-tu-gi-ppf.md",
-  "fiori-progressive-apps-vs-native-mobile.md",
-  "hp-order-flow-what-is-what.md",
-  "ppf-vs-flexible-workflow.md",
-  "s4-deployment-options-clean-core.md",
-  "samsung-order-example-corrected.md",
-  "sales-order-approval-fit-analysis.md",
-  "table-change-process-se14-vs-eclipse.md",
-  "ydemo-why-no-populateoriginalvalues.md",
-]);
+// Workspace-specific taxonomy vocabulary comes from the optional `governance`
+// block of topic-ownership.json; without it these checks stay silent.
+interface GovernanceConfig {
+  namingPrefixes?: string[];
+  namingLegacyAllowlist?: string[];
+  changeLogTopics?: string[];
+  trackPrefixes?: Record<string, string>;
+}
+let governance: GovernanceConfig = {};
 const requiredProjectSections = ["Current status", "Next 3 actions", "Blockers"];
 const projectSectionPattern = /^(##+)\s+(.+)$/gm;
 const projectRunningNotesPattern =
   /^##\s*(Current (implementation )?status snapshot|Current focus|Task\s+\d+)/im;
-const canonicalChangeLogTopics = new Set([
-  "rap-knowledge-map.md",
-  "vorwerk-rap-running-notes.md",
-  "vorwerk-cr-so-task-board-v4.md",
-]);
 
 function quoteList(list: string[]): string {
   return list.map((item) => `- ${item}`).join("\n");
@@ -169,16 +152,20 @@ function validateFrontmatter(
     warnings.push(`Topic ${topic} is merged but type is ${fm.type} (expected redirect)`);
   }
 
-  if (topic.startsWith("sap-") && fm.track && fm.track !== "sap") {
-    failures.push(
-      `Topic ${topic} uses sap-* filename prefix but track is ${fm.track}; rename or move to SAP track.`,
-    );
+  for (const [prefix, expectedTrack] of Object.entries(governance.trackPrefixes ?? {})) {
+    if (topic.startsWith(prefix) && fm.track && fm.track !== expectedTrack) {
+      failures.push(
+        `Topic ${topic} uses ${prefix}* filename prefix but track is ${fm.track}; rename or move to the ${expectedTrack} track.`,
+      );
+    }
   }
 }
 
 function hasExpectedTaxonomyPrefix(topic: string): boolean {
-  if (namingPrefixLegacyAllowlist.has(topic)) return true;
-  return namingPrefixes.some((prefix) => topic.startsWith(prefix));
+  const prefixes = governance.namingPrefixes ?? [];
+  if (!prefixes.length) return true;
+  if ((governance.namingLegacyAllowlist ?? []).includes(topic)) return true;
+  return prefixes.some((prefix) => topic.startsWith(prefix));
 }
 
 function collectH2Sections(body: string): string[] {
@@ -215,7 +202,7 @@ function validateStructureWarnings(
     }
   }
 
-  if (canonicalChangeLogTopics.has(topic) && !/^##\s+Change log\b/im.test(body)) {
+  if ((governance.changeLogTopics ?? []).includes(topic) && !/^##\s+Change log\b/im.test(body)) {
     warnings.push(`Topic ${topic} is canonical/high-traffic and is missing section: ## Change log`);
   }
 }
@@ -307,6 +294,7 @@ async function main(): Promise<void> {
   const topics = await getTopicFiles();
   const ownershipRaw = await readUtf8(ownershipPath);
   const ownership: OwnershipFile = JSON.parse(ownershipRaw);
+  governance = (ownership as { governance?: GovernanceConfig }).governance ?? {};
   const tracks = ownership.tracks || {};
   const allowedTracks = new Set(Object.keys(tracks));
   const owners = ownership.owners || {};
@@ -392,7 +380,7 @@ async function main(): Promise<void> {
 
     if (!hasExpectedTaxonomyPrefix(topic)) {
       warnings.push(
-        `Topic ${topic} does not follow preferred naming prefixes (${namingPrefixes.join(", ")}); legacy exception may be needed.`,
+        `Topic ${topic} does not follow preferred naming prefixes (${(governance.namingPrefixes ?? []).join(", ")}); legacy exception may be needed.`,
       );
     }
 

@@ -33,7 +33,7 @@ export interface WorkspaceDomainConfig {
    * Defaults to the lowercased label.
    */
   labelTokens?: string[];
-  /** External mode name -> internal mode, e.g. { sap: "domain", vorwerk: "project" }. */
+  /** External mode name -> internal mode, e.g. { sap: "domain", acme: "project" }. */
   modeAliases?: Record<string, InternalSearchMode>;
   queryExpansions?: {
     /** "extend" merges over the built-in dictionary; "replace" discards it. */

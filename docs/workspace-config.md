@@ -61,26 +61,26 @@ profile's fingerprint participates in cache keys and index manifest hashes).
 
 ```json
 {
-  "id": "learning-sap-tutor",
-  "scanRoots": ["kb", "SAP-resources", "vorwerk", "readme.md"],
+  "id": "sap-learning-workspace",
+  "scanRoots": ["kb", "reference-docs", "client-notes", "readme.md"],
   "domain": {
     "label": "SAP",
-    "modeAliases": { "sap": "domain", "vorwerk": "project" },
+    "modeAliases": { "sap": "domain", "client": "project" },
     "queryExpansions": {
       "merge": "replace",
       "entries": { "rap": ["restful", "abap", "behavior", "eml", "cds"] }
     },
     "pathMappings": [
-      { "prefix": "SAP-resources/", "sourceKind": "reference-source", "track": "sap" },
-      { "prefix": "vorwerk/", "sourceKind": "project", "track": "sap" },
+      { "prefix": "reference-docs/", "sourceKind": "reference-source", "track": "sap" },
+      { "prefix": "client-notes/", "sourceKind": "project", "track": "sap" },
       { "prefix": "kb/", "track": "sap" }
     ],
     "defaultTrack": "sap",
-    "projectQueryPattern": "\\bvorwerk\\b",
+    "projectQueryPattern": "\\bclient\\b",
     "captureDefaults": { "track": "sap", "module": "rap-core", "tags": ["sap", "kb-captured"] }
   },
   "ui": {
-    "sourceFolders": [{ "from": "kb" }, { "from": "vorwerk" }],
+    "sourceFolders": [{ "from": "kb" }, { "from": "client-notes" }],
     "rootFiles": ["readme.md"],
     "defaultActiveTrack": "sap"
   }
