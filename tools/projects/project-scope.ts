@@ -1,6 +1,42 @@
 import type { IndexedDocument } from "../grounding/types.js";
 import { normalizeProjectId } from "./project-manifest.js";
 
+export interface ProjectRecordSummary {
+  projectId: string;
+  title: string;
+  relPath: string;
+  canonical: boolean;
+}
+
+/**
+ * Enumerate the distinct projects in the index (canonical `kb/projects/<id>/project.md`
+ * records plus any remaining legacy `type: project` notes), deduped by project id with
+ * the highest-scoring record per id (canonical preferred). Used to make projects
+ * discoverable via `resources/list` without the caller knowing ids in advance.
+ */
+export function listProjectRecords(docs: IndexedDocument[]): ProjectRecordSummary[] {
+  const byId = new Map<string, { score: number; summary: ProjectRecordSummary }>();
+  for (const doc of docs) {
+    if (!isProjectRecord(doc)) continue;
+    const projectId = getDocumentProjectId(doc);
+    if (!projectId) continue;
+    const summary: ProjectRecordSummary = {
+      projectId,
+      title: `${doc.title || projectId}`.trim(),
+      relPath: doc.relPath,
+      canonical:
+        doc.frontmatter?.record_type === "project" ||
+        /(?:^|\/)(?:demo-kb|kb)\/projects\/[^/]+\/project\.md$/.test(doc.relPath),
+    };
+    const score = projectRecordScore(doc);
+    const existing = byId.get(projectId);
+    if (!existing || score > existing.score) byId.set(projectId, { score, summary });
+  }
+  return [...byId.values()]
+    .map((entry) => entry.summary)
+    .sort((a, b) => a.projectId.localeCompare(b.projectId));
+}
+
 export function resolveProjectDocument(
   docs: IndexedDocument[],
   requestedProjectId: string,

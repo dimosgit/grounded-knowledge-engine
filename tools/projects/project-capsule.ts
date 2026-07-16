@@ -9,8 +9,28 @@ import {
   sectionItems,
   sectionSummary,
 } from "./project-manifest.js";
-import { isDocumentInProject, resolveProjectDocument } from "./project-scope.js";
+import {
+  isDocumentInProject,
+  listProjectRecords,
+  resolveProjectDocument,
+  type ProjectRecordSummary,
+} from "./project-scope.js";
 import type { ProjectCapsule, ProjectCitation, ProjectSection } from "./types.js";
+
+export async function listProjectRecordsForWorkspace(
+  repoRoot: string,
+  scanRoots: string[],
+  workspace?: WorkspaceContext,
+): Promise<ProjectRecordSummary[]> {
+  const retriever = await getKbRetriever({
+    workspace,
+    repoRoot,
+    scanRoots,
+    cacheTtlMs: 15000,
+    forceRefresh: false,
+  });
+  return listProjectRecords(retriever.getDocuments());
+}
 
 export async function resumeProject(
   args: { projectId: string },

@@ -4,25 +4,6 @@ import { resumeProject, reviewWorkspace } from "../projects/index.js";
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
 
-export const MCP_RESOURCES = [
-  {
-    uri: "gke://workspace/info",
-    name: "workspace-info",
-    title: "GKE Workspace Information",
-    description: "Active repository root and indexed logical scan roots.",
-    mimeType: "application/json",
-    annotations: { audience: ["user", "assistant"], priority: 0.9 },
-  },
-  {
-    uri: "gke://workspace/review",
-    name: "workspace-review",
-    title: "GKE Workspace Review",
-    description: "Read due project reviews, attention reasons, and changed project documents.",
-    mimeType: "text/markdown",
-    annotations: { audience: ["user", "assistant"], priority: 0.95 },
-  },
-];
-
 export const MCP_RESOURCE_TEMPLATES = [
   {
     uriTemplate: "gke://record/{path}",
@@ -47,6 +28,11 @@ export interface ResourceDocument {
   relPath: string;
 }
 
+export interface ProjectResourceSummary {
+  projectId: string;
+  title: string;
+}
+
 export interface ResourceDependencies {
   repoRoot: string;
   workspace: WorkspaceContext;
@@ -54,6 +40,43 @@ export interface ResourceDependencies {
   writesEnabled: boolean;
   scanRoots: string[];
   getDocuments: () => Promise<ResourceDocument[]>;
+  getProjects: () => Promise<ProjectResourceSummary[]>;
+}
+
+/**
+ * Build the dynamic resource list: the workspace-info record plus one cited
+ * project-context resource per discovered project. Keeping projects in
+ * `resources/list` is what makes the private workspace's projects discoverable
+ * without the caller knowing their ids in advance.
+ */
+export async function listMcpResources(dependencies: ResourceDependencies): Promise<unknown[]> {
+  const projectResources = (await dependencies.getProjects()).map((project) => ({
+    uri: `gke://project/${encodeURIComponent(project.projectId)}/context`,
+    name: `project-${project.projectId}`,
+    title: project.title,
+    description: `Cited project capsule for ${project.title}.`,
+    mimeType: "text/markdown",
+    annotations: { audience: ["user", "assistant"], priority: 0.8 },
+  }));
+  return [
+    {
+      uri: "gke://workspace/info",
+      name: "workspace-info",
+      title: "GKE Workspace Information",
+      description: "Active repository root, indexed scan roots, and the project inventory.",
+      mimeType: "application/json",
+      annotations: { audience: ["user", "assistant"], priority: 0.9 },
+    },
+    {
+      uri: "gke://workspace/review",
+      name: "workspace-review",
+      title: "GKE Workspace Review",
+      description: "Due project reviews, attention reasons, and changed project documents.",
+      mimeType: "text/markdown",
+      annotations: { audience: ["user", "assistant"], priority: 0.95 },
+    },
+    ...projectResources,
+  ];
 }
 
 export async function readMcpResource(
@@ -64,27 +87,23 @@ export async function readMcpResource(
   if (!uri) throw rpcError(-32602, "Missing resource URI.");
 
   if (uri === "gke://workspace/info") {
+    const value = {
+      workspaceId: dependencies.workspace.id,
+      label: dependencies.workspace.label,
+      sensitivity: dependencies.workspace.sensitivity,
+      readOnly: dependencies.workspace.readOnly,
+      profile: dependencies.profile,
+      writesEnabled: dependencies.writesEnabled,
+      scanRoots: dependencies.workspace.scanRoots,
+      writeRoots: dependencies.workspace.writeRoots,
+      projects: (await dependencies.getProjects()).map((project) => ({
+        projectId: project.projectId,
+        title: project.title,
+        contextUri: `gke://project/${encodeURIComponent(project.projectId)}/context`,
+      })),
+    };
     return {
-      contents: [
-        {
-          uri,
-          mimeType: "application/json",
-          text: JSON.stringify(
-            {
-              workspaceId: dependencies.workspace.id,
-              label: dependencies.workspace.label,
-              sensitivity: dependencies.workspace.sensitivity,
-              readOnly: dependencies.workspace.readOnly,
-              profile: dependencies.profile,
-              writesEnabled: dependencies.writesEnabled,
-              scanRoots: dependencies.workspace.scanRoots,
-              writeRoots: dependencies.workspace.writeRoots,
-            },
-            null,
-            2,
-          ),
-        },
-      ],
+      contents: [{ uri, mimeType: "application/json", text: JSON.stringify(value, null, 2) }],
     };
   }
 
