@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, Inbox, LoaderCircle, RefreshCw, Trash2, X } from "lucide-react";
 import {
   applyCaptureProposal,
@@ -90,6 +91,20 @@ export function CaptureReviewDrawer({
   const loading = queueLoading || previewLoading;
   const visibleError = error || queueError;
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen, onClose]);
+
   return (
     <>
       <button
@@ -107,222 +122,232 @@ export function CaptureReviewDrawer({
         )}
       </button>
 
-      {isOpen && (
-        <div className="fixed inset-0 z-[80] flex justify-end" role="dialog" aria-modal="true">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/65"
-            aria-label="Close capture review queue"
-            onClick={onClose}
-          />
-          <section className="relative flex h-full w-full max-w-6xl flex-col border-l border-border-subtle bg-background shadow-2xl">
-            <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-subtle px-5">
-              <div>
-                <h2 className="font-display text-headline-md font-semibold">
-                  Capture review queue
-                </h2>
-                <p className="text-metadata text-on-surface-variant">
-                  Local proposals only · applying writes canonical Markdown
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  className="rounded border border-border-subtle p-2 text-on-surface-variant hover:text-primary"
-                  onClick={() => void onRefresh(selectedId)}
-                  aria-label="Refresh capture proposals"
-                  disabled={loading}
-                >
-                  <RefreshCw size={17} />
-                </button>
-                <button
-                  type="button"
-                  className="rounded border border-border-subtle p-2 text-on-surface-variant hover:text-primary"
-                  onClick={onClose}
-                  aria-label="Close capture review queue"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-            </header>
-
-            <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[300px_1fr]">
-              <aside className="overflow-y-auto border-r border-border-subtle bg-surface-sidebar p-3">
-                {proposals.map((item) => (
+      {isOpen &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[120] flex justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="capture-review-title"
+          >
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/65"
+              aria-label="Close capture review queue"
+              onClick={onClose}
+            />
+            <section className="relative flex h-full w-full max-w-6xl flex-col border-l border-border-subtle bg-background shadow-2xl">
+              <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-subtle px-5">
+                <div>
+                  <h2
+                    id="capture-review-title"
+                    className="font-display text-headline-md font-semibold"
+                  >
+                    Capture review queue
+                  </h2>
+                  <p className="text-metadata text-on-surface-variant">
+                    Local proposals only · applying writes canonical Markdown
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
                   <button
-                    key={item.proposalId}
                     type="button"
-                    onClick={() => onSelect(item.proposalId)}
-                    className={`mb-2 w-full rounded border p-3 text-left transition ${
-                      selectedId === item.proposalId
-                        ? "border-primary bg-surface-container-high"
-                        : "border-border-subtle bg-surface-container hover:border-primary"
-                    }`}
+                    className="rounded border border-border-subtle p-2 text-on-surface-variant hover:text-primary"
+                    onClick={() => void onRefresh(selectedId)}
+                    aria-label="Refresh capture proposals"
+                    disabled={loading}
                   >
-                    <div className="font-semibold text-on-surface">{item.title}</div>
-                    <div className="mt-1 break-all font-mono text-xs text-on-surface-variant">
-                      {item.path}
-                    </div>
-                    <div className="mt-2 text-xs uppercase text-on-surface-variant">
-                      {item.proposedAction} · {item.reviewReasons.join(", ") || "manual review"}
-                    </div>
+                    <RefreshCw size={17} />
                   </button>
-                ))}
-                {!loading && proposals.length === 0 && !visibleError && (
-                  <div className="p-5 text-center text-body-md text-on-surface-variant">
-                    No pending capture proposals.
-                  </div>
-                )}
-              </aside>
-
-              <div className="min-h-0 overflow-y-auto p-5">
-                {loading && !proposal && (
-                  <div className="flex items-center gap-2 text-on-surface-variant">
-                    <LoaderCircle className="animate-spin" size={18} /> Loading capture review…
-                  </div>
-                )}
-                {visibleError && (
-                  <div
-                    role="alert"
-                    className="mb-4 rounded border border-red-500/40 bg-red-950/30 p-3 text-sm text-red-200"
+                  <button
+                    type="button"
+                    className="rounded border border-border-subtle p-2 text-on-surface-variant hover:text-primary"
+                    onClick={onClose}
+                    aria-label="Close capture review queue"
                   >
-                    {visibleError}
-                  </div>
-                )}
-                {proposal && (
-                  <div className="space-y-5">
-                    <div className="rounded border border-border-subtle bg-surface-container p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="font-display text-headline-md font-semibold">
-                            {proposal.proposedNote.title}
-                          </h3>
-                          <p className="font-mono text-xs text-on-surface-variant">
-                            {proposal.proposedNote.path}
-                          </p>
-                        </div>
-                        <span className="rounded bg-primary-container px-3 py-1 text-xs uppercase text-on-primary-container">
-                          {route?.status || "unclassified route"}
-                        </span>
+                    <X size={18} />
+                  </button>
+                </div>
+              </header>
+
+              <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[300px_1fr]">
+                <aside className="overflow-y-auto border-r border-border-subtle bg-surface-sidebar p-3">
+                  {proposals.map((item) => (
+                    <button
+                      key={item.proposalId}
+                      type="button"
+                      onClick={() => onSelect(item.proposalId)}
+                      className={`mb-2 w-full rounded border p-3 text-left transition ${
+                        selectedId === item.proposalId
+                          ? "border-primary bg-surface-container-high"
+                          : "border-border-subtle bg-surface-container hover:border-primary"
+                      }`}
+                    >
+                      <div className="font-semibold text-on-surface">{item.title}</div>
+                      <div className="mt-1 break-all font-mono text-xs text-on-surface-variant">
+                        {item.path}
                       </div>
-
-                      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
-                        <RouteValue
-                          label="Track"
-                          value={proposal.proposedNote.track}
-                          source={route?.fields.track.source}
-                        />
-                        <RouteValue
-                          label="Module"
-                          value={proposal.proposedNote.module}
-                          source={route?.fields.module.source}
-                        />
-                        <RouteValue
-                          label="Project"
-                          value={proposal.proposedNote.projectId}
-                          source={route?.fields.projectId.source}
-                        />
-                      </dl>
-
-                      <div className="mt-4 text-sm text-on-surface-variant">
-                        Review: {proposal.reviewReasons.join(", ") || "operator requested"}
+                      <div className="mt-2 text-xs uppercase text-on-surface-variant">
+                        {item.proposedAction} · {item.reviewReasons.join(", ") || "manual review"}
                       </div>
-                      {proposal.duplicateCandidates.length > 0 && (
-                        <div className="mt-3 rounded border border-amber-400/30 bg-amber-950/20 p-3 text-sm">
-                          <div className="font-semibold text-amber-200">Possible duplicates</div>
-                          {proposal.duplicateCandidates.map((candidate) => (
-                            <div key={candidate.path} className="mt-1 text-amber-100/80">
-                              {candidate.path} · score {candidate.score}
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                    </button>
+                  ))}
+                  {!loading && proposals.length === 0 && !visibleError && (
+                    <div className="p-5 text-center text-body-md text-on-surface-variant">
+                      No pending capture proposals.
                     </div>
+                  )}
+                </aside>
 
-                    <div className="grid gap-4 lg:grid-cols-2">
-                      <PreviewPane
-                        title={
-                          preview.preview.targetExists
-                            ? "Current Markdown"
-                            : "Current Markdown (new file)"
-                        }
-                        content={currentContent ?? ""}
-                      />
-                      <PreviewPane
-                        title="Proposed Markdown"
-                        content={preview.preview.proposedContent}
-                      />
+                <div className="min-h-0 overflow-y-auto p-5">
+                  {loading && !proposal && (
+                    <div className="flex items-center gap-2 text-on-surface-variant">
+                      <LoaderCircle className="animate-spin" size={18} /> Loading capture review…
                     </div>
-
-                    <div className="rounded border border-border-subtle bg-surface-container p-4">
-                      <div className="mb-3 text-sm font-semibold">Evidence</div>
-                      {proposal.evidenceCitations.length ? (
-                        proposal.evidenceCitations.map((citation) => (
-                          <div
-                            key={`${citation.path}:${citation.line || 0}`}
-                            className="font-mono text-xs text-on-surface-variant"
-                          >
-                            {citation.path}
-                            {citation.line ? `:${citation.line}` : ""}
+                  )}
+                  {visibleError && (
+                    <div
+                      role="alert"
+                      className="mb-4 rounded border border-red-500/40 bg-red-950/30 p-3 text-sm text-red-200"
+                    >
+                      {visibleError}
+                    </div>
+                  )}
+                  {proposal && (
+                    <div className="space-y-5">
+                      <div className="rounded border border-border-subtle bg-surface-container p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <h3 className="font-display text-headline-md font-semibold">
+                              {proposal.proposedNote.title}
+                            </h3>
+                            <p className="font-mono text-xs text-on-surface-variant">
+                              {proposal.proposedNote.path}
+                            </p>
                           </div>
-                        ))
-                      ) : (
-                        <div className="text-sm text-on-surface-variant">
-                          No evidence citations attached.
+                          <span className="rounded bg-primary-container px-3 py-1 text-xs uppercase text-on-primary-container">
+                            {route?.status || "unclassified route"}
+                          </span>
                         </div>
-                      )}
-                    </div>
 
-                    <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-3 border-t border-border-subtle bg-background py-4">
-                      <button
-                        type="button"
-                        onClick={() => void submit("reject")}
-                        disabled={submitting}
-                        className="flex items-center gap-2 rounded border border-red-500/40 px-4 py-2 text-red-300 disabled:opacity-50"
-                      >
-                        <Trash2 size={16} /> Reject
-                      </button>
-                      <label className="sr-only" htmlFor="capture-action">
-                        Apply action
-                      </label>
-                      <select
-                        id="capture-action"
-                        value={action}
-                        onChange={(event) => setAction(event.target.value as CaptureAction | "")}
-                        className="rounded border border-border-subtle bg-surface-container px-3 py-2 text-on-surface"
-                      >
-                        <option value="">Choose explicit action…</option>
-                        {allowedActions(
-                          proposal.proposedNote.path,
-                          preview.preview.targetExists,
-                          proposal.proposedAction,
-                        ).map((value) => (
-                          <option key={value} value={value}>
-                            {value.replace("_", " ")}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => void submit("apply")}
-                        disabled={!action || submitting}
-                        className="flex items-center gap-2 rounded bg-primary px-4 py-2 font-semibold text-on-primary disabled:opacity-45"
-                      >
-                        {submitting ? (
-                          <LoaderCircle className="animate-spin" size={16} />
-                        ) : (
-                          <Check size={16} />
+                        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3">
+                          <RouteValue
+                            label="Track"
+                            value={proposal.proposedNote.track}
+                            source={route?.fields.track.source}
+                          />
+                          <RouteValue
+                            label="Module"
+                            value={proposal.proposedNote.module}
+                            source={route?.fields.module.source}
+                          />
+                          <RouteValue
+                            label="Project"
+                            value={proposal.proposedNote.projectId}
+                            source={route?.fields.projectId.source}
+                          />
+                        </dl>
+
+                        <div className="mt-4 text-sm text-on-surface-variant">
+                          Review: {proposal.reviewReasons.join(", ") || "operator requested"}
+                        </div>
+                        {proposal.duplicateCandidates.length > 0 && (
+                          <div className="mt-3 rounded border border-amber-400/30 bg-amber-950/20 p-3 text-sm">
+                            <div className="font-semibold text-amber-200">Possible duplicates</div>
+                            {proposal.duplicateCandidates.map((candidate) => (
+                              <div key={candidate.path} className="mt-1 text-amber-100/80">
+                                {candidate.path} · score {candidate.score}
+                              </div>
+                            ))}
+                          </div>
                         )}
-                        Apply and refresh
-                      </button>
+                      </div>
+
+                      <div className="grid gap-4 lg:grid-cols-2">
+                        <PreviewPane
+                          title={
+                            preview.preview.targetExists
+                              ? "Current Markdown"
+                              : "Current Markdown (new file)"
+                          }
+                          content={currentContent ?? ""}
+                        />
+                        <PreviewPane
+                          title="Proposed Markdown"
+                          content={preview.preview.proposedContent}
+                        />
+                      </div>
+
+                      <div className="rounded border border-border-subtle bg-surface-container p-4">
+                        <div className="mb-3 text-sm font-semibold">Evidence</div>
+                        {proposal.evidenceCitations.length ? (
+                          proposal.evidenceCitations.map((citation) => (
+                            <div
+                              key={`${citation.path}:${citation.line || 0}`}
+                              className="font-mono text-xs text-on-surface-variant"
+                            >
+                              {citation.path}
+                              {citation.line ? `:${citation.line}` : ""}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-sm text-on-surface-variant">
+                            No evidence citations attached.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="sticky bottom-0 flex flex-wrap items-center justify-end gap-3 border-t border-border-subtle bg-background py-4">
+                        <button
+                          type="button"
+                          onClick={() => void submit("reject")}
+                          disabled={submitting}
+                          className="flex items-center gap-2 rounded border border-red-500/40 px-4 py-2 text-red-300 disabled:opacity-50"
+                        >
+                          <Trash2 size={16} /> Reject
+                        </button>
+                        <label className="sr-only" htmlFor="capture-action">
+                          Apply action
+                        </label>
+                        <select
+                          id="capture-action"
+                          value={action}
+                          onChange={(event) => setAction(event.target.value as CaptureAction | "")}
+                          className="rounded border border-border-subtle bg-surface-container px-3 py-2 text-on-surface"
+                        >
+                          <option value="">Choose explicit action…</option>
+                          {allowedActions(
+                            proposal.proposedNote.path,
+                            preview.preview.targetExists,
+                            proposal.proposedAction,
+                          ).map((value) => (
+                            <option key={value} value={value}>
+                              {value.replace("_", " ")}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => void submit("apply")}
+                          disabled={!action || submitting}
+                          className="flex items-center gap-2 rounded bg-primary px-4 py-2 font-semibold text-on-primary disabled:opacity-45"
+                        >
+                          {submitting ? (
+                            <LoaderCircle className="animate-spin" size={16} />
+                          ) : (
+                            <Check size={16} />
+                          )}
+                          Apply and refresh
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
-        </div>
-      )}
+            </section>
+          </div>,
+          document.body,
+        )}
     </>
   );
 }

@@ -9,6 +9,16 @@ afterEach(() => {
 });
 
 describe("grounded Ask drawer", () => {
+  test("offers a simple workspace demo question", async () => {
+    const user = userEvent.setup();
+    render(<AskDrawer />);
+
+    await user.click(screen.getByRole("button", { name: "Ask grounded knowledge" }));
+    await user.click(screen.getByRole("button", { name: "Demo Card status" }));
+
+    expect(screen.getByLabelText("Question")).toHaveValue("What is the Demo Card status?");
+  });
+
   test("shows grounding details and captures only after an explicit action", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
@@ -91,7 +101,7 @@ describe("grounded Ask drawer", () => {
     expect(screen.getByText("Evidence gate passed")).toBeInTheDocument();
     expect(screen.getAllByText(/capture-routing\.md:12 · score 18\.4/)).toHaveLength(2);
     expect(screen.getByText("Explicit route fields take precedence.")).toBeInTheDocument();
-    expect(screen.getByText(/Token usage: ~44 visible tokens/)).toBeInTheDocument();
+    expect(screen.getByText(/Visible tokens: ~44/)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
     await user.clear(screen.getByLabelText("Question"));
@@ -132,7 +142,7 @@ describe("grounded Ask drawer", () => {
     await user.type(screen.getByLabelText("Question"), "What is not documented?");
     await user.click(screen.getByRole("button", { name: "Ask local knowledge" }));
 
-    expect(await screen.findByText("Answer withheld")).toBeInTheDocument();
+    expect(await screen.findByText("No verified answer")).toBeInTheDocument();
     expect(screen.getByText("no evidence hits")).toBeInTheDocument();
     expect(screen.getByText("No citations returned.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Capture answer" })).not.toBeInTheDocument();
