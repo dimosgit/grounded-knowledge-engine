@@ -5,6 +5,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { answerGrounded } from "./answer-service.js";
 import { getKbRetriever } from "./retriever.js";
+import { loadWorkspaceContext } from "../workspaces/config.js";
+import type { WorkspaceContext } from "../workspaces/types.js";
+
+// Set during arg parsing: an explicit --repo-root pins the evaluation to that
+// checkout and skips workspace-context resolution.
+let repoRootExplicit = false;
 import type {
   KbRetriever,
   RetrievalBackend,
@@ -213,9 +219,11 @@ export function parseEvalArgs(argv: string[], cwd = process.cwd()): EvalArgs {
       args.file = arg.slice("--file=".length);
     } else if (arg === "--repo-root") {
       args.repoRoot = next || args.repoRoot;
+      repoRootExplicit = true;
       index += 1;
     } else if (arg.startsWith("--repo-root=")) {
       args.repoRoot = arg.slice("--repo-root=".length);
+      repoRootExplicit = true;
     } else if (arg === "--scan-root") {
       if (next) args.scanRoots.push(next);
       index += 1;
@@ -744,9 +752,21 @@ async function runCli(): Promise<void> {
     return;
   }
   const loaded = await loadEvaluationCases(args.file);
+  // Without explicit repository arguments, evaluate against the active
+  // workspace so its scan roots and domain vocabulary apply (matching the
+  // MCP server and the search CLI).
+  let workspace: WorkspaceContext | undefined;
+  if (!repoRootExplicit && !args.scanRoots.length) {
+    try {
+      workspace = await loadWorkspaceContext({ repoRoot: args.repoRoot });
+    } catch {
+      workspace = undefined;
+    }
+  }
   const retrieverOptions: RetrieverOptions = {
     repoRoot: args.repoRoot,
     forceRefresh: args.refresh,
+    ...(workspace ? { workspace } : {}),
     ...(args.scanRoots.length ? { scanRoots: args.scanRoots } : {}),
   };
   const retriever =
