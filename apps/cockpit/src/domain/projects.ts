@@ -171,6 +171,7 @@ export function buildProjectSummaries(
       ...project,
       statusBucket: getProjectStatusBucket(project),
       handoffMarkdown: formatTechnicalPeerHandoff(project),
+      resumeMarkdown: formatResumeCapsule(project),
     }))
     .sort((a, b) => {
       const statusOrder = { blocked: 0, active: 1, next: 2, done: 3, reference: 4 };
@@ -280,8 +281,11 @@ export function buildOpenQuestionItems(docs) {
 
 export function getActiveProject(projectSummaries, selectedProjectId) {
   if (!projectSummaries.length) return null;
+  const normalized = normalizeProjectId(selectedProjectId);
   return (
-    projectSummaries.find((project) => project.id === normalizeProjectId(selectedProjectId)) ||
+    projectSummaries.find((project) => project.id === selectedProjectId) ||
+    projectSummaries.find((project) => project.baseId === selectedProjectId) ||
+    projectSummaries.find((project) => project.id === normalized) ||
     projectSummaries.find((project) => project.statusBucket === "active") ||
     projectSummaries[0]
   );
@@ -343,6 +347,36 @@ export function buildProjectLinkedDocs(activeProject, _projectContextGraph, docs
     .slice(0, 8);
 }
 
+// Deterministic resume / start-here capsule — mirrors the engine's
+// renderProjectCapsule, minus the line-level citations the frontend parser
+// does not track. Used by the detail view's "Download Markdown" action.
+export function formatResumeCapsule(project) {
+  return [
+    `# Resume: ${project.title}`,
+    "",
+    "## Start here",
+    project.startHereBrief || "No start-here brief recorded.",
+    "",
+    "## Current focus",
+    project.currentFocus || "No current focus recorded.",
+    "",
+    "## Recent changes",
+    project.recentChanges || "No recent change recorded.",
+    "",
+    "## Active decisions",
+    ...asMarkdownList(project.activeDecisions || []),
+    "",
+    "## Blockers and open questions",
+    ...asMarkdownList(project.blockersAndQuestions || []),
+    "",
+    "## Next actions",
+    ...asMarkdownList((project.nextActions || []).slice(0, 3)),
+    "",
+    "## Key documents",
+    ...asMarkdownList(project.keyDocuments || []),
+  ].join("\n");
+}
+
 export function formatTechnicalPeerHandoff(project) {
   return [
     `# Technical handoff: ${project.title}`,
@@ -399,6 +433,11 @@ function projectRecordScore(doc): number {
   if (doc.frontmatter?.record_type === "project") score += 20;
   if (/^(?:demo-kb|kb)\/projects\/[^/]+\/project\.md$/.test(doc.path || "")) score += 10;
   if (doc.frontmatter?.project_id) score += 5;
+  if (
+    doc.title?.toLowerCase().includes("execution board") ||
+    doc.title?.toLowerCase().includes("task board")
+  )
+    score += 4;
   if (doc.frontmatter?.type === "project") score += 2;
   return score;
 }

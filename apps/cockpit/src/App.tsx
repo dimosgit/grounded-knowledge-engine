@@ -84,7 +84,12 @@ const markdownModules = import.meta.glob("../content/**/*.md", {
 
 const DEFAULT_ACTIVE_TAG = "modules";
 const DEFAULT_HIDE_MERGED = true;
-const DEFAULT_ACTIVE_TRACK = "all";
+declare const __KB_DEFAULT_ACTIVE_TRACK__: string | undefined;
+// Workspaces can pin the initial track filter via `.gke/workspace.json` (ui.defaultActiveTrack).
+const DEFAULT_ACTIVE_TRACK =
+  typeof __KB_DEFAULT_ACTIVE_TRACK__ === "string" && __KB_DEFAULT_ACTIVE_TRACK__
+    ? __KB_DEFAULT_ACTIVE_TRACK__
+    : "all";
 const DEFAULT_ACTIVE_ITEM = "all";
 
 export default function App() {

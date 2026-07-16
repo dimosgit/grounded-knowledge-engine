@@ -17,7 +17,14 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretest": "npm run sync:content"
+    "pretest": "npm run sync:content",
+    "check:kb-topics": "tsx scripts/check-topic-module-ownership.ts",
+    "check:kb-digests": "tsx scripts/check-kb-digests.ts",
+    "check:kb-maintenance": "tsx scripts/check-kb-maintenance-cadence.ts",
+    "check:kb": "npm run check:kb-topics && npm run check:kb-digests && npm run check:kb-maintenance",
+    "compact:topic": "tsx scripts/compact-topic.ts",
+    "apply:topic-frontmatter": "tsx scripts/apply-topic-frontmatter.ts",
+    "backfill:quick-recall": "tsx scripts/backfill-quick-recall.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

@@ -31,3 +31,29 @@ export async function writeTextToClipboard(text) {
 
   return copyWithTemporaryTextarea(text);
 }
+
+// Triggers a client-side Markdown download without touching the canonical
+// project record — the file is built from the in-memory capsule facts, so the
+// generated resume is derived output, never written back to source.
+export function downloadTextFile(filename: string, text: string): boolean {
+  if (
+    !text ||
+    typeof document === "undefined" ||
+    typeof URL === "undefined" ||
+    !URL.createObjectURL
+  ) {
+    return false;
+  }
+
+  const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+  return true;
+}
