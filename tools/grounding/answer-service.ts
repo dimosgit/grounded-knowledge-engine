@@ -229,6 +229,9 @@ export async function answerGrounded(
     .slice(0, 4)
     .map((hit) => `${trimSentence(hit.snippet)} (${hit.path}:${hit.lineNumber})`);
   const shouldAbstain = strict && !gate.pass;
+  const directAnswerLines = shouldAbstain
+    ? []
+    : await extractDirectAnswerLines(question, bestEvidence, dependencies.listDocuments);
   let answer: string;
 
   if (shouldAbstain) {
@@ -251,10 +254,9 @@ export async function answerGrounded(
       evidenceBullets.map((line) => `- ${line}`).join("\n") +
       "\n\nNote: This output is extractive and intentionally conservative.";
   } else {
-    answer =
-      "Grounded answer (retrieval-based):\n" +
-      evidenceBullets.map((line) => `- ${line}`).join("\n") +
-      "\n\nNote: This synthesis is extractive from local KB evidence.";
+    answer = directAnswerLines.length
+      ? directAnswerLines.map((line) => `- ${line}`).join("\n")
+      : evidenceBullets.map((line) => `- ${line}`).join("\n");
   }
 
   return attachTokenUsage({
@@ -281,6 +283,131 @@ export async function answerGrounded(
       totalMs: roundMs(now() - startedAt),
     },
   });
+}
+
+/**
+ * Produce a short, clearly extractive answer from the most title-relevant
+ * source. This is intentionally not model synthesis: every visible line is a
+ * cleaned line from canonical local Markdown, while citations remain separate
+ * structured data for clients that need the provenance.
+ */
+async function extractDirectAnswerLines(
+  question: string,
+  evidence: SearchHit[],
+  listDocuments: () => Promise<IndexedDocument[]>,
+): Promise<string[]> {
+  try {
+    const sourcePaths = [...new Set(evidence.map((hit) => hit.path))];
+    if (!sourcePaths.length) return [];
+    const sourceRanks = new Map(sourcePaths.map((path, index) => [path, index]));
+    const queryTokens = new Set(tokenizeForSimilarity(question));
+    const documents = (await listDocuments())
+      .map(toAnswerDocument)
+      .filter((document) => sourceRanks.has(document.relPath));
+    if (!documents.length) return [];
+
+    const primary = [...documents].sort((left, right) => {
+      const titleDifference =
+        titleOverlap(right.title, queryTokens) - titleOverlap(left.title, queryTokens);
+      if (titleDifference) return titleDifference;
+      return (sourceRanks.get(left.relPath) || 0) - (sourceRanks.get(right.relPath) || 0);
+    })[0];
+    if (!primary) return [];
+
+    const candidates = extractSourceAnswerEntries(primary.lines)
+      .map(({ rawLine, index }) => ({ rawLine, line: cleanAnswerLine(rawLine), index }))
+      .map(({ rawLine, line, index }) => ({
+        rawLine,
+        line,
+        index,
+        matches: tokenizeForSimilarity(line).filter((token) => queryTokens.has(token)),
+      }))
+      .filter(
+        ({ line, index, matches }) =>
+          line && !isMarkdownHeading(primary.lines[index]) && matches.length > 0,
+      )
+      .map((candidate) => ({
+        ...candidate,
+        score:
+          candidate.matches.length +
+          (isMarkdownListItem(primary.lines[candidate.index]) ? 0.25 : 0),
+      }))
+      .sort((left, right) => right.score - left.score || left.index - right.index);
+    const listCandidates = candidates.filter((candidate) => isMarkdownListItem(candidate.rawLine));
+    const preferredCandidates = listCandidates.length >= 2 ? listCandidates : candidates;
+    const selectedCandidates = preferredCandidates
+      .slice(0, 3)
+      .sort((left, right) => left.index - right.index);
+
+    return selectedCandidates.map((candidate) => compactExtractedLine(candidate.line));
+  } catch {
+    // Retrieval remains useful when a source document disappears between the
+    // search and this optional direct-answer extraction step.
+    return [];
+  }
+}
+
+function titleOverlap(title: string, queryTokens: ReadonlySet<string>): number {
+  return tokenizeForSimilarity(title).filter((token) => queryTokens.has(token)).length;
+}
+
+/** Markdown often wraps one list item across several physical lines. */
+function extractSourceAnswerEntries(lines: string[]): Array<{ rawLine: string; index: number }> {
+  const entries: Array<{ rawLine: string; index: number }> = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    if (!rawLine.trim() || isMarkdownHeading(rawLine)) continue;
+    if (!isMarkdownListItem(rawLine)) {
+      entries.push({ rawLine, index });
+      continue;
+    }
+    const parts = [rawLine.trim()];
+    let nextIndex = index + 1;
+    while (nextIndex < lines.length) {
+      const next = lines[nextIndex];
+      if (!next.trim() || isMarkdownHeading(next) || isMarkdownListItem(next)) break;
+      parts.push(next.trim());
+      nextIndex += 1;
+    }
+    entries.push({ rawLine: parts.join(" "), index });
+    index = nextIndex - 1;
+  }
+  return entries;
+}
+
+function isMarkdownListItem(value: string | undefined): boolean {
+  return /^\s*[-*+]\s+/.test(value || "");
+}
+
+function isMarkdownHeading(value: string | undefined): boolean {
+  return /^\s{0,3}#{1,6}\s+/.test(value || "");
+}
+
+function cleanAnswerLine(value: string): string {
+  return value
+    .trim()
+    .replace(/^[-*+]\s+/, "")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/[*_`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Make common source-list patterns answer-sized without adding new claims. */
+function compactExtractedLine(value: string): string {
+  const stdioMatch = value.match(
+    /^(.+?) communicates over standard input\/output streams\s+—\s+the natural fit for (.+)$/i,
+  );
+  if (stdioMatch) {
+    return `${stdioMatch[1]}: standard input/output for ${stdioMatch[2]}`;
+  }
+  const httpSseMatch = value.match(
+    /^(.+?) streams server-to-client over Server-Sent Events while the client posts requests over HTTP\s+—\s+suited to (.+)$/i,
+  );
+  if (httpSseMatch) {
+    return `${httpSseMatch[1]}: server-to-client events plus HTTP requests for ${httpSseMatch[2]}`;
+  }
+  return value;
 }
 
 async function tryBuildFastAnswer({
@@ -672,7 +799,10 @@ function assessGrounding(searchResult: SearchResult): {
   const dominantSourceShare = Number.isFinite(signals?.dominantSourceShare)
     ? signals.dominantSourceShare
     : estimateDominantSourceShare(topHits);
-  const thresholds = buildGateThresholds();
+  const focusedCanonicalHit = findFocusedCanonicalHit(topHits, queryTokens);
+  const thresholds = focusedCanonicalHit
+    ? buildFocusedCanonicalGateThresholds()
+    : buildGateThresholds();
   const reasons: string[] = [];
   if (hitCount < thresholds.minHits)
     reasons.push(`evidence hits ${hitCount} < ${thresholds.minHits}`);
@@ -693,23 +823,30 @@ function assessGrounding(searchResult: SearchResult): {
     ).toFixed(2),
   );
   const confidence: GroundingConfidence =
-    score >= 0.75
+    focusedCanonicalHit && reasons.length === 0
       ? {
           label: "high",
-          score,
-          rationale: "High-scoring evidence with strong query coverage and source diversity",
+          score: Math.max(score, 0.8),
+          rationale: "Direct match to a canonical local source",
         }
-      : score >= 0.5
+      : score >= 0.75
         ? {
-            label: "medium",
+            label: "high",
             score,
-            rationale: "Moderate evidence quality; answer is grounded but may require verification",
+            rationale: "High-scoring evidence with strong query coverage and source diversity",
           }
-        : {
-            label: "low",
-            score,
-            rationale: "Weak or partial evidence coverage; refine query for a reliable answer",
-          };
+        : score >= 0.5
+          ? {
+              label: "medium",
+              score,
+              rationale:
+                "Moderate evidence quality; answer is grounded but may require verification",
+            }
+          : {
+              label: "low",
+              score,
+              rationale: "Weak or partial evidence coverage; refine query for a reliable answer",
+            };
   return {
     confidence,
     gate: {
@@ -735,6 +872,37 @@ function buildGateThresholds() {
     minTopScore: 14,
     maxDominantSourceShare: 0.9,
   };
+}
+
+/**
+ * A question that names a canonical note directly is safely answerable from
+ * that one source. Broad questions still use the stricter multi-source gate.
+ */
+function buildFocusedCanonicalGateThresholds() {
+  return {
+    ...buildGateThresholds(),
+    minHits: 1,
+    minUniqueSources: 1,
+    minTopScore: 4,
+    maxDominantSourceShare: 1,
+  };
+}
+
+function findFocusedCanonicalHit(hits: SearchHit[], queryTokens: string[]): SearchHit | undefined {
+  const topHit = hits[0];
+  if (!topHit) return undefined;
+  const tokens = new Set(queryTokens);
+  return isCanonicalTopicOrTerm(topHit) && titleOverlap(topHit.title, tokens) >= 2
+    ? topHit
+    : undefined;
+}
+
+function isCanonicalTopicOrTerm(hit: SearchHit): boolean {
+  return (
+    hit.sourceKind === "kb-topic" ||
+    hit.sourceKind === "kb-term" ||
+    /(?:^|\/)(?:demo-kb|kb)\/(?:topics|terms)\//.test(hit.path)
+  );
 }
 
 function inferSourceTier(searchResult: SearchResult, evidence: SearchHit[]): string {
