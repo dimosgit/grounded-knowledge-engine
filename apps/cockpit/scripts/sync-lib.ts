@@ -10,9 +10,11 @@ const appRoot = path.resolve(__dirname, "..");
 // levels up at the repository root (`demo-kb/`, `kb/`). KB_PREVIEW_REPO_ROOT
 // points the viewer and the governance scripts at another workspace (for
 // example an exported one, or a test fixture).
-const repoRoot = process.env.KB_PREVIEW_REPO_ROOT
-  ? path.resolve(process.env.KB_PREVIEW_REPO_ROOT)
-  : path.resolve(appRoot, "../..");
+function repoRootNow(): string {
+  return process.env.KB_PREVIEW_REPO_ROOT
+    ? path.resolve(process.env.KB_PREVIEW_REPO_ROOT)
+    : path.resolve(appRoot, "../..");
+}
 const contentRoot = path.join(appRoot, "content");
 
 // Each entry maps a repo-root source folder to the folder it lands under inside
@@ -39,7 +41,7 @@ interface WorkspaceUiFileConfig {
 // synchronously and best-effort: the viewer must keep working on bare repos.
 function readWorkspaceUiConfig(): WorkspaceUiFileConfig {
   try {
-    const raw = fsSync.readFileSync(path.join(repoRoot, ".gke", "workspace.json"), "utf8");
+    const raw = fsSync.readFileSync(path.join(repoRootNow(), ".gke", "workspace.json"), "utf8");
     const parsed = JSON.parse(raw) as { ui?: WorkspaceUiFileConfig };
     return parsed?.ui && typeof parsed.ui === "object" ? parsed.ui : {};
   } catch {
@@ -194,7 +196,7 @@ export async function syncContent(options: SyncContentOptions = {}): Promise<Syn
   let assets = 0;
   for (const { from, to } of sourceFolders) {
     if (isOperationalStatePath(from) || isOperationalStatePath(to)) continue;
-    const source = path.join(repoRoot, from);
+    const source = path.join(repoRootNow(), from);
     const destination = path.join(contentRoot, to);
     if (!(await exists(source))) continue;
     const copied = await copyContentTree(source, destination);
@@ -206,7 +208,7 @@ export async function syncContent(options: SyncContentOptions = {}): Promise<Syn
     if (isOperationalStatePath(rootFile) || rootFile.includes("/") || rootFile.includes("\\")) {
       continue;
     }
-    const source = path.join(repoRoot, rootFile);
+    const source = path.join(repoRootNow(), rootFile);
     if (!(await exists(source))) continue;
     const copyDecision = shouldCopyFile(source, rootFile);
     if (!copyDecision.markdown && !copyDecision.asset) continue;
@@ -225,7 +227,7 @@ export async function syncContent(options: SyncContentOptions = {}): Promise<Syn
 export function getPaths(options: SyncContentOptions = {}): RepoPaths {
   return {
     appRoot,
-    repoRoot,
+    repoRoot: repoRootNow(),
     sourceFolders: parseSourceFolders(options),
   };
 }
