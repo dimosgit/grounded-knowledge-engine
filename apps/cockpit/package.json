@@ -17,7 +17,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretest": "npm run sync:content",
+    "pretest": "KB_PREVIEW_SOURCE_FOLDERS=demo-kb:kb,kb:kb npm run sync:content",
     "check:kb-topics": "tsx scripts/check-topic-module-ownership.ts",
     "check:kb-digests": "tsx scripts/check-kb-digests.ts",
     "check:kb-maintenance": "tsx scripts/check-kb-maintenance-cadence.ts",
