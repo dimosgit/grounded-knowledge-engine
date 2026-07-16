@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import fsSync from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,8 +7,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const appRoot = path.resolve(__dirname, "..");
 // The cockpit lives at `apps/cockpit`, so the knowledge base it renders sits two
-// levels up at the repository root (`demo-kb/`, `kb/`).
-const repoRoot = path.resolve(appRoot, "../..");
+// levels up at the repository root (`demo-kb/`, `kb/`). KB_PREVIEW_REPO_ROOT
+// points the viewer and the governance scripts at another workspace (for
+// example an exported one, or a test fixture).
+const repoRoot = process.env.KB_PREVIEW_REPO_ROOT
+  ? path.resolve(process.env.KB_PREVIEW_REPO_ROOT)
+  : path.resolve(appRoot, "../..");
 const contentRoot = path.join(appRoot, "content");
 
 // Each entry maps a repo-root source folder to the folder it lands under inside
@@ -23,6 +28,23 @@ export interface SourceFolder {
 
 export interface SyncContentOptions {
   publicOnly?: boolean;
+}
+
+interface WorkspaceUiFileConfig {
+  sourceFolders?: Array<{ from?: string; to?: string }>;
+  rootFiles?: string[];
+}
+
+// The committed workspace configuration may carry viewer settings. Read
+// synchronously and best-effort: the viewer must keep working on bare repos.
+function readWorkspaceUiConfig(): WorkspaceUiFileConfig {
+  try {
+    const raw = fsSync.readFileSync(path.join(repoRoot, ".gke", "workspace.json"), "utf8");
+    const parsed = JSON.parse(raw) as { ui?: WorkspaceUiFileConfig };
+    return parsed?.ui && typeof parsed.ui === "object" ? parsed.ui : {};
+  } catch {
+    return {};
+  }
 }
 
 function parseSourceFolders({ publicOnly = false }: SyncContentOptions = {}): SourceFolder[] {
@@ -41,10 +63,37 @@ function parseSourceFolders({ publicOnly = false }: SyncContentOptions = {}): So
         return { from, to: to || from };
       });
   }
+
+  const configured = readWorkspaceUiConfig().sourceFolders;
+  if (Array.isArray(configured) && configured.length) {
+    return configured
+      .filter((entry) => entry && typeof entry.from === "string" && entry.from.trim())
+      .map((entry) => {
+        const from = entry.from!.trim();
+        return { from, to: (entry.to ?? from).trim() || from };
+      });
+  }
+
   return [
     { from: "demo-kb", to: "kb" },
     { from: "kb", to: "kb" },
   ];
+}
+
+// Root-level standalone files (for example readme.md) that should appear in
+// the generated content tree alongside the source folders.
+function parseRootFiles({ publicOnly = false }: SyncContentOptions = {}): string[] {
+  if (publicOnly) return [];
+  const raw = process.env.KB_PREVIEW_ROOT_FILES?.trim();
+  if (raw) {
+    return raw
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  const configured = readWorkspaceUiConfig().rootFiles;
+  if (!Array.isArray(configured)) return [];
+  return configured.map((entry) => `${entry}`.trim()).filter(Boolean);
 }
 
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif"]);
@@ -151,6 +200,19 @@ export async function syncContent(options: SyncContentOptions = {}): Promise<Syn
     const copied = await copyContentTree(source, destination);
     markdown += copied.markdown;
     assets += copied.assets;
+  }
+
+  for (const rootFile of parseRootFiles(options)) {
+    if (isOperationalStatePath(rootFile) || rootFile.includes("/") || rootFile.includes("\\")) {
+      continue;
+    }
+    const source = path.join(repoRoot, rootFile);
+    if (!(await exists(source))) continue;
+    const copyDecision = shouldCopyFile(source, rootFile);
+    if (!copyDecision.markdown && !copyDecision.asset) continue;
+    await fs.copyFile(source, path.join(contentRoot, rootFile));
+    if (copyDecision.markdown) markdown += 1;
+    if (copyDecision.asset) assets += 1;
   }
 
   return {
