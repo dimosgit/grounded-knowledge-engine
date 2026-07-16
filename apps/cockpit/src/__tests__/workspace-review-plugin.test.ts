@@ -1,6 +1,7 @@
 /// <reference types="node" />
 // @vitest-environment node
 
+import { DEFAULT_DOMAIN_PROFILE } from "../../../../tools/workspaces/domain-profile";
 import http from "node:http";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
@@ -118,6 +119,8 @@ function testWorkspace(repoRoot: string): WorkspaceContext {
     realWriteRoots: [repoRoot],
     readOnly: true,
     sensitivity: "internal",
+  domain: DEFAULT_DOMAIN_PROFILE,
+  ui: {},
   };
 }
 

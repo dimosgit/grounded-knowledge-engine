@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import {
+  Download,
   AlertTriangle,
   ArrowDown,
   BarChart3,
@@ -14,7 +15,7 @@ import {
 } from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
 import { OperatorFrame } from "../components/OperatorFrame";
-import { writeTextToClipboard } from "../utils/clipboard";
+import { downloadTextFile, writeTextToClipboard } from "../utils/clipboard";
 
 const PROGRESS_PHASE = {
   active: { label: "In Progress" },
@@ -122,6 +123,13 @@ export function ProjectDetailView({
     taskBoardRef.current?.scrollIntoView({ block: "start" });
   }
 
+  function downloadMarkdown() {
+    if (!activeProject) return;
+    const markdown = activeProject.resumeMarkdown || activeProject.handoffMarkdown;
+    if (!markdown) return;
+    downloadTextFile(`${activeProject.id || "project"}-resume.md`, markdown);
+  }
+
   async function copyHandoff() {
     if (!activeProject?.handoffMarkdown) return;
     const copied = await writeTextToClipboard(activeProject.handoffMarkdown);
@@ -187,6 +195,14 @@ export function ProjectDetailView({
                   : handoffCopyState === "failed"
                     ? "Retry Copy"
                     : "Copy Handoff"}
+              </button>
+              <button
+                className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary"
+                type="button"
+                onClick={downloadMarkdown}
+              >
+                <Download size={16} />
+                Download Markdown
               </button>
               <button
                 className="flex items-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary"
