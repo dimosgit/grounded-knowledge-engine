@@ -14,6 +14,9 @@ const repoRoot = path.resolve(__dirname, "../..");
 const workspace = await loadWorkspaceContext({ repoRoot });
 
 export default defineConfig({
+  define: {
+    __KB_DEFAULT_ACTIVE_TRACK__: JSON.stringify(workspace.ui.defaultActiveTrack ?? "all"),
+  },
   plugins: [
     react(),
     createLifecycleWritebackPlugin({ repoRoot, workspace }),
