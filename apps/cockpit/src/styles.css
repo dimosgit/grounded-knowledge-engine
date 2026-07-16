@@ -24,6 +24,23 @@
   box-sizing: border-box;
 }
 
+/* Ask is a document-level drawer. It must remain inside the actual viewport
+   even when a legacy screen has a wider layout, and source-extracted answer
+   lines must never disappear off the right edge. */
+.grounded-ask-panel {
+  width: min(100vw, 42rem);
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+.grounded-answer-content {
+  min-width: 0;
+  max-width: 100%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
 /* Themed scrollbars across the whole cockpit so overflow areas — notably the
    Project Board's horizontal scroll — match the dark surface instead of the
    bright OS default. Uses the same palette as the Library panes below; more
