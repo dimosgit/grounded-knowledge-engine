@@ -39,6 +39,10 @@ function createGovernedFixture(): string {
     JSON.stringify({
       tracks: { domain: {} },
       moduleTracks: { "agent-runtime": "domain" },
+      governance: {
+        namingPrefixes: ["kb-"],
+        namingLegacyAllowlist: [],
+      },
       owners: {
         "kb-transport-basics.md": "agent-runtime",
         "oddly-named-topic.md": "agent-runtime",
