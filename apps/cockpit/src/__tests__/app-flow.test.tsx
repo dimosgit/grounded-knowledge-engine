@@ -11,7 +11,8 @@ afterEach(() => {
 
 describe("cockpit major flows", () => {
   async function openLearningLibrary(user) {
-    await user.click(screen.getByRole("button", { name: /Open learning library/i }));
+    await user.click(await screen.findByRole("button", { name: /Open learning library/i }));
+    await screen.findByPlaceholderText("Search all docs (modules, topics, terms, digests)...");
   }
 
   test("search surfaces topic docs by title", async () => {
@@ -44,6 +45,18 @@ describe("cockpit major flows", () => {
     ).toBeInTheDocument();
   });
 
+  test("direct document links load the full Markdown body on demand", async () => {
+    window.location.hash = "#/doc/kb%2Ftopics%2Fmcp-source-architecture.md";
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "MCP Source Notes: Architecture" }),
+    ).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(/MCP follows a client-server architecture/)).length,
+    ).toBeGreaterThan(0);
+  });
+
   test("quick search command bar finds notes globally", async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -53,7 +66,7 @@ describe("cockpit major flows", () => {
     await user.type(commandSearch, "sampling");
 
     expect(
-      await screen.findByRole("button", { name: /MCP Source Notes: Sampling/i }),
+      await screen.findByRole("option", { name: /MCP Source Notes: Sampling/i }),
     ).toBeInTheDocument();
   });
 

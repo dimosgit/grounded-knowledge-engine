@@ -94,6 +94,9 @@ export function ProjectDetailView({
   activeProject,
   linkedDocs,
   onOpenDoc,
+  bodyStatus,
+  bodyError,
+  onRetryBody,
 }) {
   const [handoffCopyState, setHandoffCopyState] = useState("idle");
   const taskBoardRef = useRef(null);
@@ -158,6 +161,30 @@ export function ProjectDetailView({
       askProjectTitle={activeProject?.title}
     >
       <div className="mx-auto flex max-w-[1200px] flex-col gap-10 px-4 py-8 md:px-8">
+        {bodyStatus === "loading" && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded border border-border-subtle bg-surface-container px-4 py-3 text-body-md text-on-surface-variant"
+          >
+            Loading the full project record…
+          </div>
+        )}
+        {bodyStatus === "error" && (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-3 rounded border border-status-blocked/40 bg-status-blocked/10 px-4 py-3 text-body-md"
+          >
+            <span>Could not load the full project record. {bodyError}</span>
+            <button
+              type="button"
+              className="rounded border border-border-subtle px-3 py-1.5 font-semibold"
+              onClick={onRetryBody}
+            >
+              Retry
+            </button>
+          </div>
+        )}
         <section className="flex flex-col justify-between gap-4 border-b border-border-subtle pb-6 md:flex-row md:items-end">
           <div>
             <div className="mb-2 flex items-center gap-3">

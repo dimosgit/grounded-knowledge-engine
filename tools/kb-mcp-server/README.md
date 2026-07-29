@@ -27,9 +27,11 @@ The `full` profile additionally exposes:
   questions use the shared atomic mutation service, so exact normalized
   duplicates return `unchanged` instead of adding another entry.
 
-When writes are disabled, mutation tools are omitted from discovery.
-`kb.answer_and_capture` remains available as a read-only grounded answer tool
-and skips automatic capture.
+Automatic retention through `kb.answer_and_capture` is read-only regardless of
+whether writes are enabled. It creates no Markdown, open question, or review
+proposal. Explicit `captureStrategy=note` and `captureStrategy=open_question`
+remain available when writes are enabled and the user deliberately requests
+retention. When writes are disabled, mutation tools are omitted from discovery.
 
 ## Run and configure
 
@@ -38,18 +40,23 @@ npm run dev:mcp
 npm run setup:mcp
 ```
 
-`setup:mcp` writes project-local adapters for Claude Code, Codex, and Gemini
-CLI. Every adapter launches this same server; there are no provider-specific
-server implementations.
+`setup:mcp` writes project-local adapters for Claude Code, Codex, Gemini CLI,
+and GitHub Copilot. Every adapter launches this same server; there are no
+provider-specific server implementations.
 
 ```bash
 npm run setup:mcp -- --client claude
 npm run setup:mcp -- --client codex
 npm run setup:mcp -- --client gemini
+npm run setup:mcp -- --client github-copilot
 npm run setup:mcp -- --profile core
 npm run setup:mcp -- --profile full
 npm run setup:mcp -- --no-writes
 ```
+
+The GitHub adapter writes the shared `.mcp.json` used by Copilot CLI and a
+VS Code-specific `.vscode/mcp.json`. See
+[`docs/integrations/github-copilot.md`](../../docs/integrations/github-copilot.md).
 
 ## Project Context
 
@@ -199,7 +206,8 @@ writes even if `KB_MCP_ENABLE_WRITES=true`.
 - Real writes require `KB_MCP_ENABLE_WRITES=true`; `dryRun=true` remains
   available for write previews.
 - `kb.answer_grounded` is evidence-gated and can abstain.
-- `kb.answer_and_capture` couples retrieval with explicit capture policy.
+- `kb.answer_and_capture` answers read-only by default; note and open-question
+  retention require an explicit capture strategy.
 - Grounded answers report an estimated visible-text token footprint split across
   the request, retrieved evidence, and answer. This is not a provider-billed
   total and excludes hidden agent context.

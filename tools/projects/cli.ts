@@ -3,6 +3,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { loadWorkspaceContext } from "../workspaces/config.js";
+import { createProjectCheckpoint, type CheckpointEvidenceInput } from "./checkpoint-service.js";
 import { reviewWorkspace } from "./index.js";
 import {
   addProjectTask,
@@ -38,6 +39,38 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     ...(requestedScanRoots.length ? { scanRoots: requestedScanRoots } : {}),
   });
   const scanRoots = [...workspace.scanRoots];
+
+  if (command === "checkpoint") {
+    const projectId = parsed.positionals[0];
+    if (!projectId || parsed.positionals.length > 1) {
+      throw new Error("Usage: gke checkpoint <project-id> [options]");
+    }
+    const result = await createProjectCheckpoint({
+      repoRoot,
+      workspace,
+      scanRoots,
+      projectId,
+      checkpointId: first(parsed, "id"),
+      title: first(parsed, "title") || "",
+      createdAt: first(parsed, "created-at"),
+      author: first(parsed, "author"),
+      whatChanged: first(parsed, "what-changed") || "",
+      completed: all(parsed, "completed"),
+      currentBlocker: first(parsed, "blocker"),
+      nextStartingPoint: first(parsed, "next-start") || "",
+      evidence: all(parsed, "evidence").map(parseCheckpointEvidence),
+      dryRun: has(parsed, "dry-run"),
+    });
+    if (json) console.log(JSON.stringify(result, null, 2));
+    else {
+      console.log(
+        `${result.dryRun ? "Would create" : "Created"} checkpoint ${result.checkpointId}`,
+      );
+      console.log(`Checkpoint record: ${result.path}`);
+      if (result.dryRun) console.log(`\n${result.content}`);
+    }
+    return 0;
+  }
 
   if (command === "create") {
     const projectId = parsed.positionals[0];
@@ -312,6 +345,18 @@ function assertKnownOptions(command: string | undefined, options: CliOptions): v
       "no-source-dir",
       "dry-run",
     ],
+    checkpoint: [
+      "id",
+      "title",
+      "created-at",
+      "author",
+      "what-changed",
+      "completed",
+      "blocker",
+      "next-start",
+      "evidence",
+      "dry-run",
+    ],
     list: [],
     review: ["as-of", "since", "state", "scan-root"],
     show: ["raw"],
@@ -355,6 +400,7 @@ function printHelp(): void {
 
 Usage:
   gke create <project-id> [options]
+  gke checkpoint <project-id> [options]
   gke list [--json]
   gke review [project-id] [--as-of <date>] [--since <date-or-timestamp>] [--state <state>]
   gke show <project-id> [--raw|--json]
@@ -384,6 +430,18 @@ Create options:
   --no-source-dir
   --dry-run
 
+Checkpoint options:
+  --id <checkpoint-id>        optional canonical ID; generated when omitted
+  --title <title>             required checkpoint label
+  --created-at <YYYY-MM-DD>   default: today
+  --author <author>           default: project owner
+  --what-changed <text>       required
+  --completed <text>          repeatable
+  --blocker <text>            default: None recorded.
+  --next-start <text>         required next starting point
+  --evidence <path:line>      repeatable; must be in explicit project scope
+  --dry-run
+
 Update options:
   --title <title>
   --status <status>
@@ -411,6 +469,12 @@ Task add options:
 Global options:
   --repo-root <path>
   --json`);
+}
+
+function parseCheckpointEvidence(value: string): CheckpointEvidenceInput {
+  const match = value.trim().match(/^(.+):([1-9]\d*)$/);
+  if (!match) throw new Error(`Checkpoint evidence must use path:line syntax: ${value}`);
+  return { path: match[1], line: Number.parseInt(match[2], 10) };
 }
 
 const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);

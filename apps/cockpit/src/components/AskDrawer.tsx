@@ -1,6 +1,7 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight, BookOpenCheck, Check, LoaderCircle, Search, X } from "lucide-react";
+import { useModalSurface } from "../hooks/useModalSurface";
 import {
   askGrounded,
   captureGroundedAnswer,
@@ -35,6 +36,13 @@ export function AskDrawer({
   const [asking, setAsking] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState("");
+  const questionRef = useRef<HTMLTextAreaElement>(null);
+  const modalRef = useModalSurface<HTMLDivElement>({
+    isOpen,
+    onClose: () => setIsOpen(false),
+    closeDisabled: capturing,
+    initialFocusRef: questionRef,
+  });
 
   async function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,20 +103,6 @@ export function AskDrawer({
     }
   }
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [isOpen]);
-
   return (
     <>
       <button
@@ -124,15 +118,19 @@ export function AskDrawer({
       {isOpen &&
         createPortal(
           <div
+            ref={modalRef}
             className="fixed inset-0 z-[120] flex justify-end"
             role="dialog"
             aria-modal="true"
             aria-labelledby="grounded-ask-title"
+            aria-describedby="grounded-ask-description"
+            tabIndex={-1}
           >
             <button
               type="button"
               className="absolute inset-0 bg-black/65"
-              aria-label="Close grounded Ask"
+              aria-hidden="true"
+              tabIndex={-1}
               onClick={() => setIsOpen(false)}
             />
             <section className="grounded-ask-panel relative flex h-full w-full max-w-2xl flex-col border-l border-border-subtle bg-background shadow-2xl">
@@ -144,7 +142,10 @@ export function AskDrawer({
                   >
                     Ask local knowledge
                   </h2>
-                  <p className="text-metadata text-on-surface-variant">
+                  <p
+                    id="grounded-ask-description"
+                    className="text-metadata text-on-surface-variant"
+                  >
                     Grounded in {scopeLabel} · capture is always explicit
                   </p>
                 </div>
@@ -172,6 +173,7 @@ export function AskDrawer({
                     </span>
                   </div>
                   <textarea
+                    ref={questionRef}
                     id="grounded-question"
                     aria-label="Question"
                     value={question}
@@ -211,6 +213,20 @@ export function AskDrawer({
                     </button>
                   </div>
                 </form>
+
+                {!capture && (
+                  <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                    {asking
+                      ? "Searching local knowledge."
+                      : capturing
+                        ? "Capturing the grounded answer."
+                        : answer
+                          ? answer.abstained
+                            ? "No verified answer was found."
+                            : "Grounded answer ready."
+                          : ""}
+                  </div>
+                )}
 
                 {error && (
                   <div

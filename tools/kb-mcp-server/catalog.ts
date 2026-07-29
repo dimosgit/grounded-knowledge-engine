@@ -203,10 +203,10 @@ function getRecordTool(): ToolDefinition {
 function answerAndCaptureTool(options: CatalogOptions): ToolDefinition {
   return {
     name: "kb.answer_and_capture",
-    title: options.writesEnabled ? "Answer and Capture Learning" : "Answer From Grounded Knowledge",
+    title: "Answer From Grounded Knowledge",
     description: options.writesEnabled
-      ? "Primary grounded Q&A tool. Call directly without pre-search; answer from local evidence and capture useful learning or an open question."
-      : "Primary grounded Q&A tool. Call directly without pre-search; automatic capture is skipped because writes are disabled.",
+      ? "Primary grounded Q&A tool. Call directly without pre-search; automatic retention is read-only, while explicit note/open-question strategies can retain user-requested knowledge."
+      : "Primary grounded Q&A tool. Call directly without pre-search; automatic retention is read-only, and explicit retention is unavailable because writes are disabled.",
     annotations: options.writesEnabled ? annotations.additiveWrite : annotations.read,
     inputSchema: {
       type: "object",
@@ -229,7 +229,12 @@ function answerAndCaptureTool(options: CatalogOptions): ToolDefinition {
         responseMode: { type: "string", enum: ["auto", "fast", "curate"] },
         backend: { type: "string", enum: ["bm25", "sqlite"] },
         responseFormat: { type: "string", enum: ["compact", "full"] },
-        captureStrategy: { type: "string", enum: ["auto", "note", "open_question", "none"] },
+        captureStrategy: {
+          type: "string",
+          enum: ["auto", "note", "open_question", "none"],
+          description:
+            "auto is read-only; use note or open_question only for explicit user-requested retention",
+        },
         noteKind: { type: "string", enum: ["topic", "term"] },
         notePath: { type: "string" },
         noteTitle: { type: "string" },

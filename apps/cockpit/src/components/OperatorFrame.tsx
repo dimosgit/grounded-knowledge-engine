@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   Archive,
   BookOpen,
@@ -17,6 +19,7 @@ import {
   UserCircle,
   X,
 } from "lucide-react";
+import { useModalSurface } from "../hooks/useModalSurface";
 import { OperatorActions } from "./OperatorActions";
 
 export function OperatorFrame({
@@ -33,6 +36,13 @@ export function OperatorFrame({
   askProjectTitle = undefined,
 }) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const mobileNavCloseRef = useRef<HTMLButtonElement>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const mobileNavModalRef = useModalSurface<HTMLDivElement>({
+    isOpen: isMobileNavOpen,
+    onClose: () => setIsMobileNavOpen(false),
+    initialFocusRef: mobileNavCloseRef,
+  });
   const [isNavCollapsed, setIsNavCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -66,96 +76,124 @@ export function OperatorFrame({
   return (
     <div className="min-h-screen bg-background text-on-surface">
       {commandBar}
-      {isMobileNavOpen && (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-black/60 md:hidden"
-          onClick={() => setIsMobileNavOpen(false)}
-          aria-label="Close side menu"
-        />
-      )}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[300px] flex-col border-r border-border-subtle bg-surface-sidebar px-4 py-6 shadow-2xl shadow-black/40 transition-transform duration-200 md:hidden ${
-          isMobileNavOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
-        aria-hidden={!isMobileNavOpen}
-      >
-        <button
-          type="button"
-          className="mb-8 flex w-full items-center gap-3 rounded px-2 py-1 pr-12 text-left transition hover:bg-surface-container-high"
-          onClick={() => runNavAction(onHub)}
-          aria-label="Go to Mission Control"
-        >
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-primary-container text-on-primary-container">
-            <Rocket size={18} />
-          </div>
-          <div className="min-w-0">
-            <div className="font-display text-headline-sm font-semibold">Operator Cockpit</div>
-            <div className="text-metadata text-on-surface-variant">Technical Lead</div>
-          </div>
-        </button>
-        <button
-          type="button"
-          className="absolute right-4 top-6 flex h-9 w-9 items-center justify-center rounded border border-border-subtle bg-surface-container text-on-surface-variant hover:border-primary hover:text-primary"
-          onClick={() => setIsMobileNavOpen(false)}
-          aria-label="Close side menu"
-        >
-          <X size={18} />
-        </button>
-
-        <button
-          className="mb-8 flex w-full items-center justify-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary opacity-70"
-          type="button"
-          disabled
-        >
-          <Plus size={16} />
-          New Document
-        </button>
-
-        <nav className="flex flex-1 flex-col gap-1" aria-label="Mobile operator views">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              item.key === activeView || (item.key === "library" && activeView === "doc");
-            return (
+      {typeof document !== "undefined" &&
+        isMobileNavOpen &&
+        createPortal(
+          <motion.div
+            ref={mobileNavModalRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="mobile-operator-navigation-title"
+            aria-describedby="mobile-operator-navigation-description"
+            tabIndex={-1}
+            className="fixed inset-0 z-40 md:hidden"
+            initial={shouldReduceMotion ? false : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: shouldReduceMotion ? 0 : 0.18 }}
+          >
+            <h2 id="mobile-operator-navigation-title" className="sr-only">
+              Operator navigation
+            </h2>
+            <p id="mobile-operator-navigation-description" className="sr-only">
+              Choose an Operator Cockpit view or close the navigation menu.
+            </p>
+            <button
+              type="button"
+              className="fixed inset-0 bg-black/60"
+              aria-hidden="true"
+              tabIndex={-1}
+              onClick={() => setIsMobileNavOpen(false)}
+            />
+            <motion.aside
+              className="fixed inset-y-0 left-0 z-50 flex w-[300px] flex-col border-r border-border-subtle bg-surface-sidebar px-4 py-6 shadow-2xl shadow-black/40"
+              initial={shouldReduceMotion ? false : { x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ duration: shouldReduceMotion ? 0 : 0.18 }}
+            >
               <button
-                key={item.key}
                 type="button"
-                className={`flex items-center gap-3 rounded px-3 py-3 text-left text-body-md transition ${
-                  isActive
-                    ? "bg-surface-container-high text-primary"
-                    : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                } ${item.disabled ? "cursor-not-allowed opacity-45" : ""}`}
-                onClick={() => runNavAction(item.onClick)}
-                disabled={item.disabled}
-                aria-current={isActive ? "page" : undefined}
+                className="mb-8 flex w-full items-center gap-3 rounded px-2 py-1 pr-12 text-left transition hover:bg-surface-container-high"
+                onClick={() => runNavAction(onHub)}
+                aria-label="Go to Mission Control"
               >
-                <Icon className="shrink-0" size={20} />
-                {item.label}
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-primary-container text-on-primary-container">
+                  <Rocket size={18} />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-display text-headline-sm font-semibold">
+                    Operator Cockpit
+                  </div>
+                  <div className="text-metadata text-on-surface-variant">Technical Lead</div>
+                </div>
               </button>
-            );
-          })}
-        </nav>
+              <button
+                ref={mobileNavCloseRef}
+                type="button"
+                className="absolute right-4 top-6 flex h-9 w-9 items-center justify-center rounded border border-border-subtle bg-surface-container text-on-surface-variant hover:border-primary hover:text-primary"
+                onClick={() => setIsMobileNavOpen(false)}
+                aria-label="Close side menu"
+              >
+                <X size={18} />
+              </button>
 
-        <div className="mt-auto flex flex-col gap-1 border-t border-border-subtle pt-4">
-          <button
-            className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45"
-            disabled
-            type="button"
-          >
-            <HelpCircle size={20} />
-            Support
-          </button>
-          <button
-            className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45"
-            disabled
-            type="button"
-          >
-            <Archive size={20} />
-            Archive
-          </button>
-        </div>
-      </aside>
+              <button
+                className="mb-8 flex w-full items-center justify-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary opacity-70"
+                type="button"
+                disabled
+              >
+                <Plus size={16} />
+                New Document
+              </button>
+
+              <nav className="flex flex-1 flex-col gap-1" aria-label="Mobile operator views">
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive =
+                    item.key === activeView || (item.key === "library" && activeView === "doc");
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`flex items-center gap-3 rounded px-3 py-3 text-left text-body-md transition ${
+                        isActive
+                          ? "bg-surface-container-high text-primary"
+                          : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                      } ${item.disabled ? "cursor-not-allowed opacity-45" : ""}`}
+                      onClick={() => runNavAction(item.onClick)}
+                      disabled={item.disabled}
+                      aria-current={isActive ? "page" : undefined}
+                    >
+                      <Icon className="shrink-0" size={20} />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </nav>
+
+              <div className="mt-auto flex flex-col gap-1 border-t border-border-subtle pt-4">
+                <button
+                  className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45"
+                  disabled
+                  type="button"
+                >
+                  <HelpCircle size={20} />
+                  Support
+                </button>
+                <button
+                  className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45"
+                  disabled
+                  type="button"
+                >
+                  <Archive size={20} />
+                  Archive
+                </button>
+              </div>
+            </motion.aside>
+          </motion.div>,
+          document.body,
+        )}
       <aside
         className={`fixed left-0 top-0 z-40 hidden h-full flex-col border-r border-border-subtle bg-surface-sidebar py-6 transition-all duration-200 md:flex ${
           isNavCollapsed ? "w-[88px] px-3" : "w-[280px] px-4"

@@ -1,10 +1,10 @@
 # Current Hardening and Operator Execution Plan
 
-**Status:** In progress — prompts 0–5 delivered; prompt 6 is next.
-**Review date:** 2026-07-14.
+**Status:** Complete — prompts 0–7 delivered.
+**Review date:** 2026-07-29.
 **Baseline:** Capture planning, policy routing, daily project review, retrieval
 quality gates, visible answer token estimates, and the local Cockpit Ask/review
-workflow are implemented.
+workflow and modal accessibility are implemented.
 
 ## Objective
 
@@ -37,8 +37,8 @@ at a time without reconstructing the wider roadmap.
 | 3     | [Shared Open-Question Mutation Service](../prompt/2026-07-14-shared-open-question-mutation-service.md) **Delivered**         | Open-question writes become atomic, deduplicated, reusable, and workspace-authorized.                | 1          |
 | 4     | [Project-Scoped Ask and Live Capture Queue](../prompt/2026-07-14-cockpit-project-scoped-ask-and-live-queue.md) **Delivered** | Project Ask uses the active project and new proposals immediately update the review workflow.        | 1, 3       |
 | 5     | [Cockpit Daily Attention](../prompt/2026-07-14-cockpit-daily-attention.md) **Delivered**                                     | Existing due-review, blocker, open-question, and changed-document signals become operable in the UI. | 1, 4       |
-| 6     | [Cockpit Modal Accessibility](../prompt/2026-07-14-cockpit-modal-accessibility.md)                                           | Drawers, command search, and mobile navigation have consistent keyboard and focus behavior.          | 4          |
-| 7     | [Cockpit Content Scaling](../prompt/2026-07-14-cockpit-content-scaling.md)                                                   | Metadata loads eagerly, Markdown bodies load on demand, and CI enforces an initial-bundle budget.    | 0, 4       |
+| 6     | [Cockpit Modal Accessibility](../prompt/2026-07-14-cockpit-modal-accessibility.md) **Delivered**                             | Drawers, command search, and mobile navigation have consistent keyboard and focus behavior.          | 4          |
+| 7     | [Cockpit Content Scaling](../prompt/2026-07-14-cockpit-content-scaling.md) **Delivered**                                     | Metadata loads eagerly, Markdown bodies load on demand, and CI enforces an initial-bundle budget.    | 0, 4       |
 
 Prompts 2 and 3 may run in parallel only when separate branches are used and
 both start from the completed Workspace Leakage Guard. For a smaller model,
@@ -57,7 +57,7 @@ sequential execution is preferred.
 5. Accessibility and scaling follow the corrected workflow to avoid polishing
    components that are still changing structurally.
 
-## Deferred until this plan is complete
+## Deferred beyond this completed plan
 
 - Checkpoint creation.
 - Decision Replay.
@@ -81,3 +81,9 @@ The plan is complete only when:
 6. Modal keyboard behavior and initial-bundle budgets are enforced in tests.
 7. `README.md`, `docs/workspace-data-architecture.md`, and active roadmap status
    labels describe only implemented behavior as implemented.
+
+Prompt 7 completed the plan with a deterministic bounded catalog, cached lazy
+Markdown loading, route-level code splitting, a Vite manifest, and an initial
+JavaScript CI budget of 350 KB raw and 120 KB gzip. The delivery build measured
+218.5 KB raw and 65.9 KB gzip across the entry and its static JavaScript
+dependencies.

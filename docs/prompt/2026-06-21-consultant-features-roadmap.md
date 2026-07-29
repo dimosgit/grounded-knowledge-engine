@@ -2,8 +2,9 @@
 
 **Status:** In progress — MCP Core Modernization, Project Context, the Leakage
 Guard, and the read-only loopback HTTP bridge are delivered. Tunnel and
-Copilot-adapter work remain planned. **Repository:** Grounded
-Knowledge Engine. **Last updated:** 2026-07-14. **Current execution:**
+Microsoft tenant validation remain planned; the local GitHub Copilot adapter is
+delivered. **Repository:** Grounded Knowledge Engine. **Last updated:**
+2026-07-29. **Current execution:**
 [Current Hardening and Operator Execution Plan](../planning/2026-07-14-current-hardening-and-operator-execution-plan.md).
 
 ## Product goal
@@ -24,15 +25,19 @@ All three must implement the shared
 normative contract for paths, record schemas, IDs, relationships, runtime data,
 workspace boundaries, and migration.
 
-Decision Replay is tracked separately as remaining work because it is a new
-product workflow, not one of the three consultant-foundation features:
+Decision Replay is tracked separately because it is a new product workflow,
+not one of the three consultant-foundation features. Its canonical local
+create/get/list slice is implemented; review, supersession, MCP, and Cockpit
+work remain:
 [Decision Replay](2026-06-21-decision-replay.md).
 
 Capture integrity and the local operator review loop are also tracked
 separately. Their capture-planning and local-review foundations are
-implemented, including source-aware re-ingestion and Cockpit daily attention.
-Cockpit scaling remains planned. Together, they strengthen how grounded evidence becomes
-canonical knowledge without expanding the four-tool core MCP surface:
+implemented, including source-aware re-ingestion, Cockpit daily attention, and
+modal accessibility. Cockpit catalog generation, lazy Markdown bodies, and the
+initial-bundle CI budget are also implemented. Together, they strengthen how
+grounded evidence becomes canonical knowledge without expanding the four-tool
+core MCP surface:
 [Capture Integrity and Operator Workflow Roadmap](../planning/2026-07-13-capture-integrity-and-operator-workflow-roadmap.md).
 
 [MCP Core Modernization](2026-06-21-mcp-core-modernization.md) is delivered.
@@ -109,9 +114,13 @@ Exit gate:
 Status: passed by the project-context, MCP catalog/transport, Cockpit, and
 full GKE test suites.
 
-### Phase 2 — Workspace Vaults and Leakage Guard
+### Phase 2 — Workspace Vaults and Leakage Guard — thin guard delivered
 
 Introduce the trust boundary before any tunnel exposure.
+
+The immutable workspace context, realpath-confined roots, read-only policy, and
+adversarial isolation tests are implemented. Multi-vault lifecycle management
+and in-process workspace switching remain outside the thin delivered kernel.
 
 Deliver:
 
@@ -133,10 +142,12 @@ Exit gate:
 
 Add new agent surfaces only after the workspace policy is reusable.
 
-Implementation note: the read-only loopback HTTP bridge is already
-implemented and covered by integration tests. The authenticated tunnel and
-Copilot adapters in this phase remain planned until the Leakage Guard is
-complete.
+Implementation note: the read-only loopback HTTP bridge is already implemented
+and covered by integration tests. The Leakage Guard prerequisite, local GitHub
+Copilot adapter, Copilot Studio onboarding guide, and compatibility matrix are
+also implemented. Live tunnel/tenant validation and a runnable Microsoft 365
+declarative-agent package remain planned; the package additionally requires a
+production-capable OAuth/OIDC or Entra authorization boundary.
 
 Deliver:
 
@@ -177,7 +188,8 @@ explicit approval.
    GitHub-specific grounding implementation is allowed.
 8. Tunnel access is opt-in, authenticated, short-lived, workspace-scoped, and
    strictly read-only in the first milestone.
-9. Existing Claude, Codex, and Gemini local workflows must remain compatible.
+9. Existing Claude, Codex, Gemini, and GitHub Copilot local workflows must
+   remain compatible.
 
 ## Shared validation gate
 

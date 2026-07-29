@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Register this repo's one KB MCP server with Claude Code, Codex, and Gemini CLI.
+// Register this repo's one KB MCP server with Claude Code, Codex, Gemini CLI,
+// and GitHub Copilot.
 //
 //   node scripts/configure-mcp.mjs
 //   node scripts/configure-mcp.mjs --client codex
+//   node scripts/configure-mcp.mjs --client github-copilot
 //   node scripts/configure-mcp.mjs --profile full
 //   node scripts/configure-mcp.mjs --no-writes
 //   node scripts/configure-mcp.mjs --skip-smoke
@@ -18,11 +20,14 @@ import { fileURLToPath } from "node:url";
 const SERVER_NAME = "kb";
 const SERVER_ENTRY_REL = "tools/kb-mcp-server/server.ts";
 const SMOKE_TEST_REL = "tools/kb-mcp-server/smoke-test.ts";
-const SUPPORTED_CLIENTS = new Set(["claude", "codex", "gemini", "all"]);
+const SUPPORTED_CLIENTS = new Set(["claude", "codex", "gemini", "github-copilot", "all"]);
 const MANAGED_TOML_START = "# >>> Grounded Knowledge Engine MCP (managed by setup:mcp)";
 const MANAGED_TOML_END = "# <<< Grounded Knowledge Engine MCP";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const configRoot = process.env.GKE_MCP_CONFIG_ROOT
+  ? resolve(process.env.GKE_MCP_CONFIG_ROOT)
+  : repoRoot;
 const cliArgs = process.argv.slice(2);
 const enableWrites = !cliArgs.includes("--no-writes");
 const skipSmoke = cliArgs.includes("--skip-smoke");
@@ -30,11 +35,14 @@ const requestedClient = readOption(cliArgs, "--client") || "all";
 const requestedProfile = readOption(cliArgs, "--profile") || "core";
 
 if (!SUPPORTED_CLIENTS.has(requestedClient)) {
-  console.error(`\n✗ Unsupported client "${requestedClient}". Use claude, codex, gemini, or all.`);
+  console.error(
+    `\n✗ Unsupported client "${requestedClient}". Use claude, codex, gemini, github-copilot, or all.`,
+  );
   process.exit(1);
 }
 
-const clients = requestedClient === "all" ? ["claude", "codex", "gemini"] : [requestedClient];
+const clients =
+  requestedClient === "all" ? ["claude", "codex", "gemini", "github-copilot"] : [requestedClient];
 const isWindows = process.platform === "win32";
 const nodeBin = process.execPath;
 const tsxBin = join(repoRoot, "node_modules", ".bin", isWindows ? "tsx.cmd" : "tsx");
@@ -114,7 +122,7 @@ function replaceManagedTomlBlock(current, block) {
 }
 
 function ensureGitignore(entries) {
-  const path = join(repoRoot, ".gitignore");
+  const path = join(configRoot, ".gitignore");
   const current = existsSync(path) ? readFileSync(path, "utf8") : "";
   const lines = new Set(current.split(/\r?\n/).map((line) => line.trim()));
   const missing = entries.filter((entry) => !lines.has(entry));
@@ -127,21 +135,25 @@ function ensureGitignore(entries) {
   );
 }
 
-function configureClaude() {
-  step("Configuring Claude Code (.mcp.json)…");
-  const mcpPath = join(repoRoot, ".mcp.json");
+function configureSharedMcpJson() {
+  step("Configuring shared MCP project entry (.mcp.json)…");
+  const mcpPath = join(configRoot, ".mcp.json");
   const mcp = readJson(mcpPath);
   mcp.mcpServers = {
     ...(mcp.mcpServers ?? {}),
     [SERVER_NAME]: {
+      type: "stdio",
       command: nodeBin,
       args: [tsxBin, serverEntry],
       env: serverEnv,
     },
   };
   writeJson(mcpPath, mcp);
+}
 
-  const settingsPath = join(repoRoot, ".claude", "settings.local.json");
+function configureClaude() {
+  step("Approving the shared entry for Claude Code (.claude/settings.local.json)…");
+  const settingsPath = join(configRoot, ".claude", "settings.local.json");
   const settings = readJson(settingsPath);
   const approved = new Set(settings.enabledMcpjsonServers ?? []);
   approved.add(SERVER_NAME);
@@ -151,7 +163,7 @@ function configureClaude() {
 
 function configureCodex() {
   step("Configuring Codex (.codex/config.toml)…");
-  const configPath = join(repoRoot, ".codex", "config.toml");
+  const configPath = join(configRoot, ".codex", "config.toml");
   const current = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
   const envLines = [
     `[mcp_servers.${SERVER_NAME}.env]`,
@@ -175,7 +187,7 @@ function configureCodex() {
 
 function configureGemini() {
   step("Configuring Gemini CLI (.gemini/settings.json)…");
-  const settingsPath = join(repoRoot, ".gemini", "settings.json");
+  const settingsPath = join(configRoot, ".gemini", "settings.json");
   const settings = readJson(settingsPath);
   settings.mcpServers = {
     ...(settings.mcpServers ?? {}),
@@ -183,6 +195,22 @@ function configureGemini() {
       command: nodeBin,
       args: [tsxBin, serverEntry],
       cwd: repoRoot,
+      env: serverEnv,
+    },
+  };
+  writeJson(settingsPath, settings);
+}
+
+function configureGithubCopilot() {
+  step("Configuring GitHub Copilot in VS Code (.vscode/mcp.json)…");
+  const settingsPath = join(configRoot, ".vscode", "mcp.json");
+  const settings = readJson(settingsPath);
+  settings.servers = {
+    ...(settings.servers ?? {}),
+    [SERVER_NAME]: {
+      type: "stdio",
+      command: nodeBin,
+      args: [tsxBin, serverEntry],
       env: serverEnv,
     },
   };
@@ -207,10 +235,14 @@ if (!existsSync(serverEntry)) {
 }
 
 // 2. Client adapters ----------------------------------------------------------
+if (clients.includes("claude") || clients.includes("github-copilot")) {
+  configureSharedMcpJson();
+}
 for (const client of clients) {
   if (client === "claude") configureClaude();
   if (client === "codex") configureCodex();
   if (client === "gemini") configureGemini();
+  if (client === "github-copilot") configureGithubCopilot();
 }
 
 // 3. Ignore generated machine-specific files ---------------------------------
@@ -220,6 +252,7 @@ ensureGitignore([
   ".claude/settings.local.json",
   ".codex/config.toml",
   ".gemini/settings.json",
+  ".vscode/mcp.json",
 ]);
 
 // 4. Verify the one shared server ---------------------------------------------

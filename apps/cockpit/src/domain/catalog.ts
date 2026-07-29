@@ -1,17 +1,4 @@
-import {
-  getDocType,
-  getExcerpt,
-  getLearningItemType,
-  getSection,
-  getTag,
-  getTitle,
-  getTrackKey,
-  getTrackLabel,
-  matchesTagFilter,
-  normalizePath,
-  parseFrontmatter,
-} from "./docs";
-import { buildSearchFields } from "../lib/search";
+import { matchesTagFilter } from "./docs";
 
 function shouldIndexDoc(path, frontmatter) {
   // `frontmatter.template === "true"` supports explicit template-marked docs.
@@ -21,38 +8,13 @@ function shouldIndexDoc(path, frontmatter) {
   return true;
 }
 
-export function buildDocs(markdownModules) {
-  return Object.entries(markdownModules)
-    .map(([rawPath, content]) => {
-      const { body, frontmatter } = parseFrontmatter(content);
-      const path = normalizePath(rawPath);
-      const title = getTitle(path, body);
-      const excerpt = getExcerpt(body);
-      const docType = getDocType(path, title, body, frontmatter);
-      const track = getTrackKey(path, frontmatter);
-      const trackLabel = getTrackLabel(track, frontmatter);
-      const learningItemType = getLearningItemType(docType);
-      const searchFields = buildSearchFields(
-        `${title}\n${path}\n${trackLabel}\n${excerpt}\n${JSON.stringify(frontmatter)}\n${body}`,
-      );
-
-      return {
-        path,
-        section: getSection(path),
-        tag: getTag(path),
-        docType,
-        learningItemType,
-        track,
-        trackLabel,
-        content: body,
-        frontmatter,
-        title,
-        excerpt,
-        searchIndex: searchFields.raw,
-        searchIndexNormalized: searchFields.normalized,
-        searchIndexCompact: searchFields.compact,
-      };
-    })
+export function buildDocs(catalogEntries) {
+  return catalogEntries
+    .map((entry) => ({
+      ...entry,
+      content: entry.structuralContent || "",
+      searchIndexCompact: (entry.searchIndexNormalized || "").replace(/\s+/g, ""),
+    }))
     .filter((doc) => shouldIndexDoc(doc.path, doc.frontmatter))
     .sort((a, b) => a.path.localeCompare(b.path));
 }

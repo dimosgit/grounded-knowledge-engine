@@ -3,11 +3,13 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { runCaptureCli } from "./capture/cli.js";
+import { runDecisionCli } from "./decisions/cli.js";
 import { runProjectCli } from "./projects/cli.js";
 
 export async function runGkeCli(argv: string[], cwd = process.cwd()): Promise<number> {
   const [command, ...rest] = argv;
   if (command === "capture") return runCaptureCli(rest, cwd);
+  if (command === "decisions") return runDecisionCli(rest, cwd);
   return runProjectCli(argv, cwd);
 }
 

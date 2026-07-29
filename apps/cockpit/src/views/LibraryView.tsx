@@ -107,6 +107,9 @@ export function LibraryView({
   digestQuickView,
   quickRecall,
   readableDocContent,
+  activeDocBodyStatus,
+  activeDocBodyError,
+  onRetryActiveDocBody,
   onOpenDoc,
   onRevealActiveDoc,
   renderHighlighted,
@@ -394,18 +397,40 @@ export function LibraryView({
                       </button>
                     </div>
                   )}
-                  <QuickRecallCard quickRecall={quickRecall} digestQuickView={digestQuickView} />
-                  <Suspense fallback={<p>Loading document renderer...</p>}>
-                    <MarkdownArticle
-                      activePath={activeDoc.path}
-                      content={readableDocContent || activeDoc.content}
-                      docs={docs}
-                      onOpenDoc={onOpenDoc}
-                      resolveMarkdownDocPath={resolveMarkdownDocPath}
-                      resolveMarkdownAssetPath={resolveMarkdownAssetPath}
-                      suppressTopLevelTitle
-                    />
-                  </Suspense>
+                  {activeDocBodyStatus === "loading" && (
+                    <section className="empty-state" role="status" aria-live="polite">
+                      <h2>Loading document…</h2>
+                      <p>Retrieving the full Markdown body for this note.</p>
+                    </section>
+                  )}
+                  {activeDocBodyStatus === "error" && (
+                    <section className="empty-state" role="alert">
+                      <h2>Could not load document</h2>
+                      <p>{activeDocBodyError}</p>
+                      <button className="action-btn" type="button" onClick={onRetryActiveDocBody}>
+                        Retry
+                      </button>
+                    </section>
+                  )}
+                  {activeDocBodyStatus === "ready" && (
+                    <>
+                      <QuickRecallCard
+                        quickRecall={quickRecall}
+                        digestQuickView={digestQuickView}
+                      />
+                      <Suspense fallback={<p role="status">Loading document renderer…</p>}>
+                        <MarkdownArticle
+                          activePath={activeDoc.path}
+                          content={readableDocContent}
+                          docs={docs}
+                          onOpenDoc={onOpenDoc}
+                          resolveMarkdownDocPath={resolveMarkdownDocPath}
+                          resolveMarkdownAssetPath={resolveMarkdownAssetPath}
+                          suppressTopLevelTitle
+                        />
+                      </Suspense>
+                    </>
+                  )}
                 </article>
               </>
             ) : docs.length === 0 ? (

@@ -38,6 +38,8 @@ script, so "run a single test" means running its npm script directly:
 | `npm run test:mcp:http`                    | loopback HTTP bridge + API-key auth                     |
 | `npm run test:projects`                    | strict project resolution, isolation, resource parity   |
 | `npm run test:project-service`             | project CLI service (create/update/link/validate)       |
+| `npm run test:checkpoints`                 | append-only project checkpoints and scoped evidence     |
+| `npm run test:decisions`                   | canonical decision create/get/list lifecycle            |
 | `npm run test:document-core`               | shared document parsing                                 |
 | `npm run smoke:mcp`                        | end-to-end MCP discovery, grounding, capture, resume    |
 | `npm run test:loop`                        | ground → capture → re-ground → cite loop                |
@@ -46,7 +48,8 @@ script, so "run a single test" means running its npm script directly:
 | `npm run test:retrieval`                   | isolated category floors across BM25 and SQLite         |
 
 Other frequently used entry points: `npm run search -- --query "…"`,
-`npm run project -- <create|list|show|validate|update|link>`,
+`npm run project -- <create|checkpoint|list|show|validate|update|link>`,
+`npm run decisions -- <create|get|list>`,
 `npm run ingest -- <folder>`, `npm run setup:mcp`, `npm run dev:mcp`.
 
 ## Commands — Cockpit (`apps/cockpit`)

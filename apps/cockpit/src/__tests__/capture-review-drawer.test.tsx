@@ -28,6 +28,10 @@ describe("capture review drawer", () => {
   test("loads a proposal and requires an explicit action before applying", async () => {
     const proposalId = "capture-20260713090000-abcdef123456";
     let listCount = 0;
+    let resolveApply: ((response: Response) => void) | undefined;
+    const applyResponse = new Promise<Response>((resolve) => {
+      resolveApply = resolve;
+    });
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/proposals") && (!init?.method || init.method === "GET")) {
@@ -85,7 +89,7 @@ describe("capture review drawer", () => {
       if (url.endsWith(`/proposals/${proposalId}/apply`)) {
         expect(init?.method).toBe("POST");
         expect(JSON.parse(String(init?.body))).toEqual({ action: "replace" });
-        return jsonResponse({ result: { proposalId, action: "replaced" } });
+        return applyResponse;
       }
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -102,6 +106,11 @@ describe("capture review drawer", () => {
     expect(apply).toBeEnabled();
     await user.click(apply);
 
+    expect(screen.getByRole("status")).toHaveTextContent("Applying the capture review decision.");
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "Capture review queue" })).toBeInTheDocument();
+
+    resolveApply?.(jsonResponse({ result: { proposalId, action: "replaced" } }));
     await waitFor(() =>
       expect(screen.getByText("No pending capture proposals.")).toBeInTheDocument(),
     );

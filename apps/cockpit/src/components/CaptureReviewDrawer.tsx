@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, Inbox, LoaderCircle, RefreshCw, Trash2, X } from "lucide-react";
+import { useModalSurface } from "../hooks/useModalSurface";
 import {
   applyCaptureProposal,
   CaptureReviewApiError,
@@ -39,6 +40,13 @@ export function CaptureReviewDrawer({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const modalRef = useModalSurface<HTMLDivElement>({
+    isOpen,
+    onClose,
+    closeDisabled: submitting,
+    initialFocusRef: closeButtonRef,
+  });
 
   useEffect(() => {
     if (!isOpen || !selectedId) {
@@ -91,20 +99,6 @@ export function CaptureReviewDrawer({
   const loading = queueLoading || previewLoading;
   const visibleError = error || queueError;
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [isOpen, onClose]);
-
   return (
     <>
       <button
@@ -125,16 +119,20 @@ export function CaptureReviewDrawer({
       {isOpen &&
         createPortal(
           <div
+            ref={modalRef}
             className="fixed inset-0 z-[120] flex justify-end"
             role="dialog"
             aria-modal="true"
             aria-labelledby="capture-review-title"
+            aria-describedby="capture-review-description"
+            tabIndex={-1}
           >
             <button
               type="button"
               className="absolute inset-0 bg-black/65"
-              aria-label="Close capture review queue"
-              onClick={onClose}
+              aria-hidden="true"
+              tabIndex={-1}
+              onClick={submitting ? undefined : onClose}
             />
             <section className="relative flex h-full w-full max-w-6xl flex-col border-l border-border-subtle bg-background shadow-2xl">
               <header className="flex h-16 shrink-0 items-center justify-between border-b border-border-subtle px-5">
@@ -145,7 +143,10 @@ export function CaptureReviewDrawer({
                   >
                     Capture review queue
                   </h2>
-                  <p className="text-metadata text-on-surface-variant">
+                  <p
+                    id="capture-review-description"
+                    className="text-metadata text-on-surface-variant"
+                  >
                     Local proposals only · applying writes canonical Markdown
                   </p>
                 </div>
@@ -160,10 +161,12 @@ export function CaptureReviewDrawer({
                     <RefreshCw size={17} />
                   </button>
                   <button
+                    ref={closeButtonRef}
                     type="button"
                     className="rounded border border-border-subtle p-2 text-on-surface-variant hover:text-primary"
                     onClick={onClose}
                     aria-label="Close capture review queue"
+                    disabled={submitting}
                   >
                     <X size={18} />
                   </button>
@@ -171,6 +174,15 @@ export function CaptureReviewDrawer({
               </header>
 
               <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[300px_1fr]">
+                <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+                  {submitting
+                    ? "Applying the capture review decision."
+                    : loading
+                      ? "Loading capture review."
+                      : proposals.length > 0
+                        ? `${proposals.length} capture proposal${proposals.length === 1 ? "" : "s"} available.`
+                        : ""}
+                </div>
                 <aside className="overflow-y-auto border-r border-border-subtle bg-surface-sidebar p-3">
                   {proposals.map((item) => (
                     <button
@@ -193,7 +205,11 @@ export function CaptureReviewDrawer({
                     </button>
                   ))}
                   {!loading && proposals.length === 0 && !visibleError && (
-                    <div className="p-5 text-center text-body-md text-on-surface-variant">
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className="p-5 text-center text-body-md text-on-surface-variant"
+                    >
                       No pending capture proposals.
                     </div>
                   )}
