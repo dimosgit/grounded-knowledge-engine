@@ -79,6 +79,7 @@ flowchart TB
 | **Project core** (`tools/projects`)    | Workspace-pinned application service over canonical project administration, checkpoints, strict membership, review, cited capsules, and handoff formatting.                                    | Shared by CLI, MCP, and Cockpit      |
 | **Decision core** (`tools/decisions`)  | Workspace-pinned application service over canonical creation, exact retrieval, evidence review diffs, append-only history, supersession, and review-state calculation.                         | Shared by CLI, MCP, and Cockpit      |
 | **Question core** (`tools/questions`)  | Workspace-pinned application service over atomic, exactly deduplicated, workspace-authorized open-question mutation.                                                                           | Shared provider-neutral core         |
+| **Capture core** (`tools/capture`)     | Workspace-pinned application service over deterministic planning, proposal review, conflict-safe apply/reject, grounded capture, and post-mutation refresh.                                    | Shared by CLI, MCP, and Cockpit      |
 | **MCP server** (`tools/kb-mcp-server`) | Four-tool core; the full profile adds decision operations and logical resources without expanding the daily-use catalog.                                                                       | Any MCP client                       |
 | **Cockpit** (`apps/cockpit`)           | Optional browser UI over shared project and decision parsers, with loopback-only preview/apply workflows in local development. The public preview is a static demo build, not a hosted engine. | Local web UI / static public preview |
 | **Index** (BM25 · SQLite)              | Derived retrieval data. Disposable — rebuilt from the docs.                                                                                                                                    | Regenerable                          |
@@ -91,8 +92,9 @@ flowchart TB
 - **Derived data is disposable.** The SQLite index is a cache of the Markdown, never the
   other way around — delete it and `--refresh` rebuilds it.
 - **Shared core, multiple surfaces.** CLI, MCP, and Cockpit reuse the
-  workspace-pinned grounding, project, decision, and open-question application
-  services. CI proves each exposed surface against the same Markdown contracts.
+  workspace-pinned grounding, project, decision, open-question, and capture
+  application services. CI proves each exposed surface against the same
+  Markdown contracts.
 - **Explicit project boundaries.** `project_id`, canonical folders,
   `source_roots`, and links define membership; similarity never silently expands
   scope.

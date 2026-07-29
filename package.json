@@ -38,7 +38,7 @@
     "test:answer-service": "tsx tools/grounding/answer-service-test.ts",
     "test:grounding-service": "tsx tools/grounding/grounding-application-service-test.ts",
     "test:questions": "tsx tools/questions/open-question-service-test.ts",
-    "test:capture": "tsx tools/capture/capture-service-test.ts && tsx tools/capture/capture-routing-test.ts && tsx tools/capture/grounded-capture-service-test.ts && tsx tools/capture/ask-capture-loop-test.ts",
+    "test:capture": "tsx tools/capture/capture-service-test.ts && tsx tools/capture/capture-application-service-test.ts && tsx tools/capture/capture-routing-test.ts && tsx tools/capture/grounded-capture-service-test.ts && tsx tools/capture/ask-capture-loop-test.ts",
     "demo:project": "tsx tools/projects/demo-resume.ts",
     "test:ingest:unit": "tsx tools/ingest/unit-test.ts",
     "test:ingest": "tsx tools/ingest/ingest-integration-test.ts && tsx tools/ingest/source-aware-integration-test.ts",
