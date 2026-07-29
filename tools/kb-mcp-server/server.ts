@@ -28,7 +28,10 @@ import {
 } from "../grounding/document-core.js";
 import { getKbRetriever } from "../grounding/retriever.js";
 import { answerGrounded, type GroundedTokenUsage } from "../grounding/answer-service.js";
-import { listProjectRecordsForWorkspace, resumeProject } from "../projects/index.js";
+import {
+  createProjectApplicationService,
+  listProjectRecordsForWorkspace,
+} from "../projects/index.js";
 import {
   applyUnreviewedCapture,
   isCaptureProposalUnchanged,
@@ -43,7 +46,16 @@ import type {
   SearchHit,
   SearchResult,
 } from "../grounding/types.js";
-import { mutateOpenQuestion } from "../questions/open-question-service.js";
+import { createOpenQuestionApplicationService } from "../questions/index.js";
+import {
+  createDecisionApplicationService,
+  type DecisionConfidence,
+  type DecisionEvidenceInput,
+  type DecisionEvidenceReviewInput,
+  type DecisionRecord,
+  type DecisionReviewState,
+  type DecisionStatus,
+} from "../decisions/index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,15 +180,196 @@ const toolHandlers: Record<string, ToolHandler> = {
   "kb.answer_and_capture": handleKbAnswerAndCapture,
   "kb.refresh": handleKbRefresh,
   "kb.resume_project": handleKbResumeProject,
+  "kb.record_decision": handleKbRecordDecision,
+  "kb.get_decision": handleKbGetDecision,
+  "kb.list_decisions": handleKbListDecisions,
+  "kb.review_decision": handleKbReviewDecision,
+  "kb.supersede_decision": handleKbSupersedeDecision,
 };
+
+const projectService = createProjectApplicationService({
+  repoRoot,
+  scanRoots: [...workspace.scanRoots],
+  workspace,
+});
+
+const openQuestionService = createOpenQuestionApplicationService({
+  repoRoot,
+  workspace,
+  writesEnabled: DEFAULT_ENABLE_WRITES,
+  refresh: refreshOpenQuestionRetrieval,
+});
 
 async function handleKbResumeProject(args: JsonObject): Promise<ToolPayload> {
   const projectId = typeof args?.projectId === "string" ? args.projectId : "";
   if (!projectId) {
     throw new Error("Missing required argument: projectId");
   }
-  const result = await resumeProject({ projectId }, repoRoot, [...workspace.scanRoots], workspace);
-  return result;
+  return projectService.resume(projectId);
+}
+
+const decisionService = createDecisionApplicationService({
+  repoRoot,
+  scanRoots: [...workspace.scanRoots],
+  workspace,
+  refresh: scheduleDocumentRefresh,
+});
+
+async function handleKbRecordDecision(args: JsonObject): Promise<ToolPayload> {
+  const dryRun = Boolean(args?.dryRun);
+  assertWriteAllowed({ dryRun, toolName: "kb.record_decision" });
+  const result = await decisionService.record({
+    decisionId: normalizeScalar(args?.decisionId) || undefined,
+    workspaceId: normalizeScalar(args?.workspaceId) || undefined,
+    projectId: normalizeScalar(args?.projectId) || undefined,
+    title: normalizeScalar(args?.title),
+    status: (normalizeScalar(args?.status).toLowerCase() || "proposed") as DecisionStatus,
+    owner: normalizeScalar(args?.owner),
+    decidedAt: normalizeScalar(args?.decidedAt),
+    evidenceCheckedAt: normalizeScalar(args?.evidenceCheckedAt),
+    reviewAfter: normalizeScalar(args?.reviewAfter),
+    confidence: normalizeScalar(args?.confidence).toLowerCase() as DecisionConfidence,
+    tags: normalizeStringArray(args?.tags),
+    question: normalizeScalar(args?.question),
+    recommendation: normalizeScalar(args?.recommendation),
+    alternatives: normalizeStringArray(args?.alternatives),
+    rationale: normalizeScalar(args?.rationale),
+    assumptions: normalizeStringArray(args?.assumptions),
+    risks: normalizeStringArray(args?.risks),
+    evidence: normalizeDecisionEvidence(args?.evidence),
+    dryRun,
+  });
+  const warning = decisionFreshnessWarning(result);
+  const structured = shapeDecisionMutation(result, args);
+  if (warning) structured.staleWarning = warning;
+  return {
+    contentText: [
+      "# kb.record_decision",
+      `Decision: ${result.title} (${result.decisionId})`,
+      `Status: ${result.status}`,
+      `Path: ${result.path}`,
+      `Review after: ${result.reviewAfter}`,
+      `Action: ${dryRun ? "previewed" : "created"}`,
+      warning,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    structured,
+  };
+}
+
+async function handleKbGetDecision(args: JsonObject): Promise<ToolPayload> {
+  const query = normalizeScalar(args?.query);
+  if (!query) throw new Error("Missing required argument: query");
+  const result = await decisionService.get({
+    identifier: query,
+    asOf: normalizeScalar(args?.asOf) || undefined,
+  });
+  const warning = decisionFreshnessWarning(result);
+  return {
+    contentText: formatDecisionText(result, warning),
+    structured: {
+      ...shapeDecisionRecord(result, normalizeResponseFormat(args?.responseFormat)),
+      ...(warning ? { staleWarning: warning } : {}),
+    },
+  };
+}
+
+async function handleKbListDecisions(args: JsonObject): Promise<ToolPayload> {
+  const results = await decisionService.list({
+    projectId: normalizeScalar(args?.projectId) || undefined,
+    status: (normalizeScalar(args?.status).toLowerCase() || undefined) as
+      | DecisionStatus
+      | undefined,
+    reviewState: (normalizeScalar(args?.reviewState).toLowerCase() || undefined) as
+      | DecisionReviewState
+      | undefined,
+    owner: normalizeScalar(args?.owner) || undefined,
+    tag: normalizeScalar(args?.tag) || undefined,
+    asOf: normalizeScalar(args?.asOf) || undefined,
+  });
+  const responseFormat = normalizeResponseFormat(args?.responseFormat);
+  const warnings = results
+    .map(decisionFreshnessWarning)
+    .filter((warning): warning is string => Boolean(warning));
+  const lines = [
+    "# kb.list_decisions",
+    `Decisions: ${results.length}`,
+    ...results.map(
+      (decision) =>
+        `- ${decision.decisionId} | ${decision.status} | ${decision.reviewState} | review ${decision.reviewAfter} | ${decision.title}`,
+    ),
+    ...warnings.map((warning) => `Warning: ${warning}`),
+  ];
+  return {
+    contentText: lines.join("\n"),
+    structured: {
+      decisionCount: results.length,
+      decisions: results.map((decision) => {
+        const warning = decisionFreshnessWarning(decision);
+        return {
+          ...shapeDecisionRecord(decision, responseFormat),
+          ...(warning ? { staleWarning: warning } : {}),
+        };
+      }),
+      warnings,
+    },
+  };
+}
+
+async function handleKbReviewDecision(args: JsonObject): Promise<ToolPayload> {
+  const dryRun = Boolean(args?.dryRun);
+  assertWriteAllowed({ dryRun, toolName: "kb.review_decision" });
+  const supported = normalizeScalar(args?.recommendationSupported).toLowerCase();
+  if (!["yes", "no", "uncertain"].includes(supported)) {
+    throw new Error("recommendationSupported must be yes, no, or uncertain.");
+  }
+  const recommendationSupported =
+    supported === "yes" ? true : supported === "no" ? false : "uncertain";
+  const result = await decisionService.review({
+    decisionId: normalizeScalar(args?.decisionId),
+    reviewedAt: normalizeScalar(args?.reviewedAt),
+    reviewAfter: normalizeScalar(args?.reviewAfter),
+    reviewer: normalizeScalar(args?.reviewer),
+    recommendationSupported,
+    assumptionsNeedingValidation: normalizeStringArray(args?.assumptionsNeedingValidation),
+    evidence: normalizeDecisionReviewEvidence(args?.evidence),
+    notes: normalizeScalar(args?.notes) || undefined,
+    dryRun,
+  });
+  return {
+    contentText: [
+      "# kb.review_decision",
+      `Decision: ${result.decisionId}`,
+      `Action: ${dryRun ? "previewed" : "review appended"}`,
+      `Recommendation supported: ${result.recommendationSupported}`,
+      `Evidence changes: ${result.changes.length}`,
+      `Next review: ${result.reviewAfter}`,
+    ].join("\n"),
+    structured: shapeDecisionMutation(result, args),
+  };
+}
+
+async function handleKbSupersedeDecision(args: JsonObject): Promise<ToolPayload> {
+  const dryRun = Boolean(args?.dryRun);
+  assertWriteAllowed({ dryRun, toolName: "kb.supersede_decision" });
+  const result = await decisionService.supersede({
+    decisionId: normalizeScalar(args?.decisionId),
+    replacementId: normalizeScalar(args?.replacementId),
+    supersededAt: normalizeScalar(args?.supersededAt),
+    reason: normalizeScalar(args?.reason),
+    dryRun,
+  });
+  return {
+    contentText: [
+      "# kb.supersede_decision",
+      `Decision: ${result.decisionId}`,
+      `Replacement: ${result.replacementId}`,
+      `Action: ${dryRun ? "previewed" : "superseded"}`,
+      `Paths: ${result.decisionPath} -> ${result.replacementPath}`,
+    ].join("\n"),
+    structured: shapeDecisionMutation(result, args),
+  };
 }
 
 // Enumerate projects for discovery surfaces (resources/list, workspace/info).
@@ -186,6 +379,15 @@ async function listProjectsSafe() {
     return await listProjectRecordsForWorkspace(repoRoot, [...workspace.scanRoots], workspace);
   } catch (error) {
     log("warn", `project enumeration failed: ${safeErrorMessage(error)}`);
+    return [];
+  }
+}
+
+async function listDecisionsSafe() {
+  try {
+    return await decisionService.list();
+  } catch (error) {
+    log("warn", `decision enumeration failed: ${safeErrorMessage(error)}`);
     return [];
   }
 }
@@ -200,6 +402,10 @@ function resourceDependencies(): ResourceDependencies {
     scanRoots: [...workspace.scanRoots],
     getDocuments: () => getDocuments(false),
     getProjects: listProjectsSafe,
+    resumeProject: (projectId) => projectService.resume(projectId),
+    reviewWorkspace: () => projectService.review(),
+    getDecisions: listDecisionsSafe,
+    getDecision: (identifier) => decisionService.get({ identifier }),
   };
 }
 
@@ -944,25 +1150,17 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
 async function addOpenQuestion(options: JsonObject): Promise<any> {
   const dryRun = Boolean(options?.dryRun);
   assertWriteAllowed({ dryRun, toolName: "kb.add_open_question" });
-  return mutateOpenQuestion(
-    {
-      question: options?.question,
-      whyOpen: options?.whyOpen,
-      whatWouldResolve: options?.whatWouldResolve,
-      status: options?.status,
-      resolvedBy: options?.resolvedBy,
-      relatedPath: options?.relatedPath,
-      owner: options?.owner,
-      source: options?.source,
-      dryRun,
-    },
-    {
-      repoRoot,
-      workspace,
-      writesEnabled: DEFAULT_ENABLE_WRITES,
-      refresh: refreshOpenQuestionRetrieval,
-    },
-  );
+  return openQuestionService.add({
+    question: options?.question,
+    whyOpen: options?.whyOpen,
+    whatWouldResolve: options?.whatWouldResolve,
+    status: options?.status,
+    resolvedBy: options?.resolvedBy,
+    relatedPath: options?.relatedPath,
+    owner: options?.owner,
+    source: options?.source,
+    dryRun,
+  });
 }
 
 async function refreshOpenQuestionRetrieval(): Promise<void> {
@@ -1064,6 +1262,104 @@ function normalizeTags(value: unknown): string[] | null {
     .map((item) => singleLine(item))
     .filter(Boolean);
   return normalized.length ? normalized : null;
+}
+
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => normalizeScalar(item)).filter(Boolean);
+}
+
+function normalizeDecisionEvidence(value: unknown): DecisionEvidenceInput[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => ({
+    path: normalizeScalar(item?.path),
+    line: Number(item?.line),
+  }));
+}
+
+function normalizeDecisionReviewEvidence(value: unknown): DecisionEvidenceReviewInput[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => ({
+    path: normalizeScalar(item?.path),
+    line: Number(item?.line),
+    classification: (normalizeScalar(item?.classification).toLowerCase() ||
+      undefined) as DecisionEvidenceReviewInput["classification"],
+    note: normalizeScalar(item?.note) || undefined,
+  }));
+}
+
+function decisionFreshnessWarning(decision: DecisionRecord): string {
+  if (decision.reviewState === "overdue") {
+    return `STALE: decision ${decision.decisionId} was due for review after ${decision.reviewAfter}; evidence was last checked ${decision.evidenceCheckedAt}.`;
+  }
+  if (decision.reviewState === "due") {
+    return `REVIEW DUE: decision ${decision.decisionId} is due on ${decision.reviewAfter}; evidence was last checked ${decision.evidenceCheckedAt}.`;
+  }
+  return "";
+}
+
+function shapeDecisionRecord(
+  decision: DecisionRecord,
+  responseFormat: ResponseFormat,
+): DecisionRecord | Record<string, unknown> {
+  if (responseFormat === "full") return decision;
+  return {
+    decisionId: decision.decisionId,
+    workspaceId: decision.workspaceId,
+    projectId: decision.projectId,
+    title: decision.title,
+    status: decision.status,
+    owner: decision.owner,
+    decidedAt: decision.decidedAt,
+    evidenceCheckedAt: decision.evidenceCheckedAt,
+    reviewAfter: decision.reviewAfter,
+    confidence: decision.confidence,
+    updated: decision.updated,
+    tags: decision.tags,
+    recommendation: decision.recommendation,
+    reviewState: decision.reviewState,
+    path: decision.path,
+  };
+}
+
+function shapeDecisionMutation(result: JsonObject, args: JsonObject): JsonObject {
+  if (normalizeResponseFormat(args?.responseFormat) === "full") return result;
+  const shaped = { ...result };
+  delete shaped.content;
+  delete shaped.decisionContent;
+  delete shaped.replacementContent;
+  return shaped;
+}
+
+function formatDecisionText(decision: DecisionRecord, warning: string): string {
+  const lines = [
+    "# kb.get_decision",
+    `Decision: ${decision.title} (${decision.decisionId})`,
+    `Status: ${decision.status}`,
+    `Review state: ${decision.reviewState}`,
+    `Evidence checked: ${decision.evidenceCheckedAt}`,
+    `Review after: ${decision.reviewAfter}`,
+    warning,
+    "",
+    "## Question",
+    decision.question,
+    "",
+    "## Recommendation",
+    decision.recommendation,
+    "",
+    "## Rationale",
+    decision.rationale,
+  ];
+  if (decision.evidence.length) {
+    lines.push(
+      "",
+      "## Evidence",
+      ...decision.evidence.map(
+        (evidence) => `- ${evidence.path}:${evidence.line} (${evidence.section})`,
+      ),
+    );
+  }
+  return lines.filter((line, index) => line || lines[index - 1] !== "").join("\n");
 }
 
 function normalizeDateString(value: unknown): string {

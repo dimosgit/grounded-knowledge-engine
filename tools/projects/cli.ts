@@ -3,18 +3,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { loadWorkspaceContext } from "../workspaces/config.js";
-import { createProjectCheckpoint, type CheckpointEvidenceInput } from "./checkpoint-service.js";
-import { reviewWorkspace } from "./index.js";
-import {
-  addProjectTask,
-  createProject,
-  getProject,
-  linkProjectSource,
-  listProjects,
-  updateProject,
-  validateAllProjects,
-  validateProject,
-} from "./project-service.js";
+import type { CheckpointEvidenceInput } from "./checkpoint-service.js";
+import { createProjectApplicationService } from "./project-application-service.js";
 
 interface CliOptions {
   values: Map<string, string[]>;
@@ -39,16 +29,14 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     ...(requestedScanRoots.length ? { scanRoots: requestedScanRoots } : {}),
   });
   const scanRoots = [...workspace.scanRoots];
+  const projectService = createProjectApplicationService({ repoRoot, workspace, scanRoots });
 
   if (command === "checkpoint") {
     const projectId = parsed.positionals[0];
     if (!projectId || parsed.positionals.length > 1) {
       throw new Error("Usage: gke checkpoint <project-id> [options]");
     }
-    const result = await createProjectCheckpoint({
-      repoRoot,
-      workspace,
-      scanRoots,
+    const result = await projectService.createCheckpoint({
       projectId,
       checkpointId: first(parsed, "id"),
       title: first(parsed, "title") || "",
@@ -75,10 +63,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
   if (command === "create") {
     const projectId = parsed.positionals[0];
     if (!projectId) throw new Error("Usage: gke create <project-id> [options]");
-    const result = await createProject({
-      repoRoot,
-      workspace,
-      scanRoots,
+    const result = await projectService.create({
       projectId,
       title: first(parsed, "title"),
       workspaceId: first(parsed, "workspace"),
@@ -105,7 +90,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
   }
 
   if (command === "list") {
-    const projects = await listProjects({ repoRoot, workspace, scanRoots });
+    const projects = await projectService.list();
     if (json) console.log(JSON.stringify(projects, null, 2));
     else if (!projects.length) console.log("No projects found.");
     else {
@@ -123,17 +108,12 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     if (parsed.positionals.length > 1) {
       throw new Error("Usage: gke review [project-id] [options]");
     }
-    const result = await reviewWorkspace(
-      {
-        asOf: first(parsed, "as-of"),
-        since: first(parsed, "since"),
-        projectId,
-        state: first(parsed, "state") as "due" | "overdue" | "all" | undefined,
-      },
-      repoRoot,
-      scanRoots,
-      workspace,
-    );
+    const result = await projectService.review({
+      asOf: first(parsed, "as-of"),
+      since: first(parsed, "since"),
+      projectId,
+      state: first(parsed, "state") as "due" | "overdue" | "all" | undefined,
+    });
     if (json) console.log(JSON.stringify(result.structured, null, 2));
     else console.log(result.contentText);
     return 0;
@@ -142,7 +122,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
   if (command === "show") {
     const projectId = parsed.positionals[0];
     if (!projectId) throw new Error("Usage: gke show <project-id>");
-    const project = await getProject(projectId, { repoRoot, workspace, scanRoots });
+    const project = await projectService.get(projectId);
     if (json) {
       console.log(
         JSON.stringify(
@@ -177,8 +157,8 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
   if (command === "validate") {
     const projectId = parsed.positionals[0];
     const results = projectId
-      ? [await validateProject(projectId, { repoRoot, workspace, scanRoots })]
-      : await validateAllProjects({ repoRoot, workspace, scanRoots });
+      ? [await projectService.validate(projectId)]
+      : await projectService.validateAll();
     if (json) console.log(JSON.stringify(results, null, 2));
     else {
       for (const result of results) {
@@ -195,10 +175,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
   if (command === "update") {
     const projectId = parsed.positionals[0];
     if (!projectId) throw new Error("Usage: gke update <project-id> [options]");
-    const result = await updateProject({
-      repoRoot,
-      workspace,
-      scanRoots,
+    const result = await projectService.update({
       projectId,
       title: first(parsed, "title"),
       status: first(parsed, "status"),
@@ -246,10 +223,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
         "Usage: gke task add <project-id> <text> [--size <XS|S|M|L|XL>] [--status <todo|in-progress|gated|done>]",
       );
     }
-    const result = await addProjectTask({
-      repoRoot,
-      workspace,
-      scanRoots,
+    const result = await projectService.addTask({
       projectId,
       text: taskParts.join(" "),
       size: first(parsed, "size") as "XS" | "S" | "M" | "L" | "XL" | undefined,
@@ -269,10 +243,7 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
   if (command === "link") {
     const [projectId, sourcePath] = parsed.positionals;
     if (!projectId || !sourcePath) throw new Error("Usage: gke link <project-id> <source-path>");
-    const result = await linkProjectSource({
-      repoRoot,
-      workspace,
-      scanRoots,
+    const result = await projectService.linkSource({
       projectId,
       sourcePath,
       label: first(parsed, "label"),

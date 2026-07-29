@@ -2,8 +2,10 @@
 
 This module owns mutation of the compatibility document at
 `kb/open_questions.md`. Protocol and UI adapters should call
-`mutateOpenQuestion` from `open-question-service.ts`; they should not read and
-rewrite the document themselves.
+the workspace-pinned `OpenQuestionApplicationService`; they should not accept
+repository context per request or read and rewrite the document themselves.
+The lower-level `mutateOpenQuestion` function remains available for focused
+domain tests and integrations that already own a trusted workspace context.
 
 ## Contract
 
@@ -15,6 +17,9 @@ rewrite the document themselves.
   Markdown.
 - Real mutations require an enabled write gate and a writable workspace.
   Dry-run still plans a result when writes are disabled.
+- The application service pins the repository root, workspace policy, write
+  gate, clock, and refresh callback once. Caller-controlled input cannot
+  redirect a mutation into a different workspace.
 - The workspace lock covers reading, duplicate detection, and atomic writing.
 - Retrieval refresh runs once after a created or appended result, and never for
   `unchanged` or dry-run.

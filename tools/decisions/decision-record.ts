@@ -8,34 +8,30 @@ import {
 import type { WorkspaceContext } from "../workspaces/types.js";
 import { normalizeProjectId, parseProjectFrontmatter } from "../projects/project-manifest.js";
 import { getProject, type LoadedProject } from "../projects/project-service.js";
+import { parseDecision as parseDecisionRecord } from "./decision-parser.js";
 import type {
   CreateDecisionOptions,
   CreatedDecision,
   DecisionConfidence,
   DecisionEvidence,
+  DecisionEvidenceChangeRecord,
   DecisionEvidenceInput,
+  DecisionEvidenceReviewInput,
   DecisionRecord,
   DecisionReviewState,
   DecisionServiceOptions,
   DecisionStatus,
   ListDecisionOptions,
+  ReviewDecisionOptions,
+  ReviewedDecision,
+  SupersedeDecisionOptions,
+  SupersededDecision,
 } from "./types.js";
 
 const DEFAULT_SCAN_ROOTS = ["demo-kb", "kb"];
 const VALID_STATUSES = new Set<DecisionStatus>(["proposed", "active", "superseded", "rejected"]);
 const VALID_CONFIDENCE = new Set<DecisionConfidence>(["low", "medium", "high"]);
 const VALID_REVIEW_STATES = new Set<DecisionReviewState>(["current", "due", "overdue"]);
-const REQUIRED_SECTIONS = [
-  "decision-question",
-  "recommendation",
-  "alternatives-considered",
-  "rationale",
-  "assumptions",
-  "risks-and-caveats",
-  "evidence-snapshot",
-  "review-history",
-  "supersession",
-] as const;
 
 export async function createDecision(options: CreateDecisionOptions): Promise<CreatedDecision> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
@@ -185,15 +181,21 @@ export async function getDecision(
   if (!cleanIdentifier) throw new Error("Decision identifier cannot be empty.");
   const decisions = await listDecisions({ ...options, asOf: options.asOf });
   const normalizedPath = normalizeOptionalPath(cleanIdentifier);
-  const canonicalId = normalizeProjectId(cleanIdentifier.replace(/\.md$/i, ""));
-  const exact = decisions.filter(
+  const canonicalId =
+    cleanIdentifier === normalizeProjectId(cleanIdentifier) ? cleanIdentifier : undefined;
+  const direct = decisions.filter(
     (decision) =>
-      decision.decisionId === canonicalId ||
-      decision.path === normalizedPath ||
-      decision.title.toLowerCase() === cleanIdentifier.toLowerCase(),
+      (canonicalId && decision.decisionId === canonicalId) || decision.path === normalizedPath,
+  );
+  if (direct.length === 1) return direct[0];
+  if (direct.length > 1) throw new Error(`Decision identifier is ambiguous: ${identifier}`);
+  const exact = decisions.filter(
+    (decision) => decision.title.toLowerCase() === cleanIdentifier.toLowerCase(),
   );
   if (exact.length === 1) return exact[0];
   if (exact.length > 1) {
+    const active = exact.filter((decision) => decision.status === "active");
+    if (active.length === 1) return active[0];
     throw new Error(
       `Decision identifier is ambiguous: ${identifier}. Matches: ${exact
         .map((decision) => decision.decisionId)
@@ -203,54 +205,179 @@ export async function getDecision(
   throw new Error(`Decision not found: ${identifier}`);
 }
 
-export function parseDecision(raw: string, relPath: string, asOf = todayIso()): DecisionRecord {
-  const { frontmatter, bodyStartLine } = parseProjectFrontmatter(raw);
-  if (frontmatter.schema_version !== "1") {
-    throw new Error(`Decision at ${relPath} must use schema_version 1.`);
+export async function reviewDecision(options: ReviewDecisionOptions): Promise<ReviewedDecision> {
+  const repoRoot = path.resolve(options.repoRoot || process.cwd());
+  const scanRoots = options.scanRoots || DEFAULT_SCAN_ROOTS;
+  const decisionId = requireDecisionId(options.decisionId);
+  const reviewedAt = validateDate(options.reviewedAt, "reviewedAt");
+  const nextReviewAfter = validateDate(options.reviewAfter, "reviewAfter");
+  if (nextReviewAfter < reviewedAt) {
+    throw new Error("reviewAfter cannot be earlier than reviewedAt.");
   }
-  if (frontmatter.record_type !== "decision") {
-    throw new Error(`Decision at ${relPath} must use record_type decision.`);
-  }
-  const sections = parseSections(raw, bodyStartLine);
-  for (const section of REQUIRED_SECTIONS) {
-    if (!sections.has(section)) throw new Error(`Decision at ${relPath} is missing ${section}.`);
-  }
-  const decisionId = requireDecisionId(frontmatter.decision_id);
-  const pathId = relPath.match(/(?:^|\/)(?:demo-kb|kb)\/decisions\/([^/]+)\.md$/)?.[1];
-  if (pathId && pathId !== decisionId) {
-    throw new Error(
-      `Decision ID '${decisionId}' does not match the canonical path ID '${pathId}' at ${relPath}.`,
+  const reviewer = requireScalar(options.reviewer, "reviewer");
+  const recommendationSupported = requireRecommendationSupported(options.recommendationSupported);
+  const assumptions = normalizeList(
+    options.assumptionsNeedingValidation || [],
+    "assumptionsNeedingValidation",
+  );
+  const notes = options.notes ? requireText(options.notes, "notes") : "";
+  const apply = async (): Promise<ReviewedDecision> => {
+    const decision = await loadCanonicalDecision(decisionId, {
+      repoRoot,
+      scanRoots,
+      workspace: options.workspace,
+    });
+    if (decision.record.status === "superseded" || decision.record.status === "rejected") {
+      throw new Error(`Only proposed or active decisions can be reviewed: ${decisionId}`);
+    }
+    if (reviewedAt < decision.record.evidenceCheckedAt) {
+      throw new Error("reviewedAt cannot be earlier than the previous evidence check.");
+    }
+    const project = decision.record.projectId
+      ? await loadWritableProject(decision.record.projectId, repoRoot, scanRoots, options.workspace)
+      : undefined;
+    const currentEvidence = await validateEvidence(
+      options.evidence,
+      repoRoot,
+      scanRoots,
+      project,
+      options.workspace,
     );
-  }
-  const title = requireScalar(frontmatter.title, "title");
-  const reviewAfter = validateDate(frontmatter.review_after, "review_after");
-  return {
-    decisionId,
-    workspaceId: requireScalar(frontmatter.workspace_id, "workspace_id"),
-    projectId: cleanScalar(frontmatter.project_id)
-      ? requireCanonicalSlug(frontmatter.project_id, "project_id")
-      : undefined,
-    title,
-    status: requireStatus(frontmatter.status),
-    owner: requireScalar(frontmatter.owner, "owner"),
-    decidedAt: validateDate(frontmatter.decided_at, "decided_at"),
-    evidenceCheckedAt: validateDate(frontmatter.evidence_checked_at, "evidence_checked_at"),
-    reviewAfter,
-    confidence: requireConfidence(frontmatter.confidence),
-    updated: validateDate(frontmatter.updated, "updated"),
-    tags: splitCsv(frontmatter.tags),
-    question: requireText(sections.get("decision-question"), "Decision question"),
-    recommendation: requireText(sections.get("recommendation"), "Recommendation"),
-    alternatives: parseList(sections.get("alternatives-considered") || ""),
-    rationale: requireText(sections.get("rationale"), "Rationale"),
-    assumptions: parseList(sections.get("assumptions") || ""),
-    risks: parseList(sections.get("risks-and-caveats") || ""),
-    evidence: parseEvidence(sections.get("evidence-snapshot") || ""),
-    reviewHistory: parseList(sections.get("review-history") || ""),
-    supersession: parseList(sections.get("supersession") || ""),
-    reviewState: reviewState(reviewAfter, validateDate(asOf, "asOf")),
-    path: relPath,
+    const changes = compareEvidence(decision.record.evidence, currentEvidence, options.evidence);
+    const reviewEntry = renderReviewEntry({
+      reviewedAt,
+      nextReviewAfter,
+      reviewer,
+      recommendationSupported,
+      assumptions,
+      changes,
+      notes,
+    });
+    let content = replaceFrontmatterField(decision.raw, "evidence_checked_at", reviewedAt);
+    content = replaceFrontmatterField(content, "review_after", nextReviewAfter);
+    content = replaceFrontmatterField(content, "updated", reviewedAt);
+    content = appendSectionContent(content, "Review history", reviewEntry);
+    if (!options.dryRun) {
+      await writeAtomic(decision.absPath, content, options.workspace);
+    }
+    return {
+      decisionId,
+      path: decision.record.path,
+      reviewedAt,
+      reviewAfter: nextReviewAfter,
+      recommendationSupported,
+      assumptionsNeedingValidation: assumptions,
+      changes,
+      content,
+      dryRun: Boolean(options.dryRun),
+    };
   };
+
+  if (options.dryRun) return apply();
+  const lockPath = await acquireDecisionLock(repoRoot, decisionId, options.workspace);
+  try {
+    return await apply();
+  } finally {
+    await fs.rm(lockPath, { force: true });
+  }
+}
+
+export async function supersedeDecision(
+  options: SupersedeDecisionOptions,
+): Promise<SupersededDecision> {
+  const repoRoot = path.resolve(options.repoRoot || process.cwd());
+  const scanRoots = options.scanRoots || DEFAULT_SCAN_ROOTS;
+  const decisionId = requireDecisionId(options.decisionId);
+  const replacementId = requireDecisionId(options.replacementId);
+  if (decisionId === replacementId) throw new Error("A decision cannot supersede itself.");
+  const supersededAt = validateDate(options.supersededAt, "supersededAt");
+  const reason = requireText(options.reason, "reason");
+  const apply = async (): Promise<SupersededDecision> => {
+    const original = await loadCanonicalDecision(decisionId, {
+      repoRoot,
+      scanRoots,
+      workspace: options.workspace,
+    });
+    const replacement = await loadCanonicalDecision(replacementId, {
+      repoRoot,
+      scanRoots,
+      workspace: options.workspace,
+    });
+    if (original.record.status === "superseded" || original.record.status === "rejected") {
+      throw new Error(`Only proposed or active decisions can be superseded: ${decisionId}`);
+    }
+    if (replacement.record.status === "superseded" || replacement.record.status === "rejected") {
+      throw new Error(`Replacement decision must be proposed or active: ${replacementId}`);
+    }
+    if (original.record.workspaceId !== replacement.record.workspaceId) {
+      throw new Error("Superseded decisions must belong to the same workspace.");
+    }
+    if (original.record.projectId !== replacement.record.projectId) {
+      throw new Error("Superseded decisions must belong to the same project scope.");
+    }
+    if (
+      supersededAt < original.record.decidedAt ||
+      supersededAt < replacement.record.decidedAt ||
+      supersededAt < original.record.updated ||
+      supersededAt < replacement.record.updated
+    ) {
+      throw new Error("supersededAt cannot predate either decision.");
+    }
+    if (replacement.record.status === "proposed" && replacement.record.evidence.length === 0) {
+      throw new Error("Activating a replacement decision requires evidence.");
+    }
+
+    let decisionContent = replaceFrontmatterField(original.raw, "status", "superseded");
+    decisionContent = replaceFrontmatterField(decisionContent, "updated", supersededAt);
+    decisionContent = appendSectionContent(
+      decisionContent,
+      "Supersession",
+      `- Superseded by [${replacementId}](${replacement.record.path}) on ${supersededAt} — ${cleanScalar(reason)}`,
+    );
+    let replacementContent = replaceFrontmatterField(replacement.raw, "status", "active");
+    replacementContent = replaceFrontmatterField(replacementContent, "updated", supersededAt);
+    replacementContent = appendSectionContent(
+      replacementContent,
+      "Supersession",
+      `- Supersedes [${decisionId}](${original.record.path}) on ${supersededAt} — ${cleanScalar(reason)}`,
+    );
+    if (!options.dryRun) {
+      await writePairAtomic(
+        original.absPath,
+        decisionContent,
+        original.raw,
+        replacement.absPath,
+        replacementContent,
+        replacement.raw,
+        options.workspace,
+      );
+    }
+    return {
+      decisionId,
+      replacementId,
+      decisionPath: original.record.path,
+      replacementPath: replacement.record.path,
+      decisionContent,
+      replacementContent,
+      dryRun: Boolean(options.dryRun),
+    };
+  };
+
+  if (options.dryRun) return apply();
+  const lockIds = [decisionId, replacementId].sort();
+  const locks: string[] = [];
+  try {
+    for (const lockId of lockIds) {
+      locks.push(await acquireDecisionLock(repoRoot, lockId, options.workspace));
+    }
+    return await apply();
+  } finally {
+    await Promise.all(locks.map((lockPath) => fs.rm(lockPath, { force: true })));
+  }
+}
+
+export function parseDecision(raw: string, relPath: string, asOf = todayIso()): DecisionRecord {
+  return parseDecisionRecord(raw, relPath, asOf);
 }
 
 function renderDecision(values: {
@@ -328,6 +455,118 @@ ${values.evidence.length ? values.evidence.map(renderEvidence).join("\n") : "- N
 
 - None recorded.
 `;
+}
+
+function compareEvidence(
+  previous: DecisionEvidence[],
+  current: DecisionEvidence[],
+  inputs: DecisionEvidenceReviewInput[],
+): DecisionEvidenceChangeRecord[] {
+  const currentByKey = new Map(current.map((item) => [evidenceKey(item), item]));
+  const inputByKey = new Map(inputs.map((item) => [evidenceKey(item), item]));
+  const changes: DecisionEvidenceChangeRecord[] = [];
+  for (const oldEvidence of previous) {
+    const key = evidenceKey(oldEvidence);
+    const currentEvidence = currentByKey.get(key);
+    if (!currentEvidence) {
+      changes.push({ classification: "missing", previous: oldEvidence });
+      continue;
+    }
+    const input = inputByKey.get(key);
+    changes.push({
+      classification: requireEvidenceClassification(input?.classification || "unchanged", false),
+      previous: oldEvidence,
+      current: currentEvidence,
+      ...(input?.note ? { note: requireScalar(input.note, "evidence note") } : {}),
+    });
+    currentByKey.delete(key);
+  }
+  for (const currentEvidence of currentByKey.values()) {
+    const input = inputByKey.get(evidenceKey(currentEvidence));
+    changes.push({
+      classification: requireEvidenceClassification(input?.classification || "new", false),
+      current: currentEvidence,
+      ...(input?.note ? { note: requireScalar(input.note, "evidence note") } : {}),
+    });
+  }
+  return changes;
+}
+
+function renderReviewEntry(values: {
+  reviewedAt: string;
+  nextReviewAfter: string;
+  reviewer: string;
+  recommendationSupported: boolean | "uncertain";
+  assumptions: string[];
+  changes: DecisionEvidenceChangeRecord[];
+  notes: string;
+}): string {
+  const support =
+    values.recommendationSupported === "uncertain"
+      ? "uncertain"
+      : values.recommendationSupported
+        ? "yes"
+        : "no";
+  const assumptions = values.assumptions.length
+    ? values.assumptions.map((item) => `  - ${item}`).join("\n")
+    : "  - None.";
+  const changes = values.changes.length
+    ? values.changes
+        .map((change) => {
+          const evidence = change.current || change.previous;
+          return `  - ${change.classification}: ${evidence?.path}:${evidence?.line}${change.note ? ` — ${change.note}` : ""}`;
+        })
+        .join("\n")
+    : "  - None.";
+  return `### Review ${values.reviewedAt}
+
+- Reviewer: ${values.reviewer}
+- Recommendation supported: ${support}
+- Next review after: ${values.nextReviewAfter}
+- Assumptions needing human validation:
+${assumptions}
+- Evidence changes:
+${changes}${values.notes ? `\n- Notes: ${values.notes}` : ""}`;
+}
+
+async function loadCanonicalDecision(
+  decisionId: string,
+  options: DecisionServiceOptions & { asOf?: string },
+): Promise<{ record: DecisionRecord; raw: string; absPath: string }> {
+  const record = await getDecision(decisionId, options);
+  const canonicalPath = `kb/decisions/${record.decisionId}.md`;
+  if (record.path !== canonicalPath) {
+    throw new Error(`Decision mutation requires a writable canonical record at ${canonicalPath}.`);
+  }
+  const repoRoot = path.resolve(options.repoRoot || process.cwd());
+  const absPath = await resolveWritePath(repoRoot, record.path, options.workspace);
+  return { record, raw: await fs.readFile(absPath, "utf8"), absPath };
+}
+
+function replaceFrontmatterField(raw: string, field: string, value: string): string {
+  const pattern = new RegExp(`^${field}:.*$`, "m");
+  if (!pattern.test(raw)) throw new Error(`Decision frontmatter is missing ${field}.`);
+  return raw.replace(pattern, `${field}: ${cleanScalar(value)}`);
+}
+
+function appendSectionContent(raw: string, heading: string, addition: string): string {
+  const lines = raw.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
+  if (start < 0) throw new Error(`Decision is missing ${heading}.`);
+  let end = lines.findIndex((line, index) => index > start && /^##\s+/.test(line));
+  if (end < 0) end = lines.length;
+  const existing = lines
+    .slice(start + 1, end)
+    .join("\n")
+    .trim()
+    .replace(/^-\s+None recorded\.?$/i, "")
+    .trim();
+  const section = [`## ${heading}`, "", existing, addition].filter(Boolean).join("\n\n");
+  return [...lines.slice(0, start), section, ...lines.slice(end)].join("\n");
+}
+
+function evidenceKey(value: DecisionEvidenceInput): string {
+  return `${normalizeWorkspacePath(value.path)}:${value.line}`;
 }
 
 async function validateEvidence(
@@ -441,55 +680,8 @@ async function findDecisionById(
   return null;
 }
 
-function parseSections(raw: string, bodyStartLine: number): Map<string, string> {
-  const sections = new Map<string, string>();
-  const lines = raw.split(/\r?\n/).slice(bodyStartLine - 1);
-  let key: string | undefined;
-  let content: string[] = [];
-  const save = (): void => {
-    if (!key) return;
-    if (sections.has(key)) throw new Error(`Decision contains duplicate '${key}' sections.`);
-    sections.set(key, content.join("\n").trim());
-  };
-  for (const line of lines) {
-    const heading = line.match(/^##\s+(.+?)\s*$/);
-    if (heading) {
-      save();
-      key = normalizeProjectId(heading[1]);
-      content = [];
-    } else if (key) {
-      content.push(line);
-    }
-  }
-  save();
-  return sections;
-}
-
-function parseEvidence(raw: string): DecisionEvidence[] {
-  const results: DecisionEvidence[] = [];
-  for (const line of raw.split(/\r?\n/)) {
-    const cleaned = line.trim();
-    if (!cleaned || /^-\s+none recorded\.?$/i.test(cleaned)) continue;
-    const match = cleaned.match(/^-\s+(.+):([1-9]\d*)\s+—\s+(.+)$/);
-    if (!match) throw new Error(`Invalid decision evidence citation: ${cleaned}`);
-    results.push({
-      path: normalizeWorkspacePath(match[1]),
-      line: Number.parseInt(match[2], 10),
-      section: match[3].trim(),
-    });
-  }
-  return results;
-}
-
 function renderEvidence(value: DecisionEvidence): string {
   return `- ${value.path}:${value.line} — ${value.section}`;
-}
-
-function parseList(raw: string): string[] {
-  return raw
-    .split(/\r?\n/)
-    .map((line) => line.trim().replace(/^[-*]\s+/, ""))
-    .filter((line) => line && !/^none recorded\.?$/i.test(line));
 }
 
 function renderList(values: string[]): string {
@@ -509,10 +701,6 @@ function normalizeCsv(values: string[]): string[] {
         .filter(Boolean),
     ),
   ];
-}
-
-function splitCsv(value: unknown): string[] {
-  return normalizeCsv([`${value || ""}`]);
 }
 
 function requireDecisionId(value: unknown): string {
@@ -549,6 +737,32 @@ function requireReviewState(value: unknown): DecisionReviewState {
     throw new Error("reviewState must be current, due, or overdue.");
   }
   return state;
+}
+
+function requireRecommendationSupported(value: unknown): boolean | "uncertain" {
+  if (value === true || value === false || value === "uncertain") return value;
+  throw new Error("recommendationSupported must be true, false, or uncertain.");
+}
+
+function requireEvidenceClassification(
+  value: unknown,
+  allowMissing: boolean,
+): DecisionEvidenceChangeRecord["classification"] {
+  const classification = cleanScalar(value) as DecisionEvidenceChangeRecord["classification"];
+  const allowed = new Set([
+    "unchanged",
+    "strengthened",
+    "weakened",
+    "contradicted",
+    "new",
+    ...(allowMissing ? ["missing"] : []),
+  ]);
+  if (!allowed.has(classification)) {
+    throw new Error(
+      "Evidence classification must be unchanged, strengthened, weakened, contradicted, or new.",
+    );
+  }
+  return classification;
 }
 
 function requireScalar(value: unknown, field: string): string {
@@ -710,6 +924,41 @@ async function writeExclusive(
     throw error;
   } finally {
     await handle?.close();
+  }
+}
+
+async function writeAtomic(
+  target: string,
+  content: string,
+  workspace?: WorkspaceContext,
+): Promise<void> {
+  if (workspace) await authorizeWorkspaceWrite(workspace, target);
+  const temp = `${target}.${process.pid}.${Date.now()}.tmp`;
+  if (workspace) await authorizeWorkspaceWrite(workspace, temp);
+  await fs.writeFile(temp, content, { encoding: "utf8", mode: 0o600 });
+  try {
+    await fs.rename(temp, target);
+  } finally {
+    await fs.rm(temp, { force: true });
+  }
+}
+
+async function writePairAtomic(
+  firstPath: string,
+  firstContent: string,
+  firstOriginal: string,
+  secondPath: string,
+  secondContent: string,
+  secondOriginal: string,
+  workspace?: WorkspaceContext,
+): Promise<void> {
+  await writeAtomic(firstPath, firstContent, workspace);
+  try {
+    await writeAtomic(secondPath, secondContent, workspace);
+  } catch (error) {
+    await writeAtomic(firstPath, firstOriginal, workspace);
+    await writeAtomic(secondPath, secondOriginal, workspace).catch((): undefined => undefined);
+    throw error;
   }
 }
 

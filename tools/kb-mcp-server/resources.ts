@@ -1,8 +1,8 @@
 import fs from "node:fs/promises";
 import { normalizeScalar } from "../grounding/document-core.js";
-import { resumeProject, reviewWorkspace } from "../projects/index.js";
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
+import type { DecisionRecord } from "../decisions/index.js";
 
 export const MCP_RESOURCE_TEMPLATES = [
   {
@@ -18,6 +18,14 @@ export const MCP_RESOURCE_TEMPLATES = [
     name: "project-context",
     title: "GKE Project Context",
     description: "Read the same compact cited project capsule returned by kb.resume_project.",
+    mimeType: "text/markdown",
+    annotations: { audience: ["user", "assistant"], priority: 0.9 },
+  },
+  {
+    uriTemplate: "gke://decision/{decisionId}",
+    name: "decision-record",
+    title: "GKE Decision Record",
+    description: "Read one canonical decision with its freshness state and evidence snapshot.",
     mimeType: "text/markdown",
     annotations: { audience: ["user", "assistant"], priority: 0.9 },
   },
@@ -41,6 +49,12 @@ export interface ResourceDependencies {
   scanRoots: string[];
   getDocuments: () => Promise<ResourceDocument[]>;
   getProjects: () => Promise<ProjectResourceSummary[]>;
+  resumeProject: (
+    projectId: string,
+  ) => Promise<{ contentText: string; structured: { projectId: string } }>;
+  reviewWorkspace: () => Promise<{ contentText: string }>;
+  getDecisions: () => Promise<DecisionRecord[]>;
+  getDecision: (identifier: string) => Promise<DecisionRecord>;
 }
 
 /**
@@ -57,6 +71,18 @@ export async function listMcpResources(dependencies: ResourceDependencies): Prom
     description: `Cited project capsule for ${project.title}.`,
     mimeType: "text/markdown",
     annotations: { audience: ["user", "assistant"], priority: 0.8 },
+  }));
+  const decisions = await dependencies.getDecisions();
+  const decisionResources = decisions.map((decision) => ({
+    uri: `gke://decision/${encodeURIComponent(decision.decisionId)}`,
+    name: `decision-${decision.decisionId}`,
+    title: decision.title,
+    description: `${decision.status} decision; review ${decision.reviewState} (${decision.reviewAfter}).`,
+    mimeType: "text/markdown",
+    annotations: {
+      audience: ["user", "assistant"],
+      priority: decision.reviewState === "overdue" ? 1 : 0.85,
+    },
   }));
   return [
     {
@@ -75,7 +101,16 @@ export async function listMcpResources(dependencies: ResourceDependencies): Prom
       mimeType: "text/markdown",
       annotations: { audience: ["user", "assistant"], priority: 0.95 },
     },
+    {
+      uri: "gke://workspace/decisions",
+      name: "decision-ledger",
+      title: "GKE Decision Ledger",
+      description: "Canonical decisions with status, evidence date, review date, and freshness.",
+      mimeType: "text/markdown",
+      annotations: { audience: ["user", "assistant"], priority: 0.95 },
+    },
     ...projectResources,
+    ...decisionResources,
   ];
 }
 
@@ -101,6 +136,14 @@ export async function readMcpResource(
         title: project.title,
         contextUri: `gke://project/${encodeURIComponent(project.projectId)}/context`,
       })),
+      decisions: (await dependencies.getDecisions()).map((decision) => ({
+        decisionId: decision.decisionId,
+        title: decision.title,
+        status: decision.status,
+        reviewState: decision.reviewState,
+        decisionUri: `gke://decision/${encodeURIComponent(decision.decisionId)}`,
+      })),
+      decisionLedgerUri: "gke://workspace/decisions",
     };
     return {
       contents: [{ uri, mimeType: "application/json", text: JSON.stringify(value, null, 2) }],
@@ -109,12 +152,7 @@ export async function readMcpResource(
 
   if (uri === "gke://workspace/review") {
     try {
-      const result = await reviewWorkspace(
-        {},
-        dependencies.repoRoot,
-        dependencies.scanRoots,
-        dependencies.workspace,
-      );
+      const result = await dependencies.reviewWorkspace();
       return {
         contents: [
           {
@@ -122,6 +160,52 @@ export async function readMcpResource(
             mimeType: "text/markdown",
             text: result.contentText,
             annotations: { audience: ["user", "assistant"], priority: 0.95 },
+          },
+        ],
+      };
+    } catch (error) {
+      throw rpcError(-32602, errorMessage(error));
+    }
+  }
+
+  if (uri === "gke://workspace/decisions") {
+    try {
+      const decisions = await dependencies.getDecisions();
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "text/markdown",
+            text: renderDecisionLedger(decisions),
+            annotations: { audience: ["user", "assistant"], priority: 0.95 },
+          },
+        ],
+      };
+    } catch (error) {
+      throw rpcError(-32602, errorMessage(error));
+    }
+  }
+
+  const decisionMatch = uri.match(/^gke:\/\/decision\/([^/]+)$/);
+  if (decisionMatch) {
+    let decisionId: string;
+    try {
+      decisionId = decodeURIComponent(decisionMatch[1]);
+    } catch (error) {
+      throw rpcError(-32602, `Invalid decision resource URI: ${errorMessage(error)}`);
+    }
+    try {
+      const decision = await dependencies.getDecision(decisionId);
+      return {
+        contents: [
+          {
+            uri: `gke://decision/${encodeURIComponent(decision.decisionId)}`,
+            mimeType: "text/markdown",
+            text: renderDecisionResource(decision),
+            annotations: {
+              audience: ["user", "assistant"],
+              priority: decision.reviewState === "overdue" ? 1 : 0.9,
+            },
           },
         ],
       };
@@ -139,12 +223,7 @@ export async function readMcpResource(
       throw rpcError(-32602, `Invalid project resource URI: ${errorMessage(error)}`);
     }
     try {
-      const result = await resumeProject(
-        { projectId },
-        dependencies.repoRoot,
-        dependencies.scanRoots,
-        dependencies.workspace,
-      );
+      const result = await dependencies.resumeProject(projectId);
       return {
         contents: [
           {
@@ -186,6 +265,78 @@ export async function readMcpResource(
       },
     ],
   };
+}
+
+function renderDecisionLedger(decisions: DecisionRecord[]): string {
+  const lines = ["# Decision Ledger", "", `Decisions: ${decisions.length}`];
+  if (!decisions.length) {
+    lines.push("", "No canonical decisions found.");
+    return lines.join("\n");
+  }
+  lines.push("");
+  for (const decision of decisions) {
+    const warning = decisionWarning(decision);
+    lines.push(
+      `- [${decision.title}](gke://decision/${encodeURIComponent(decision.decisionId)}) — ${decision.status}; evidence ${decision.evidenceCheckedAt}; review ${decision.reviewAfter}; ${decision.reviewState}${warning ? ` — ${warning}` : ""}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+function renderDecisionResource(decision: DecisionRecord): string {
+  const warning = decisionWarning(decision);
+  const lines = [
+    `# ${decision.title}`,
+    "",
+    `- Decision ID: ${decision.decisionId}`,
+    `- Status: ${decision.status}`,
+    `- Project: ${decision.projectId || "workspace"}`,
+    `- Owner: ${decision.owner}`,
+    `- Confidence: ${decision.confidence}`,
+    `- Evidence checked: ${decision.evidenceCheckedAt}`,
+    `- Review after: ${decision.reviewAfter}`,
+    `- Review state: ${decision.reviewState}`,
+  ];
+  if (warning) lines.push(`- Warning: ${warning}`);
+  lines.push(
+    "",
+    "## Decision question",
+    "",
+    decision.question,
+    "",
+    "## Recommendation",
+    "",
+    decision.recommendation,
+    "",
+    "## Rationale",
+    "",
+    decision.rationale,
+    "",
+    "## Evidence snapshot",
+    "",
+    ...(decision.evidence.length
+      ? decision.evidence.map(
+          (evidence) => `- ${evidence.path}:${evidence.line} (${evidence.section})`,
+        )
+      : ["- No evidence citations recorded."]),
+  );
+  if (decision.reviewHistory.length) {
+    lines.push("", "## Review history", "", ...decision.reviewHistory);
+  }
+  if (decision.supersession.length) {
+    lines.push("", "## Supersession", "", ...decision.supersession);
+  }
+  return lines.join("\n");
+}
+
+function decisionWarning(decision: DecisionRecord): string {
+  if (decision.reviewState === "overdue") {
+    return `STALE: review was due after ${decision.reviewAfter}; evidence was last checked ${decision.evidenceCheckedAt}.`;
+  }
+  if (decision.reviewState === "due") {
+    return `REVIEW DUE on ${decision.reviewAfter}; evidence was last checked ${decision.evidenceCheckedAt}.`;
+  }
+  return "";
 }
 
 function sanitizeResourcePath(value: string): string {

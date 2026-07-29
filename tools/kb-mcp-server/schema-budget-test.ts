@@ -50,6 +50,9 @@ function assertCatalog(profile: McpProfile, writesEnabled: boolean): void {
     assert.ok(!names.includes("kb.upsert_note"));
     assert.ok(!names.includes("kb.add_open_question"));
     assert.ok(!names.includes("kb.checkpoint_project"));
+    assert.ok(!names.includes("kb.record_decision"));
+    assert.ok(!names.includes("kb.review_decision"));
+    assert.ok(!names.includes("kb.supersede_decision"));
   }
   if (profile === "core") {
     assert.equal(tools.length, 4, "core must remain fixed at four semantic tools");
@@ -72,13 +75,34 @@ function assertCatalog(profile: McpProfile, writesEnabled: boolean): void {
   if (profile === "full") {
     assert.ok(names.includes("kb.get_topic"));
     assert.ok(names.includes("kb.get_term"));
+    assert.ok(names.includes("kb.get_decision"));
+    assert.ok(names.includes("kb.list_decisions"));
     if (writesEnabled) {
+      assert.ok(names.includes("kb.record_decision"));
+      assert.ok(names.includes("kb.review_decision"));
+      assert.ok(names.includes("kb.supersede_decision"));
       const upsert = tools.find((tool) => tool.name === "kb.upsert_note") as any;
       const properties = upsert.inputSchema?.properties;
       assert.equal(properties?.projectId?.type, "string");
       assert.deepEqual(properties?.conflictPolicy?.enum, ["error", "append", "replace"]);
       assert.equal(properties?.baseContentHash?.pattern, "^[a-f0-9]{64}$");
       assert.deepEqual(properties?.sourceOperation?.enum, ["answer", "ingest", "upsert"]);
+      const recordDecision = tools.find((tool) => tool.name === "kb.record_decision") as {
+        annotations?: { idempotentHint?: boolean };
+        inputSchema?: { properties?: { dryRun?: { type?: string } } };
+      };
+      assert.equal(recordDecision.annotations?.idempotentHint, true);
+      assert.equal(recordDecision.inputSchema?.properties?.dryRun?.type, "boolean");
+      const reviewDecision = tools.find((tool) => tool.name === "kb.review_decision") as {
+        inputSchema?: {
+          properties?: { recommendationSupported?: { enum?: string[] } };
+        };
+      };
+      assert.deepEqual(reviewDecision.inputSchema?.properties?.recommendationSupported?.enum, [
+        "yes",
+        "no",
+        "uncertain",
+      ]);
     }
   }
 }

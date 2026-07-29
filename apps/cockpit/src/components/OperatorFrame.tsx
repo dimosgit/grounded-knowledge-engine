@@ -14,6 +14,7 @@ import {
   PanelLeftOpen,
   Plus,
   Rocket,
+  Scale,
   Search,
   Settings,
   UserCircle,
@@ -64,6 +65,14 @@ export function OperatorFrame({
     { key: "hub", label: "Mission Control", icon: LayoutDashboard, onClick: onHub },
     { key: "library", label: "Knowledge Base", icon: BookOpen, onClick: onLibrary },
     { key: "projects", label: "Project Board", icon: Grid2X2, onClick: onProjects },
+    {
+      key: "decisions",
+      label: "Decision Replay",
+      icon: Scale,
+      onClick: () => {
+        window.location.hash = "/decisions";
+      },
+    },
     { key: "graph", label: "Context Graph", icon: Network, onClick: onGraph },
     { key: "settings", label: "Settings", icon: Settings, disabled: true },
   ];

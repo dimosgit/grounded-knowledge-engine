@@ -3,10 +3,12 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { loadWorkspaceContext } from "../workspaces/config.js";
-import { createDecision, getDecision, listDecisions } from "./decision-record.js";
+import { createDecisionApplicationService } from "./decision-application-service.js";
 import type {
   DecisionConfidence,
   DecisionEvidenceInput,
+  DecisionEvidenceReviewInput,
+  DecisionRecord,
   DecisionReviewState,
   DecisionStatus,
 } from "./types.js";
@@ -31,16 +33,14 @@ export async function runDecisionCli(argv: string[], cwd = process.cwd()): Promi
     ...(requestedScanRoots.length ? { scanRoots: requestedScanRoots } : {}),
   });
   const scanRoots = [...workspace.scanRoots];
+  const decisions = createDecisionApplicationService({ repoRoot, workspace, scanRoots });
   const json = has(parsed, "json");
 
   if (command === "create") {
     if (parsed.positionals.length > 1) {
       throw new Error("Usage: gke decisions create [decision-id] [options]");
     }
-    const result = await createDecision({
-      repoRoot,
-      workspace,
-      scanRoots,
+    const result = await decisions.record({
       decisionId: parsed.positionals[0],
       workspaceId: first(parsed, "workspace"),
       projectId: first(parsed, "project"),
@@ -76,10 +76,8 @@ export async function runDecisionCli(argv: string[], cwd = process.cwd()): Promi
     if (!identifier || parsed.positionals.length > 1) {
       throw new Error("Usage: gke decisions get <decision-id|path|title> [options]");
     }
-    const result = await getDecision(identifier, {
-      repoRoot,
-      workspace,
-      scanRoots,
+    const result = await decisions.get({
+      identifier,
       asOf: first(parsed, "as-of"),
     });
     if (json) console.log(JSON.stringify(result, null, 2));
@@ -96,10 +94,7 @@ export async function runDecisionCli(argv: string[], cwd = process.cwd()): Promi
 
   if (command === "list") {
     if (parsed.positionals.length) throw new Error("Usage: gke decisions list [options]");
-    const results = await listDecisions({
-      repoRoot,
-      workspace,
-      scanRoots,
+    const results = await decisions.list({
       projectId: first(parsed, "project"),
       status: first(parsed, "status") as DecisionStatus | undefined,
       reviewState: first(parsed, "review-state") as DecisionReviewState | undefined,
@@ -119,10 +114,59 @@ export async function runDecisionCli(argv: string[], cwd = process.cwd()): Promi
     return 0;
   }
 
+  if (command === "review") {
+    const decisionId = parsed.positionals[0];
+    if (!decisionId || parsed.positionals.length > 1) {
+      throw new Error("Usage: gke decisions review <decision-id> [options]");
+    }
+    const result = await decisions.review({
+      decisionId,
+      reviewedAt: first(parsed, "reviewed-at") || "",
+      reviewAfter: first(parsed, "review-after") || "",
+      reviewer: first(parsed, "reviewer") || "",
+      recommendationSupported: parseSupported(first(parsed, "supported")),
+      assumptionsNeedingValidation: all(parsed, "assumption"),
+      evidence: all(parsed, "evidence").map(parseReviewEvidence),
+      notes: first(parsed, "notes"),
+      dryRun: has(parsed, "dry-run"),
+    });
+    if (json) console.log(JSON.stringify(result, null, 2));
+    else {
+      console.log(`${result.dryRun ? "Would review" : "Reviewed"} decision ${result.decisionId}`);
+      for (const change of result.changes) {
+        const evidence = change.current || change.previous;
+        console.log(`${change.classification}\t${evidence?.path}:${evidence?.line}`);
+      }
+      if (result.dryRun) console.log(`\n${result.content}`);
+    }
+    return 0;
+  }
+
+  if (command === "supersede") {
+    const [decisionId, replacementId] = parsed.positionals;
+    if (!decisionId || !replacementId || parsed.positionals.length > 2) {
+      throw new Error("Usage: gke decisions supersede <decision-id> <replacement-id> [options]");
+    }
+    const result = await decisions.supersede({
+      decisionId,
+      replacementId,
+      supersededAt: first(parsed, "superseded-at") || "",
+      reason: first(parsed, "reason") || "",
+      dryRun: has(parsed, "dry-run"),
+    });
+    if (json) console.log(JSON.stringify(result, null, 2));
+    else {
+      console.log(
+        `${result.dryRun ? "Would supersede" : "Superseded"} ${decisionId} with ${replacementId}`,
+      );
+    }
+    return 0;
+  }
+
   throw new Error(`Unknown decision command: ${command}`);
 }
 
-function printDecision(decision: Awaited<ReturnType<typeof getDecision>>): void {
+function printDecision(decision: DecisionRecord): void {
   console.log(`${decision.title} (${decision.decisionId})`);
   console.log(`Path: ${decision.path}`);
   console.log(`Status: ${decision.status}`);
@@ -184,6 +228,17 @@ function assertKnownOptions(command: string, options: CliOptions): void {
     ],
     get: ["as-of", "raw"],
     list: ["project", "status", "review-state", "owner", "tag", "as-of"],
+    review: [
+      "reviewed-at",
+      "review-after",
+      "reviewer",
+      "supported",
+      "assumption",
+      "evidence",
+      "notes",
+      "dry-run",
+    ],
+    supersede: ["superseded-at", "reason", "dry-run"],
   };
   if (!(command in commands)) return;
   const allowed = new Set([...global, ...commands[command]]);
@@ -195,6 +250,31 @@ function parseEvidence(value: string): DecisionEvidenceInput {
   const match = value.trim().match(/^(.+):([1-9]\d*)$/);
   if (!match) throw new Error(`Decision evidence must use path:line syntax: ${value}`);
   return { path: match[1], line: Number.parseInt(match[2], 10) };
+}
+
+function parseReviewEvidence(value: string): DecisionEvidenceReviewInput {
+  const match = value
+    .trim()
+    .match(/^(.+):([1-9]\d*)(?:@(unchanged|strengthened|weakened|contradicted|new))?$/);
+  if (!match) {
+    throw new Error(
+      `Reviewed evidence must use path:line or path:line@classification syntax: ${value}`,
+    );
+  }
+  return {
+    path: match[1],
+    line: Number.parseInt(match[2], 10),
+    ...(match[3]
+      ? { classification: match[3] as DecisionEvidenceReviewInput["classification"] }
+      : {}),
+  };
+}
+
+function parseSupported(value: string | undefined): boolean | "uncertain" {
+  if (value === "yes" || value === "true") return true;
+  if (value === "no" || value === "false") return false;
+  if (value === "uncertain") return "uncertain";
+  throw new Error("--supported must be yes, no, or uncertain.");
 }
 
 function first(options: CliOptions, name: string): string | undefined {
@@ -216,6 +296,8 @@ Usage:
   gke decisions create [decision-id] [options]
   gke decisions get <decision-id|path|title> [--as-of <date>] [--raw|--json]
   gke decisions list [filters] [--json]
+  gke decisions review <decision-id> [options]
+  gke decisions supersede <decision-id> <replacement-id> [options]
 
 Create options:
   --title <title>                    required; also derives the ID when omitted
@@ -244,6 +326,21 @@ List filters:
   --owner <owner>
   --tag <tag>
   --as-of <YYYY-MM-DD>
+
+Review options:
+  --reviewed-at <YYYY-MM-DD>          required evidence-check date
+  --review-after <YYYY-MM-DD>         required next review date
+  --reviewer <name>                   required
+  --supported <yes|no|uncertain>      required recommendation assessment
+  --assumption <text>                 repeatable human-validation item
+  --evidence <path:line@class>        repeatable; class suffix is optional
+  --notes <text>
+  --dry-run
+
+Supersede options:
+  --superseded-at <YYYY-MM-DD>        required
+  --reason <text>                     required
+  --dry-run
 
 Global options:
   --repo-root <path>

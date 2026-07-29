@@ -122,6 +122,261 @@ const mutationOutputSchema: JsonSchema = {
   required: ["action", "path", "dryRun"],
 };
 
+const decisionEvidenceInputSchema: JsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    path: { type: "string", minLength: 1 },
+    line: { type: "integer", minimum: 1 },
+  },
+  required: ["path", "line"],
+};
+
+const decisionRecordSchema: JsonSchema = {
+  type: "object",
+  additionalProperties: true,
+  properties: {
+    decisionId: { type: "string" },
+    workspaceId: { type: "string" },
+    projectId: { type: "string" },
+    title: { type: "string" },
+    status: { type: "string", enum: ["proposed", "active", "superseded", "rejected"] },
+    owner: { type: "string" },
+    decidedAt: { type: "string" },
+    evidenceCheckedAt: { type: "string" },
+    reviewAfter: { type: "string" },
+    confidence: { type: "string", enum: ["low", "medium", "high"] },
+    reviewState: { type: "string", enum: ["current", "due", "overdue"] },
+    path: { type: "string" },
+    staleWarning: { type: "string" },
+  },
+  required: [
+    "decisionId",
+    "workspaceId",
+    "title",
+    "status",
+    "owner",
+    "decidedAt",
+    "evidenceCheckedAt",
+    "reviewAfter",
+    "confidence",
+    "reviewState",
+    "path",
+  ],
+};
+
+function getDecisionTool(): ToolDefinition {
+  return {
+    name: "kb.get_decision",
+    title: "Get Decision",
+    description:
+      "Read one canonical decision by ID, path, or title, with an explicit warning when review is due or overdue.",
+    annotations: annotations.read,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        query: { type: "string", minLength: 1 },
+        asOf: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        responseFormat: { type: "string", enum: ["compact", "full"] },
+      },
+      required: ["query"],
+    },
+    outputSchema: decisionRecordSchema,
+  };
+}
+
+function listDecisionsTool(): ToolDefinition {
+  return {
+    name: "kb.list_decisions",
+    title: "List Decisions",
+    description:
+      "List the canonical decision ledger with project, status, review-state, owner, and tag filters.",
+    annotations: annotations.read,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        projectId: { type: "string" },
+        status: { type: "string", enum: ["proposed", "active", "superseded", "rejected"] },
+        reviewState: { type: "string", enum: ["current", "due", "overdue"] },
+        owner: { type: "string" },
+        tag: { type: "string" },
+        asOf: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        responseFormat: { type: "string", enum: ["compact", "full"] },
+      },
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        decisionCount: { type: "integer" },
+        decisions: { type: "array", items: decisionRecordSchema },
+        warnings: { type: "array", items: { type: "string" } },
+      },
+      required: ["decisionCount", "decisions", "warnings"],
+    },
+  };
+}
+
+function recordDecisionTool(): ToolDefinition {
+  return {
+    name: "kb.record_decision",
+    title: "Record Decision",
+    description:
+      "Create a cited canonical decision under kb/decisions; validates local evidence and supports dry-run.",
+    annotations: annotations.idempotentWrite,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        decisionId: { type: "string" },
+        workspaceId: { type: "string" },
+        projectId: { type: "string" },
+        title: { type: "string", minLength: 2 },
+        status: { type: "string", enum: ["proposed", "active"] },
+        owner: { type: "string", minLength: 1 },
+        decidedAt: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        evidenceCheckedAt: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        reviewAfter: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        confidence: { type: "string", enum: ["low", "medium", "high"] },
+        tags: { type: "array", items: { type: "string" } },
+        question: { type: "string", minLength: 1 },
+        recommendation: { type: "string", minLength: 1 },
+        alternatives: { type: "array", items: { type: "string" } },
+        rationale: { type: "string", minLength: 1 },
+        assumptions: { type: "array", items: { type: "string" } },
+        risks: { type: "array", items: { type: "string" } },
+        evidence: { type: "array", items: decisionEvidenceInputSchema },
+        dryRun: { type: "boolean" },
+        responseFormat: { type: "string", enum: ["compact", "full"] },
+      },
+      required: [
+        "title",
+        "owner",
+        "decidedAt",
+        "evidenceCheckedAt",
+        "reviewAfter",
+        "confidence",
+        "question",
+        "recommendation",
+        "rationale",
+      ],
+    },
+    outputSchema: {
+      ...decisionRecordSchema,
+      required: [...(decisionRecordSchema.required as string[]), "dryRun"],
+    },
+  };
+}
+
+function reviewDecisionTool(): ToolDefinition {
+  return {
+    name: "kb.review_decision",
+    title: "Review Decision",
+    description:
+      "Append a classified evidence review without replacing the original evidence snapshot.",
+    annotations: annotations.additiveWrite,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        decisionId: { type: "string", minLength: 1 },
+        reviewedAt: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        reviewAfter: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        reviewer: { type: "string", minLength: 1 },
+        recommendationSupported: { type: "string", enum: ["yes", "no", "uncertain"] },
+        assumptionsNeedingValidation: { type: "array", items: { type: "string" } },
+        evidence: {
+          type: "array",
+          items: {
+            ...decisionEvidenceInputSchema,
+            properties: {
+              ...(decisionEvidenceInputSchema.properties as Record<string, unknown>),
+              classification: {
+                type: "string",
+                enum: ["unchanged", "strengthened", "weakened", "contradicted", "new"],
+              },
+              note: { type: "string" },
+            },
+          },
+        },
+        notes: { type: "string" },
+        dryRun: { type: "boolean" },
+        responseFormat: { type: "string", enum: ["compact", "full"] },
+      },
+      required: [
+        "decisionId",
+        "reviewedAt",
+        "reviewAfter",
+        "reviewer",
+        "recommendationSupported",
+        "evidence",
+      ],
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        decisionId: { type: "string" },
+        path: { type: "string" },
+        reviewedAt: { type: "string" },
+        reviewAfter: { type: "string" },
+        recommendationSupported: {
+          oneOf: [{ type: "boolean" }, { type: "string", enum: ["uncertain"] }],
+        },
+        assumptionsNeedingValidation: { type: "array", items: { type: "string" } },
+        changes: { type: "array", items: { type: "object" } },
+        dryRun: { type: "boolean" },
+      },
+      required: [
+        "decisionId",
+        "path",
+        "reviewedAt",
+        "reviewAfter",
+        "recommendationSupported",
+        "changes",
+        "dryRun",
+      ],
+    },
+  };
+}
+
+function supersedeDecisionTool(): ToolDefinition {
+  return {
+    name: "kb.supersede_decision",
+    title: "Supersede Decision",
+    description:
+      "Preserve and link two canonical decisions while activating the replacement; supports dry-run.",
+    annotations: annotations.idempotentWrite,
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        decisionId: { type: "string", minLength: 1 },
+        replacementId: { type: "string", minLength: 1 },
+        supersededAt: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+        reason: { type: "string", minLength: 1 },
+        dryRun: { type: "boolean" },
+        responseFormat: { type: "string", enum: ["compact", "full"] },
+      },
+      required: ["decisionId", "replacementId", "supersededAt", "reason"],
+    },
+    outputSchema: {
+      type: "object",
+      additionalProperties: true,
+      properties: {
+        decisionId: { type: "string" },
+        replacementId: { type: "string" },
+        decisionPath: { type: "string" },
+        replacementPath: { type: "string" },
+        dryRun: { type: "boolean" },
+      },
+      required: ["decisionId", "replacementId", "decisionPath", "replacementPath", "dryRun"],
+    },
+  };
+}
+
 const annotations = {
   read: {
     readOnlyHint: true,
@@ -325,6 +580,8 @@ function resumeProjectTool(): ToolDefinition {
 
 function fullTools(options: CatalogOptions): ToolDefinition[] {
   const tools: ToolDefinition[] = [
+    getDecisionTool(),
+    listDecisionsTool(),
     compatibilityGetter("kb.get_topic"),
     compatibilityGetter("kb.get_term"),
     {
@@ -388,6 +645,9 @@ function fullTools(options: CatalogOptions): ToolDefinition[] {
 
   if (options.writesEnabled) {
     tools.push(
+      recordDecisionTool(),
+      reviewDecisionTool(),
+      supersedeDecisionTool(),
       {
         name: "kb.upsert_note",
         title: "Upsert Knowledge Note",
@@ -464,5 +724,5 @@ export function buildToolCatalog(options: CatalogOptions): ToolDefinition[] {
 
 export const CATALOG_BUDGETS = {
   core: { maxTools: 4, maxCharacters: 7000 },
-  full: { maxTools: 11, maxCharacters: 13500 },
+  full: { maxTools: 16, maxCharacters: 22000 },
 } as const;

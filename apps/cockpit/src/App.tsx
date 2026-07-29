@@ -52,10 +52,20 @@ import {
   type ProjectAttentionFilter,
 } from "./domain/projects";
 import {
+  buildDecisionSummaries,
+  countDecisionStates,
+  filterDecisionSummaries,
+  getDecisionSummary,
+  parseDecisionDetail,
+  type DecisionLedgerFilter,
+} from "./domain/decisions";
+import {
   getAppRoute,
   getHashPath,
   setHashGraph,
   setHashHub,
+  setHashDecision,
+  setHashDecisions,
   setHashPath,
   setHashProject,
   setHashProjects,
@@ -80,6 +90,16 @@ const ProjectBoardView = lazy(() =>
 );
 const ProjectDetailView = lazy(() =>
   import("./views/ProjectDetailView").then((module) => ({ default: module.ProjectDetailView })),
+);
+const DecisionLedgerView = lazy(() =>
+  import("./views/DecisionLedgerView").then((module) => ({
+    default: module.DecisionLedgerView,
+  })),
+);
+const DecisionReplayView = lazy(() =>
+  import("./views/DecisionReplayView").then((module) => ({
+    default: module.DecisionReplayView,
+  })),
 );
 
 export { isExternalResource, normalizeDocPath, resolveMarkdownAssetPath, resolveMarkdownDocPath };
@@ -136,6 +156,8 @@ export default function App() {
     if (route.mode === "hub") return "hub";
     if (route.mode === "projects") return "projects";
     if (route.mode === "project") return "project";
+    if (route.mode === "decisions") return "decisions";
+    if (route.mode === "decision") return "decision";
     if (route.mode === "graph") return "graph";
     return initialDocFromHash ? "library" : "hub";
   });
@@ -143,6 +165,11 @@ export default function App() {
   const [isCommandBarOpen, setIsCommandBarOpen] = useState(false);
   const [moduleContextByPath, setModuleContextByPath] = useState({});
   const [selectedProjectId, setSelectedProjectId] = useState(initialRoute.projectId || "");
+  const [selectedDecisionId, setSelectedDecisionId] = useState(initialRoute.decisionId || "");
+  const [decisionLedgerFilter, setDecisionLedgerFilter] = useState<DecisionLedgerFilter>(
+    (initialRoute.decisionFilter as DecisionLedgerFilter) || "all",
+  );
+  const [decisionQuery, setDecisionQuery] = useState("");
   const [lifecycleOverrides, setLifecycleOverrides] = useState<Record<string, string>>({});
   const [projectAttentionFilter, setProjectAttentionFilter] = useState<ProjectAttentionFilter>(
     (initialRoute.attentionFilter as ProjectAttentionFilter) || "all",
@@ -170,6 +197,8 @@ export default function App() {
     setSelectedGraphPath,
     setSelectedProjectId,
     setProjectAttentionFilter,
+    setSelectedDecisionId,
+    setDecisionLedgerFilter,
     setViewMode,
   });
 
@@ -430,6 +459,20 @@ export default function App() {
     setHashProject(projectId);
   }
 
+  function goToDecisions(filter: DecisionLedgerFilter = "all") {
+    setIsReadingMode(false);
+    setDecisionLedgerFilter(filter);
+    setViewMode("decisions");
+    setHashDecisions(filter);
+  }
+
+  function openDecision(decisionId) {
+    setIsReadingMode(false);
+    setSelectedDecisionId(decisionId);
+    setViewMode("decision");
+    setHashDecision(decisionId);
+  }
+
   const activeModuleForHub = useMemo(() => buildHubModuleSummary(docs), [docs]);
 
   const openQuestionsCount = useMemo(() => countOpenQuestions(docs), [docs]);
@@ -541,6 +584,37 @@ export default function App() {
     () => buildProjectLinkedDocs(activeProject, projectContextGraph, docs),
     [activeProject, docs, projectContextGraph],
   );
+  const decisionSummaries = useMemo(() => buildDecisionSummaries(docs), [docs]);
+  const decisionCounts = useMemo(() => countDecisionStates(decisionSummaries), [decisionSummaries]);
+  const filteredDecisionSummaries = useMemo(
+    () => filterDecisionSummaries(decisionSummaries, decisionLedgerFilter, decisionQuery),
+    [decisionLedgerFilter, decisionQuery, decisionSummaries],
+  );
+  const activeDecisionSummary = useMemo(
+    () => getDecisionSummary(decisionSummaries, selectedDecisionId),
+    [decisionSummaries, selectedDecisionId],
+  );
+  const activeDecisionBody = useMarkdownBody(
+    markdownContentLoader,
+    activeDecisionSummary?.path || "",
+    viewMode === "decision" && Boolean(activeDecisionSummary?.path),
+  );
+  const activeDecisionResult = useMemo(() => {
+    if (activeDecisionBody.status !== "ready" || !activeDecisionSummary) {
+      return { decision: null, error: "" };
+    }
+    try {
+      return {
+        decision: parseDecisionDetail(activeDecisionBody.body, activeDecisionSummary.path),
+        error: "",
+      };
+    } catch (error) {
+      return {
+        decision: null,
+        error: error instanceof Error ? error.message : "The decision record is invalid.",
+      };
+    }
+  }, [activeDecisionBody.body, activeDecisionBody.status, activeDecisionSummary]);
 
   if (viewMode === "hub") {
     return (
@@ -599,6 +673,66 @@ export default function App() {
           attentionFilter={projectAttentionFilter}
           onAttentionFilterChange={setProjectAttentionFilter}
           attentionCounts={attentionCounts}
+        />
+      </Suspense>
+    );
+  }
+
+  if (viewMode === "decisions") {
+    return (
+      <Suspense fallback={<ViewLoading label="decision ledger" />}>
+        <DecisionLedgerView
+          docs={docs}
+          commandBarOpen={isCommandBarOpen}
+          onCommandBarOpenChange={setIsCommandBarOpen}
+          onCommand={() => setIsCommandBarOpen(true)}
+          onHub={goToHub}
+          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+          onProjects={goToProjects}
+          onGraph={goToGraph}
+          onCommandSelect={(item) => openDoc(item.path)}
+          decisions={filteredDecisionSummaries}
+          counts={decisionCounts}
+          filter={decisionLedgerFilter}
+          onFilterChange={(filter) => {
+            setDecisionLedgerFilter(filter);
+            setHashDecisions(filter);
+          }}
+          query={decisionQuery}
+          onQueryChange={setDecisionQuery}
+          onOpenDecision={openDecision}
+        />
+      </Suspense>
+    );
+  }
+
+  if (viewMode === "decision") {
+    const bodyStatus =
+      activeDecisionResult.error && activeDecisionBody.status === "ready"
+        ? "error"
+        : activeDecisionBody.status;
+    return (
+      <Suspense fallback={<ViewLoading label="decision replay" />}>
+        <DecisionReplayView
+          docs={docs}
+          commandBarOpen={isCommandBarOpen}
+          onCommandBarOpenChange={setIsCommandBarOpen}
+          onCommand={() => setIsCommandBarOpen(true)}
+          onHub={goToHub}
+          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+          onProjects={goToProjects}
+          onGraph={goToGraph}
+          onCommandSelect={(item) => openDoc(item.path)}
+          summary={activeDecisionSummary}
+          decision={activeDecisionResult.decision}
+          bodyStatus={bodyStatus}
+          bodyError={activeDecisionResult.error || activeDecisionBody.error}
+          onRetryBody={activeDecisionBody.retry}
+          onReviewApplied={() => {
+            window.setTimeout(activeDecisionBody.retry, 500);
+          }}
+          onBack={() => goToDecisions(decisionLedgerFilter)}
+          onOpenDoc={openDoc}
         />
       </Suspense>
     );

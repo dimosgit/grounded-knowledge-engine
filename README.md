@@ -23,17 +23,17 @@ workspace only.
 
 ## What is implemented
 
-| Capability                   | Current behavior                                                                                                                                                                                                                        |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Grounded retrieval**       | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations.                                                                                                                                                           |
-| **Durable capture**          | Clear learning is captured immediately; ambiguous routing, duplicates, and destructive replacements enter a conflict-safe local review queue.                                                                                           |
-| **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                                                                                                                 |
-| **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations.                                                                                             |
-| **Project checkpoints**      | `gke checkpoint` creates append-only, project-scoped handoff records with validated workspace-relative evidence citations; recent checkpoints feed project resume.                                                                      |
-| **Daily project review**     | `gke review` and `gke://workspace/review` return due reviews, attention reasons, and explicitly scoped project changes since an ISO date.                                                                                               |
-| **One MCP server**           | Claude Code, Codex, Gemini CLI, and GitHub Copilot use the same local `kb` server and knowledge base.                                                                                                                                   |
-| **Operator Cockpit**         | The React Cockpit eagerly loads a bounded catalog, loads full Markdown on demand, and adds daily-attention summaries and Board filters. Local development also adds grounded Ask, capture review, and source-provenance project deltas. |
-| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                                                                                           |
+| Capability                   | Current behavior                                                                                                                                                                                                                                         |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Grounded retrieval**       | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations.                                                                                                                                                                            |
+| **Durable capture**          | Clear learning is captured immediately; ambiguous routing, duplicates, and destructive replacements enter a conflict-safe local review queue.                                                                                                            |
+| **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                                                                                                                                  |
+| **Project resume**           | `kb.resume_project` returns current focus, recent changes, decisions, blockers/questions, next three actions, key documents, and citations.                                                                                                              |
+| **Project checkpoints**      | `gke checkpoint` creates append-only, project-scoped handoff records with validated workspace-relative evidence citations; recent checkpoints feed project resume.                                                                                       |
+| **Daily project review**     | `gke review` and `gke://workspace/review` return due reviews, attention reasons, and explicitly scoped project changes since an ISO date.                                                                                                                |
+| **One MCP server**           | Claude Code, Codex, Gemini CLI, and GitHub Copilot use the same local `kb` server and knowledge base.                                                                                                                                                    |
+| **Operator Cockpit**         | The React Cockpit eagerly loads a bounded catalog, loads full Markdown on demand, and adds daily-attention summaries and Board filters. Local development also adds grounded Ask, capture review, decision review, and source-provenance project deltas. |
+| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                                                                                                            |
 
 ## The compounding loop
 
@@ -125,6 +125,23 @@ The command is idempotent. Generated machine-specific configuration is ignored
 by Git. Restart the configured client from this repository after setup.
 See the [GitHub Copilot setup guide](docs/integrations/github-copilot.md) for
 host-specific verification and organization-policy notes.
+
+Register separate workspace vaults with one isolated MCP entry per process:
+
+```bash
+# First registration also records the local root in .gke/workspaces.json
+npm run setup:mcp -- --workspace client-alpha \
+  --workspace-root "/path/to/client-alpha"
+
+# Reconfigure a registered vault without repeating its path
+npm run setup:mcp -- --workspace client-alpha --client codex
+npm run setup:mcp -- --list-workspaces
+```
+
+This creates `kb-client-alpha` beside the existing `kb` entry. Registered
+vaults default to writes disabled; use `--writes` only when that vault's own
+`.gke/workspace.json` explicitly sets `readOnly: false`. Setup never adds an
+in-process workspace switch or cross-workspace search.
 
 ### Default MCP surface
 
@@ -253,15 +270,17 @@ The shared parser and handoff formatter live under
 than maintaining a separate interpretation of project Markdown. Legacy project
 notes remain readable for compatibility.
 
-**Implemented today:** canonical project, checkpoint, and initial decision
-records; shared project parsing; project-scoped `kb.resume_project`; Cockpit
-project rendering; the `gke project` CLI (`create`, `checkpoint`, `list`,
-`show`, `validate`, `update`, `link`); and the local decision CLI
-(`create`, `get`, `list`).
+**Implemented today:** canonical project, checkpoint, and decision records;
+shared project parsing; project-scoped `kb.resume_project`; Cockpit project
+rendering and Decision Replay views with preview-before-apply local review;
+separately named multi-vault MCP entries; the `gke project` CLI (`create`,
+`checkpoint`, `list`, `show`, `validate`, `update`, `link`); and the local
+decision CLI (`create`, `get`, `list`, `review`, `supersede`). The MCP full
+profile exposes the same decision lifecycle through dedicated tools and
+addressable resources.
 
-**Planned (target architecture, not yet implemented):** in-process
-multi-workspace switching, decision review/supersession and its MCP/Cockpit
-surfaces, and live Microsoft agent validation. These appear in
+**Planned (target architecture, not yet implemented):** live Microsoft agent
+validation and its production OAuth/OIDC authorization boundary. These appear in
 [`docs/workspace-data-architecture.md`](docs/workspace-data-architecture.md) as
 the normative target model; each record type there carries its own
 **Implementation status** label so the current surface is never confused with
@@ -318,16 +337,15 @@ npm link
 gke create customer-pilot --title "Customer Pilot"
 ```
 
-The reusable TypeScript service exports `createProject`,
-`createProjectCheckpoint`, `listProjectCheckpoints`, `getProject`,
-`listProjects`, `updateProject`, `linkProjectSource`, `validateProject`, and
-`validateAllProjects` from
-[`tools/projects`](tools/projects). Creation uses workspace-relative paths and
-atomic or exclusive append-only writes. Checkpoint citations must resolve to
-existing line numbers inside explicit project scope. Validation is read-only
-and checks canonical metadata, dates, required sections, duplicate IDs,
-lifecycle values, source roots, and local links. Controlled updates preserve
-unknown frontmatter and body sections.
+The workspace-pinned `ProjectApplicationService` composes project creation,
+inspection, validation, updates, tasks, source links, checkpoints, review, and
+resume from [`tools/projects`](tools/projects). The CLI, MCP resume/resources,
+and local Cockpit project workflows use that shared boundary. Creation uses
+workspace-relative paths and atomic or exclusive append-only writes. Checkpoint
+citations must resolve to existing line numbers inside explicit project scope.
+Validation is read-only and checks canonical metadata, dates, required
+sections, duplicate IDs, lifecycle values, source roots, and local links.
+Controlled updates preserve unknown frontmatter and body sections.
 
 Direct editing remains supported. A manually created canonical record under
 `kb/projects/<project-id>/project.md` is discovered by the CLI, Cockpit, and
@@ -339,6 +357,8 @@ The first Decision Replay slice stores structured, cited decisions under
 `kb/decisions/`. Creation is append-only, active decisions require evidence,
 project decisions accept citations only from explicit project scope, and
 `review_after` is always rendered as `current`, `due`, or `overdue`.
+The CLI, full-profile MCP tools, resources, and local Cockpit review endpoint
+share one workspace-pinned Decision Application Service.
 
 ```bash
 npm run decisions -- create pilot-location \
@@ -357,12 +377,45 @@ npm run decisions -- create pilot-location \
 
 npm run decisions -- get pilot-location --as-of 2026-08-30
 npm run decisions -- list --project customer-pilot --review-state overdue
+npm run decisions -- review pilot-location \
+  --reviewed-at 2026-08-30 \
+  --review-after 2026-09-30 \
+  --reviewer "workspace-owner" \
+  --supported uncertain \
+  --evidence "kb/sources/customer-pilot/location-evidence.md:12@unchanged" \
+  --evidence "kb/sources/customer-pilot/new-evidence.md:8@weakened"
+npm run decisions -- supersede pilot-location pilot-location-v2 \
+  --superseded-at 2026-08-31 \
+  --reason "New evidence changed the operating constraint"
 ```
+
+The MCP `full` profile adds `kb.get_decision` and `kb.list_decisions`.
+When `KB_MCP_ENABLE_WRITES=true`, it also advertises `kb.record_decision`,
+`kb.review_decision`, and `kb.supersede_decision`; otherwise those mutation
+tools are absent from discovery. Reads are also addressable without adding
+more tools:
+
+```text
+gke://workspace/decisions
+gke://decision/{decisionId}
+```
+
+Compact responses omit rendered Markdown bodies. Pass `responseFormat: full`
+when the complete evidence and review history is required. Due and overdue
+records carry an explicit warning in tool responses and resources.
+
+The Cockpit adds `#/decisions` and `#/decision/<decision-id>` routes over the
+same browser-safe parser. The ledger filters by freshness and lifecycle; replay
+shows the original evidence beside classified review changes and keeps stale
+warnings visible. The public demo compares Valencia, Málaga, and Lisbon.
+Canonical review writes still go through the MCP full profile or local CLI.
 
 Creation supports `--dry-run`; retrieval resolves exact decision ID, canonical
 path, or title. Filtering supports project, status, review state, owner, and
-tag. Evidence review diffs, supersession, MCP decision operations, and the
-Cockpit Decision Ledger remain planned.
+tag. Reviews preserve the original evidence snapshot, append structured
+history, and classify evidence as unchanged, strengthened, weakened,
+contradicted, missing, or new. Supersession preserves both records and writes
+bidirectional links.
 
 To recreate the repository's demo as a standalone, portable workspace through
 the same CLI:
@@ -454,16 +507,16 @@ see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
 
 ## Architecture
 
-| Layer                                        | Responsibility                                                                                                           |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| [`tools/grounding`](tools/grounding)         | Deterministic indexing, retrieval, grounded synthesis, and evaluation.                                                   |
-| [`tools/projects`](tools/projects)           | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting.                  |
-| [`tools/decisions`](tools/decisions)         | Canonical decision creation, parsing, exact retrieval, filtered listing, evidence validation, and review-state warnings. |
-| [`tools/questions`](tools/questions)         | Atomic, deduplicated, workspace-authorized open-question mutation shared by protocol and local adapters.                 |
-| [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts.                      |
-| [`tools/ingest`](tools/ingest)               | Local document extraction and capture adapters.                                                                          |
-| [`apps/cockpit`](apps/cockpit)               | Optional React preview over the same Markdown and shared project model; hosted as a static demo at `gke.dimouzunov.com`. |
-| `demo-kb/` and `kb/`                         | Sanitized public demo knowledge and gitignored private local project state, respectively.                                |
+| Layer                                        | Responsibility                                                                                                                     |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [`tools/grounding`](tools/grounding)         | Deterministic indexing, retrieval, grounded synthesis, and evaluation.                                                             |
+| [`tools/projects`](tools/projects)           | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting.                            |
+| [`tools/decisions`](tools/decisions)         | Canonical decision creation, retrieval, review diffs, append-only history, supersession, and review-state warnings.                |
+| [`tools/questions`](tools/questions)         | Workspace-pinned application service for atomic, deduplicated, workspace-authorized open-question mutation.                        |
+| [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts.                                |
+| [`tools/ingest`](tools/ingest)               | Local document extraction and capture adapters.                                                                                    |
+| [`apps/cockpit`](apps/cockpit)               | Optional React preview over the same Markdown and shared project/decision models; hosted as a static demo at `gke.dimouzunov.com`. |
+| `demo-kb/` and `kb/`                         | Sanitized public demo knowledge and gitignored private local project state, respectively.                                          |
 
 See [`docs/architecture.md`](docs/architecture.md) for the engine diagram and
 [`docs/workspace-data-architecture.md`](docs/workspace-data-architecture.md) for
@@ -510,8 +563,8 @@ secret/filename sanitization.
 
 The demo knowledge base contains paraphrased notes from the MIT-licensed
 [Model Context Protocol documentation](https://github.com/modelcontextprotocol/docs)
-plus original synthetic project records used to test isolation and handoff
-behavior. Attribution is documented in
+plus original synthetic project and decision records used to test isolation,
+handoff, and Decision Replay behavior. Attribution is documented in
 [`docs/demo-sources.md`](docs/demo-sources.md).
 
 [MIT](LICENSE)

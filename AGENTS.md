@@ -39,9 +39,9 @@ script, so "run a single test" means running its npm script directly:
 | `npm run test:projects`                    | strict project resolution, isolation, resource parity   |
 | `npm run test:project-service`             | project CLI service (create/update/link/validate)       |
 | `npm run test:checkpoints`                 | append-only project checkpoints and scoped evidence     |
-| `npm run test:decisions`                   | canonical decision create/get/list lifecycle            |
+| `npm run test:decisions`                   | decision create/review/supersede lifecycle              |
 | `npm run test:document-core`               | shared document parsing                                 |
-| `npm run smoke:mcp`                        | end-to-end MCP discovery, grounding, capture, resume    |
+| `npm run smoke:mcp`                        | MCP discovery, capture, resume, and decision lifecycle  |
 | `npm run test:loop`                        | ground → capture → re-ground → cite loop                |
 | `npm run test:ingest:unit` / `test:ingest` | ingestion pipeline (PDF/DOCX/XLSX fixtures)             |
 | `npm run eval`                             | exploratory retrieval quality against the demo QA set   |
@@ -49,7 +49,7 @@ script, so "run a single test" means running its npm script directly:
 
 Other frequently used entry points: `npm run search -- --query "…"`,
 `npm run project -- <create|checkpoint|list|show|validate|update|link>`,
-`npm run decisions -- <create|get|list>`,
+`npm run decisions -- <create|get|list|review|supersede>`,
 `npm run ingest -- <folder>`, `npm run setup:mcp`, `npm run dev:mcp`.
 
 ## Commands — Cockpit (`apps/cockpit`)
@@ -87,13 +87,19 @@ Delete the index anytime; `--refresh` rebuilds it from the Markdown.
 
 - **`tools/grounding`** — deterministic indexing, retrieval, grounded synthesis
   with file-and-line citations, and the eval harness.
-- **`tools/projects`** — the shared project model: parses canonical project
-  records (`record_type: project`, `project_id`,
-  `kb/projects/<id>/project.md`), resolves membership **explicitly only**
-  (`project_id`, canonical folder, `source_roots`, links — never semantic
-  similarity), and formats resume capsules/handoffs. Both the MCP server and
-  the Cockpit import this module, so a change here updates both surfaces;
-  keep the parser browser-safe (no Node-only imports).
+- **`tools/projects`** — the shared project model and workspace-pinned
+  application service: parses canonical project records
+  (`record_type: project`, `project_id`, `kb/projects/<id>/project.md`),
+  resolves membership **explicitly only** (`project_id`, canonical folder,
+  `source_roots`, links — never semantic similarity), and composes project
+  administration, checkpoints, review, resume capsules, and handoffs. The CLI,
+  MCP server, and Cockpit consume this module; keep parser/model modules
+  browser-safe (no Node-only imports).
+- **`tools/questions`** — the workspace-pinned open-question application
+  service and atomic repository. It normalizes and exactly deduplicates
+  questions, serializes the read/decide/write critical section, authorizes
+  canonical and operational paths through workspace policy, and refreshes
+  retrieval only after a real mutation.
 - **`tools/kb-mcp-server`** — provider-neutral MCP server over stdio using
   newline-delimited JSON (legacy `Content-Length` input frames still parse).
   The `core` profile exposes exactly four tools (`kb.search`, `kb.get_record`,
@@ -123,9 +129,10 @@ contain real customer identifiers, private endpoints, or secrets — use
 placeholders (`YOUR-DOMAIN`, env vars for keys). `npm run scrub` is the
 enforcement, but it is a backstop, not permission to be careless.
 
-Machine-local generated configs (`.mcp.json`, `.claude/settings.local.json`,
-`.codex/config.toml`, `.gemini/settings.json`) come from `npm run setup:mcp`
-and are gitignored — never commit them or hardcode absolute local paths.
+Machine-local generated configs (`.gke/workspaces.json`, `.mcp.json`,
+`.claude/settings.local.json`, `.codex/config.toml`,
+`.gemini/settings.json`) come from `npm run setup:mcp` and are gitignored —
+never commit them or hardcode absolute local paths.
 
 ## Documentation conventions
 

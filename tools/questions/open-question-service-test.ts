@@ -6,6 +6,7 @@ import path from "node:path";
 import { loadWorkspaceContext } from "../workspaces/config.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
 import {
+  createOpenQuestionApplicationService,
   mutateOpenQuestion,
   normalizeOpenQuestionInput,
   parseOpenQuestionEntries,
@@ -14,6 +15,8 @@ import type { OpenQuestionMutationInput } from "./types.js";
 
 async function main(): Promise<void> {
   const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-open-questions-"));
+  const pinnedRepoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-open-questions-pinned-"));
+  const outsideRepoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-open-questions-outside-"));
   try {
     await fs.mkdir(path.join(repoRoot, "kb"), { recursive: true });
     await fs.writeFile(path.join(repoRoot, "kb/index.md"), "# Test workspace\n", "utf8");
@@ -24,6 +27,50 @@ async function main(): Promise<void> {
     });
     const target = path.join(repoRoot, "kb/open_questions.md");
     const fixedNow = () => new Date("2026-07-14T12:00:00.000Z");
+
+    await fs.mkdir(path.join(pinnedRepoRoot, "kb"), { recursive: true });
+    await fs.writeFile(
+      path.join(pinnedRepoRoot, "kb/index.md"),
+      "# Pinned test workspace\n",
+      "utf8",
+    );
+    const pinnedWorkspace = await loadWorkspaceContext({
+      repoRoot: pinnedRepoRoot,
+      scanRoots: ["kb"],
+      writeRoots: ["kb", ".gke", ".cache"],
+    });
+    let pinnedRefreshCount = 0;
+    const pinnedService = createOpenQuestionApplicationService({
+      repoRoot: pinnedRepoRoot,
+      workspace: pinnedWorkspace,
+      writesEnabled: true,
+      now: fixedNow,
+      refresh: async () => {
+        pinnedRefreshCount += 1;
+      },
+    });
+    const redirectedInput = {
+      ...questionInput("Which workspace owns this question?"),
+      dryRun: false,
+      repoRoot: outsideRepoRoot,
+      workspace,
+      writesEnabled: false,
+    } as OpenQuestionMutationInput;
+    const pinnedResult = await pinnedService.add(redirectedInput);
+    assert.equal(pinnedResult.action, "created");
+    assert.equal(pinnedRefreshCount, 1);
+    assert.match(
+      await fs.readFile(path.join(pinnedRepoRoot, "kb/open_questions.md"), "utf8"),
+      /Which workspace owns this question\?/,
+    );
+    await assert.rejects(fs.access(path.join(outsideRepoRoot, "kb/open_questions.md")));
+    const pinnedDuplicate = await pinnedService.add({
+      ...questionInput("  which   WORKSPACE owns this question?  "),
+      dryRun: false,
+    });
+    assert.equal(pinnedDuplicate.action, "unchanged");
+    assert.equal(pinnedDuplicate.entryId, pinnedResult.entryId);
+    assert.equal(pinnedRefreshCount, 1);
 
     const normalized = normalizeOpenQuestionInput({
       question: "Question with\nextra spacing?",
@@ -169,7 +216,11 @@ async function main(): Promise<void> {
       "Open-question service tests passed (atomic concurrency, dedupe, dry-run, gates, syntax).",
     );
   } finally {
-    await fs.rm(repoRoot, { recursive: true, force: true });
+    await Promise.all([
+      fs.rm(repoRoot, { recursive: true, force: true }),
+      fs.rm(pinnedRepoRoot, { recursive: true, force: true }),
+      fs.rm(outsideRepoRoot, { recursive: true, force: true }),
+    ]);
   }
 }
 

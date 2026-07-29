@@ -133,14 +133,23 @@ The current public repository may continue to co-locate `demo-kb/` and `kb/`
 for its runnable demonstration. That compatibility layout is not the
 recommended structure for sensitive multi-client use.
 
+The engine installation may also keep a machine-local
+`.gke/workspaces.json` launcher registry. That file maps a workspace ID to its
+absolute local root so setup can regenerate separately named client entries.
+It is not part of any vault's canonical knowledge or runtime policy, and it
+must remain gitignored. A server process receives only the one selected root;
+it does not load the registry as a searchable workspace collection.
+
 ## Workspace boundary
 
 **Implementation status:** the thin local leakage guard is implemented. Each
 process resolves one immutable workspace context, realpath-confines configured
 scan roots and read/write targets, enforces read-only policy, and exposes safe
-workspace identity through the existing resource. Multi-vault lifecycle
-management, in-process workspace switching, and cross-workspace search remain
-planned; sensitive workspaces still use separate roots and processes.
+workspace identity through the existing resource. The local setup command now
+registers vault roots, lists them, and generates separately named MCP entries
+without replacing existing profiles. In-process workspace switching and
+cross-workspace search are deliberately excluded from the current design;
+sensitive workspaces use separate roots and processes.
 
 A workspace represents one trust domain, such as:
 
@@ -384,9 +393,15 @@ Rules:
 
 **Implementation status:** canonical decision creation, parsing, exact
 retrieval, filtered listing, scoped evidence validation, and stale-state
-calculation are implemented through the local service and CLI. Review history
-mutation, supersession, MCP operations, and Cockpit Decision Replay remain
-planned.
+calculation are implemented through the local service, CLI, and MCP full
+profile. Reviews preserve the original evidence snapshot, append classified
+evidence changes and human validation needs, and advance explicit freshness
+dates. Supersession preserves both records and writes bidirectional links.
+Decision resources expose the ledger and individual records. Cockpit Decision
+Ledger and Replay views consume the same browser-safe parser. The local
+Cockpit submits reviews through a loopback-only, same-origin endpoint that
+requires a successful dry-run preview before the UI enables apply. The public
+static build contains no review endpoint and remains read-only.
 
 Path:
 
@@ -724,9 +739,11 @@ Migration must remain incremental:
 10. Remove compatibility paths only in a later major schema version.
 
 Implemented migration slices now include project records, checkpoint records,
-the initial decision record lifecycle, source records, workspace configuration,
-workspace-local derived caches, and source-aware ingestion. Decision review and
-supersession remain planned.
+the local decision record/review/supersession lifecycle, source records,
+workspace configuration, workspace-local derived caches, and source-aware
+ingestion. Decision MCP tools and resources are implemented; Cockpit Decision
+Ledger and Replay reads plus local preview-before-apply review submission are
+implemented. The public Cockpit boundary remains read-only.
 
 No bulk migration should occur without:
 

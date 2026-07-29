@@ -27,6 +27,30 @@ export async function mutateOpenQuestion(
   }
 }
 
+export class OpenQuestionApplicationService {
+  private readonly context: OpenQuestionServiceOptions;
+
+  constructor(options: OpenQuestionServiceOptions) {
+    this.context = {
+      repoRoot: path.resolve(options.repoRoot),
+      workspace: options.workspace,
+      writesEnabled: options.writesEnabled,
+      refresh: options.refresh,
+      now: options.now,
+    };
+  }
+
+  async add(input: OpenQuestionMutationInput): Promise<OpenQuestionMutationResult> {
+    return mutateOpenQuestion(input, this.context);
+  }
+}
+
+export function createOpenQuestionApplicationService(
+  options: OpenQuestionServiceOptions,
+): OpenQuestionApplicationService {
+  return new OpenQuestionApplicationService(options);
+}
+
 async function mutateOpenQuestionValue(
   input: OpenQuestionMutationInput,
   options: OpenQuestionServiceOptions,

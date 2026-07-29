@@ -2,6 +2,18 @@ export { resumeProject, listProjectRecordsForWorkspace } from "./project-capsule
 export { formatTechnicalPeerHandoff, renderProjectCapsule } from "./project-capsule.js";
 export { listProjectRecords, type ProjectRecordSummary } from "./project-scope.js";
 export { reviewWorkspace } from "./project-review.js";
+export {
+  createProjectApplicationService,
+  ProjectApplicationService,
+} from "./project-application-service.js";
+export type {
+  AddProjectTaskInput,
+  CreateProjectCheckpointInput,
+  CreateProjectInput,
+  LinkProjectSourceInput,
+  ProjectApplicationServiceOptions,
+  UpdateProjectInput,
+} from "./project-application-service.js";
 export * from "./project-attention.js";
 export {
   createProjectCheckpoint,

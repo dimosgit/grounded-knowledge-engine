@@ -67,6 +67,11 @@ interface ListedTool {
   name: string;
 }
 
+interface ListedResource {
+  uri?: string;
+  uriTemplate?: string;
+}
+
 const child = spawn(process.execPath, serverArgs, {
   env: {
     ...process.env,
@@ -189,20 +194,41 @@ try {
   assert.ok(names.has("kb.add_open_question"));
   assert.ok(names.has("kb.answer_and_capture"));
   assert.ok(names.has("kb.resume_project"));
+  assert.ok(names.has("kb.record_decision"));
+  assert.ok(names.has("kb.get_decision"));
+  assert.ok(names.has("kb.list_decisions"));
+  assert.ok(names.has("kb.review_decision"));
+  assert.ok(names.has("kb.supersede_decision"));
 
   const resources = await request("resources/list", {});
-  assert.ok(resources.resources.some((resource: any) => resource.uri === "gke://workspace/info"));
-  assert.ok(resources.resources.some((resource: any) => resource.uri === "gke://workspace/review"));
+  assert.ok(
+    resources.resources.some((resource: ListedResource) => resource.uri === "gke://workspace/info"),
+  );
+  assert.ok(
+    resources.resources.some(
+      (resource: ListedResource) => resource.uri === "gke://workspace/review",
+    ),
+  );
+  assert.ok(
+    resources.resources.some(
+      (resource: ListedResource) => resource.uri === "gke://workspace/decisions",
+    ),
+  );
 
   const resourceTemplates = await request("resources/templates/list", {});
   assert.ok(
     resourceTemplates.resourceTemplates.some(
-      (resource: any) => resource.uriTemplate === "gke://record/{path}",
+      (resource: ListedResource) => resource.uriTemplate === "gke://record/{path}",
     ),
   );
   assert.ok(
     resourceTemplates.resourceTemplates.some(
-      (resource: any) => resource.uriTemplate === "gke://project/{projectId}/context",
+      (resource: ListedResource) => resource.uriTemplate === "gke://project/{projectId}/context",
+    ),
+  );
+  assert.ok(
+    resourceTemplates.resourceTemplates.some(
+      (resource: ListedResource) => resource.uriTemplate === "gke://decision/{decisionId}",
     ),
   );
 
@@ -212,6 +238,13 @@ try {
   const reviewResource = await request("resources/read", { uri: "gke://workspace/review" });
   assert.equal(reviewResource.contents?.[0]?.mimeType, "text/markdown");
   assert.match(reviewResource.contents?.[0]?.text || "", /workspace review/i);
+
+  const initialDecisionLedger = await request("resources/read", {
+    uri: "gke://workspace/decisions",
+  });
+  assert.equal(initialDecisionLedger.contents?.[0]?.mimeType, "text/markdown");
+  assert.match(initialDecisionLedger.contents?.[0]?.text || "", /Decision Ledger/);
+  assert.match(initialDecisionLedger.contents?.[0]?.text || "", /pilot-location/);
 
   const prompts = await request("prompts/list", {});
   assert.ok(Array.isArray(prompts.prompts));
@@ -344,6 +377,151 @@ try {
   });
   assert.equal(openQuestionDryRun.structuredContent?.dryRun, true);
   assert.equal(openQuestionDryRun.structuredContent?.status, "open");
+
+  const decisionV1 = await request("tools/call", {
+    name: "kb.record_decision",
+    arguments: {
+      decisionId: "mcp-tool-primitive-v1",
+      title: "MCP Tool Primitive",
+      status: "active",
+      owner: "mcp-smoke",
+      decidedAt: "2026-06-21",
+      evidenceCheckedAt: "2026-06-21",
+      reviewAfter: "2026-07-01",
+      confidence: "high",
+      tags: ["mcp", "decision-replay"],
+      question: "Which MCP primitive should expose model-driven knowledge operations?",
+      recommendation: "Use model-controlled MCP tools with addressable read resources.",
+      alternatives: ["Expose resources only"],
+      rationale: "The connected agent chooses when to invoke grounded operations.",
+      assumptions: ["The MCP client supports tool calls."],
+      risks: ["Clients may surface different discovery affordances."],
+      evidence: [{ path: "kb/topics/mcp-primitive-decision.md", line: 20 }],
+    },
+  });
+  assert.equal(decisionV1.isError, undefined);
+  assert.equal(decisionV1.structuredContent?.decisionId, "mcp-tool-primitive-v1");
+  assert.equal(decisionV1.structuredContent?.dryRun, false);
+  assert.match(decisionV1.structuredContent?.path || "", /^kb\/decisions\//);
+
+  const overdueDecision = await request("tools/call", {
+    name: "kb.get_decision",
+    arguments: {
+      query: "mcp-tool-primitive-v1",
+      asOf: "2026-07-29",
+      responseFormat: "full",
+    },
+  });
+  assert.equal(overdueDecision.structuredContent?.reviewState, "overdue");
+  assert.match(overdueDecision.structuredContent?.staleWarning || "", /^STALE:/);
+  assert.match(overdueDecision.content?.[0]?.text || "", /STALE:/);
+  assert.equal(overdueDecision.structuredContent?.evidence?.[0]?.line, 20);
+
+  const overdueLedger = await request("tools/call", {
+    name: "kb.list_decisions",
+    arguments: { reviewState: "overdue", owner: "mcp-smoke", asOf: "2026-07-29" },
+  });
+  assert.equal(overdueLedger.structuredContent?.decisionCount, 1);
+  assert.equal(
+    overdueLedger.structuredContent?.decisions?.[0]?.decisionId,
+    "mcp-tool-primitive-v1",
+  );
+  assert.match(overdueLedger.structuredContent?.warnings?.[0] || "", /^STALE:/);
+
+  const reviewedDecision = await request("tools/call", {
+    name: "kb.review_decision",
+    arguments: {
+      decisionId: "mcp-tool-primitive-v1",
+      reviewedAt: "2026-07-29",
+      reviewAfter: "2026-12-31",
+      reviewer: "mcp-smoke",
+      recommendationSupported: "yes",
+      assumptionsNeedingValidation: ["Confirm support in each target client."],
+      evidence: [
+        {
+          path: "kb/topics/mcp-primitive-decision.md",
+          line: 20,
+          classification: "unchanged",
+          note: "The local evidence still supports the primitive choice.",
+        },
+      ],
+      notes: "Review completed through the MCP decision lifecycle.",
+    },
+  });
+  assert.equal(reviewedDecision.structuredContent?.recommendationSupported, true);
+  assert.equal(reviewedDecision.structuredContent?.changes?.[0]?.classification, "unchanged");
+  assert.equal(reviewedDecision.structuredContent?.dryRun, false);
+
+  const currentDecision = await request("tools/call", {
+    name: "kb.get_decision",
+    arguments: { query: "mcp-tool-primitive-v1", asOf: "2026-07-29", responseFormat: "full" },
+  });
+  assert.equal(currentDecision.structuredContent?.reviewState, "current");
+  assert.match(currentDecision.structuredContent?.reviewHistory?.join("\n") || "", /2026-07-29/);
+  assert.equal(currentDecision.structuredContent?.evidence?.length, 1);
+
+  const decisionV2 = await request("tools/call", {
+    name: "kb.record_decision",
+    arguments: {
+      decisionId: "mcp-tool-primitive-v2",
+      title: "MCP Tool Primitive",
+      status: "proposed",
+      owner: "mcp-smoke",
+      decidedAt: "2026-07-29",
+      evidenceCheckedAt: "2026-07-29",
+      reviewAfter: "2027-01-31",
+      confidence: "high",
+      tags: ["mcp", "decision-replay"],
+      question: "Which MCP primitive should expose model-driven knowledge operations?",
+      recommendation: "Use semantic tools plus explicit decision resources.",
+      alternatives: ["Keep decision records reachable only through generic record reads"],
+      rationale: "Dedicated decision reads expose freshness and lifecycle state.",
+      assumptions: ["Full-profile clients opt into advanced decision operations."],
+      risks: ["The larger full catalog must remain within its explicit budget."],
+      evidence: [{ path: "kb/topics/mcp-primitive-decision.md", line: 21 }],
+    },
+  });
+  assert.equal(decisionV2.structuredContent?.status, "proposed");
+
+  const supersededDecision = await request("tools/call", {
+    name: "kb.supersede_decision",
+    arguments: {
+      decisionId: "mcp-tool-primitive-v1",
+      replacementId: "mcp-tool-primitive-v2",
+      supersededAt: "2026-07-30",
+      reason: "The replacement makes decision freshness explicit across tools and resources.",
+    },
+  });
+  assert.equal(supersededDecision.structuredContent?.decisionId, "mcp-tool-primitive-v1");
+  assert.equal(supersededDecision.structuredContent?.replacementId, "mcp-tool-primitive-v2");
+  assert.equal(supersededDecision.structuredContent?.dryRun, false);
+
+  const preferredDecision = await request("tools/call", {
+    name: "kb.get_decision",
+    arguments: { query: "MCP Tool Primitive", asOf: "2026-07-30", responseFormat: "full" },
+  });
+  assert.equal(preferredDecision.structuredContent?.decisionId, "mcp-tool-primitive-v2");
+  assert.equal(preferredDecision.structuredContent?.status, "active");
+
+  const decisionResources = await request("resources/list", {});
+  assert.ok(
+    decisionResources.resources.some(
+      (resource: ListedResource) => resource.uri === "gke://decision/mcp-tool-primitive-v1",
+    ),
+  );
+  assert.ok(
+    decisionResources.resources.some(
+      (resource: ListedResource) => resource.uri === "gke://decision/mcp-tool-primitive-v2",
+    ),
+  );
+  const decisionResource = await request("resources/read", {
+    uri: "gke://decision/mcp-tool-primitive-v1",
+  });
+  assert.equal(decisionResource.contents?.[0]?.mimeType, "text/markdown");
+  assert.match(decisionResource.contents?.[0]?.text || "", /Status: superseded/);
+  assert.match(decisionResource.contents?.[0]?.text || "", /Superseded by/);
+  const decisionLedger = await request("resources/read", { uri: "gke://workspace/decisions" });
+  assert.match(decisionLedger.contents?.[0]?.text || "", /mcp-tool-primitive-v2/);
 
   const sharedQuestion = "zzzzzzzzzzzzzzzzzzzz shared open-question smoke test";
   const openQuestionCreated = await request("tools/call", {

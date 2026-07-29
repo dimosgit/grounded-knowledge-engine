@@ -314,8 +314,9 @@ the current MCP schemas and transport behavior throughout the refactor.
 
 ### Phase 3 — Close the local product loop
 
-1. Extract reusable application services. **Grounded answer and capture
-   application boundaries implemented; broader extraction remains planned.**
+1. Extract reusable application services. **Grounded answer, capture, and
+   workspace-pinned project, decision, and open-question application boundaries
+   implemented; broader extraction remains planned.**
 2. Add the local Cockpit Ask/Review drawer. **Implemented.**
 3. Split Cockpit metadata from lazily loaded bodies. **Implemented.**
 
