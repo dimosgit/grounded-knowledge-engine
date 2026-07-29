@@ -1,21 +1,25 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin, ViteDevServer } from "vite";
-import {
-  answerGrounded,
-  type GroundedAnswerInput,
-  type GroundedAnswerResult,
+import type {
+  GroundedAnswerInput,
+  GroundedAnswerResult,
 } from "../../../tools/grounding/answer-service.js";
-import { getKbRetriever } from "../../../tools/grounding/retriever.js";
-import { getSqliteKbRetriever } from "../../../tools/grounding/sqlite-index.js";
-import type { IndexedDocument, SearchHit, SearchResult } from "../../../tools/grounding/types.js";
+import {
+  createGroundingApplicationService,
+  type GroundingApplicationService,
+} from "../../../tools/grounding/grounding-application-service.js";
+import type { IndexedDocument } from "../../../tools/grounding/types.js";
 import {
   captureGroundedAnswer,
   type CaptureGroundedAnswerOptions,
   type CaptureGroundedAnswerResult,
 } from "../../../tools/capture/grounded-capture-service.js";
 import { CaptureConflictError } from "../../../tools/capture/capture-service.js";
-import { createProjectApplicationService } from "../../../tools/projects/project-application-service.js";
+import {
+  createProjectApplicationService,
+  type ProjectApplicationService,
+} from "../../../tools/projects/project-application-service.js";
 import type { LoadedProject } from "../../../tools/projects/project-service.js";
 import { isDocumentInProject } from "../../../tools/projects/project-scope.js";
 import { loadWorkspaceContext } from "../../../tools/workspaces/config.js";
@@ -45,6 +49,8 @@ export interface GroundedAskPluginOptions {
 
 type GroundedAskRequestOptions = Omit<GroundedAskPluginOptions, "workspace"> & {
   workspace: WorkspaceContext;
+  groundingService?: GroundingApplicationService;
+  projectService?: ProjectApplicationService;
 };
 
 export function createGroundedAskPlugin(options: GroundedAskPluginOptions): Plugin {
@@ -54,15 +60,30 @@ export function createGroundedAskPlugin(options: GroundedAskPluginOptions): Plug
     (workspacePromise ??= options.workspace
       ? Promise.resolve(options.workspace)
       : loadWorkspaceContext({ repoRoot }));
+  let requestOptionsPromise: Promise<GroundedAskRequestOptions> | null = null;
+  const getRequestOptions = () =>
+    (requestOptionsPromise ??= getWorkspace().then((workspace) => ({
+      ...options,
+      repoRoot,
+      workspace,
+      groundingService: createGroundingApplicationService({
+        repoRoot,
+        workspace,
+        backend: process.env.KB_MCP_RETRIEVAL_BACKEND,
+      }),
+      projectService: createProjectApplicationService({
+        repoRoot,
+        scanRoots: [...workspace.scanRoots],
+        workspace,
+      }),
+    })));
   return {
     name: "grounded-ask-local-api",
     apply: "serve",
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
-        void getWorkspace()
-          .then((workspace) =>
-            handleGroundedAskRequest(req, res, { ...options, repoRoot, workspace }),
-          )
+        void getRequestOptions()
+          .then((requestOptions) => handleGroundedAskRequest(req, res, requestOptions))
           .then((handled) => {
             if (!handled) next();
           })
@@ -107,13 +128,14 @@ export async function handleGroundedAskRequest(
     const question = requiredString(body.question, "question", 3, 2_000);
     const strict = optionalBoolean(body.strict, "strict") ?? true;
     const requestedProjectId = optionalString(body.projectId, "projectId", 120);
-    const project = requestedProjectId
-      ? await createProjectApplicationService({
-          repoRoot: options.repoRoot,
-          scanRoots: [...options.workspace.scanRoots],
-          workspace: options.workspace,
-        }).get(requestedProjectId)
-      : null;
+    const projectService =
+      options.projectService ??
+      createProjectApplicationService({
+        repoRoot: options.repoRoot,
+        scanRoots: [...options.workspace.scanRoots],
+        workspace: options.workspace,
+      });
+    const project = requestedProjectId ? await projectService.get(requestedProjectId) : null;
     const projectId = project?.parsed.manifest.projectId;
     const answerInput: GroundedAnswerInput = {
       question,
@@ -124,9 +146,25 @@ export async function handleGroundedAskRequest(
       module: optionalString(body.module, "module", 120),
       projectId,
     };
-    const grounded = options.answer
-      ? await options.answer(answerInput)
-      : await runGroundedAnswer(options.repoRoot, answerInput, options.workspace, project);
+    let grounded: GroundedAnswerResult;
+    if (options.answer) {
+      grounded = await options.answer(answerInput);
+    } else {
+      const groundingService =
+        options.groundingService ??
+        createGroundingApplicationService({
+          repoRoot: options.repoRoot,
+          workspace: options.workspace,
+          backend: process.env.KB_MCP_RETRIEVAL_BACKEND,
+        });
+      const allDocuments = project
+        ? await groundingService.listDocuments({ backend: answerInput.backend })
+        : null;
+      const allowedPaths = project
+        ? getProjectDocuments(allDocuments || [], project).map((document) => document.relPath)
+        : undefined;
+      grounded = await groundingService.answer(answerInput, { allowedPaths });
+    }
 
     if (!isCapture) {
       sendJson(res, 200, { answer: shapeGroundedAnswer(grounded) });
@@ -158,37 +196,6 @@ export async function handleGroundedAskRequest(
   }
 }
 
-async function runGroundedAnswer(
-  repoRoot: string,
-  input: GroundedAnswerInput,
-  workspace: WorkspaceContext,
-  project: LoadedProject | null,
-): Promise<GroundedAnswerResult> {
-  const backend = String(input.backend || process.env.KB_MCP_RETRIEVAL_BACKEND || "bm25")
-    .trim()
-    .toLowerCase();
-  const retriever =
-    backend === "sqlite"
-      ? await getSqliteKbRetriever({ repoRoot, workspace })
-      : await getKbRetriever({ repoRoot, workspace });
-  const allDocuments = project ? await retriever.getDocuments() : null;
-  const scopedDocuments = project ? getProjectDocuments(allDocuments || [], project) : null;
-  const allowedPaths = scopedDocuments
-    ? new Set(scopedDocuments.map((document) => document.relPath))
-    : null;
-  return answerGrounded(input, {
-    search: async (args) => {
-      const result = await retriever.search(
-        allowedPaths ? { ...args, limit: 30, disableCache: true } : args,
-      );
-      return allowedPaths
-        ? scopeSearchResult(result, allowedPaths, Number(args.limit) || 8)
-        : result;
-    },
-    listDocuments: async () => scopedDocuments || retriever.getDocuments(),
-  });
-}
-
 function getProjectDocuments(documents: IndexedDocument[], project: LoadedProject) {
   const { manifest, explicitPaths } = project.parsed;
   return documents.filter((document) =>
@@ -200,43 +207,6 @@ function getProjectDocuments(documents: IndexedDocument[], project: LoadedProjec
       explicitPaths,
     ),
   );
-}
-
-function scopeSearchResult(
-  result: SearchResult,
-  allowedPaths: ReadonlySet<string>,
-  limit: number,
-): SearchResult {
-  const hits = result.hits.filter((hit) => allowedPaths.has(hit.path)).slice(0, limit);
-  return {
-    ...result,
-    hitCount: hits.length,
-    hits,
-    signals: buildEvidenceSignals(hits, result.queryTokens),
-  };
-}
-
-function buildEvidenceSignals(hits: SearchHit[], queryTokens: string[]) {
-  const topHits = hits.slice(0, 5);
-  const coveredTokens = new Set<string>();
-  const sourceCounts = new Map<string, number>();
-  for (const hit of topHits) {
-    for (const token of hit.matchedTokens || []) coveredTokens.add(token);
-    sourceCounts.set(hit.path, (sourceCounts.get(hit.path) || 0) + 1);
-  }
-  const dominantSourceShare = topHits.length
-    ? Math.max(...sourceCounts.values()) / topHits.length
-    : 0;
-  return {
-    topScore: roundSignal(topHits[0]?.score || 0),
-    uniqueSources: sourceCounts.size,
-    tokenCoverage: roundSignal(queryTokens.length ? coveredTokens.size / queryTokens.length : 0),
-    dominantSourceShare: roundSignal(dominantSourceShare),
-  };
-}
-
-function roundSignal(value: number): number {
-  return Number(value.toFixed(3));
 }
 
 function shapeGroundedAnswer(answer: GroundedAnswerResult) {

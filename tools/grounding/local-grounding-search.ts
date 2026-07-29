@@ -1,8 +1,11 @@
 #!/usr/bin/env node
-import { getKbRetriever } from "./retriever.js";
 import { loadWorkspaceContext } from "../workspaces/config.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
-import type { RetrievalBackend, RetrieverOptions, SearchHit, SearchMode } from "./types.js";
+import {
+  createGroundingApplicationService,
+  normalizeRetrievalBackend,
+} from "./grounding-application-service.js";
+import type { RetrievalBackend, SearchHit, SearchMode } from "./types.js";
 
 const DEFAULT_LIMIT = 12;
 const DEFAULT_CONTEXT = 1;
@@ -152,12 +155,12 @@ function parseArgs(argv: string[]): SearchCliArgs {
       continue;
     }
     if (arg === "--backend") {
-      args.backend = normalizeBackend(next || "bm25");
+      args.backend = normalizeRetrievalBackend(next || "bm25");
       i += 1;
       continue;
     }
     if (arg.startsWith("--backend=")) {
-      args.backend = normalizeBackend(arg.slice("--backend=".length));
+      args.backend = normalizeRetrievalBackend(arg.slice("--backend=".length));
       continue;
     }
     if (arg === "--max-per-path") {
@@ -274,11 +277,12 @@ async function main() {
   }
 
   const workspace = await tryLoadWorkspace();
-  const retriever =
-    args.backend === "sqlite"
-      ? await getSqliteRetriever({ forceRefresh: args.refresh, workspace })
-      : await getKbRetriever({ forceRefresh: args.refresh, workspace });
-  const result = retriever.search({
+  const groundingService = createGroundingApplicationService({
+    workspace,
+    backend: args.backend,
+  });
+  if (args.refresh) await groundingService.refresh();
+  const result = await groundingService.search({
     query: args.query,
     mode: args.mode,
     track: args.track,
@@ -290,6 +294,7 @@ async function main() {
     disableCache: args.disableCache,
     debug: args.debug,
     debugTopN: args.debugTopN,
+    backend: args.backend,
   });
 
   if (args.json) {
@@ -358,15 +363,6 @@ async function tryLoadWorkspace(): Promise<WorkspaceContext | undefined> {
     // Retriever falls back to env/default scan roots without a workspace.
     return undefined;
   }
-}
-
-async function getSqliteRetriever(options: RetrieverOptions) {
-  const { getSqliteKbRetriever } = await import("./sqlite-index.js");
-  return getSqliteKbRetriever(options);
-}
-
-function normalizeBackend(value: unknown): RetrievalBackend {
-  return `${value || ""}`.trim().toLowerCase() === "sqlite" ? "sqlite" : "bm25";
 }
 
 main().catch((error) => {

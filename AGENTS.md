@@ -41,6 +41,7 @@ script, so "run a single test" means running its npm script directly:
 | `npm run test:checkpoints`                 | append-only project checkpoints and scoped evidence     |
 | `npm run test:decisions`                   | decision create/review/supersede lifecycle              |
 | `npm run test:document-core`               | shared document parsing                                 |
+| `npm run test:grounding-service`           | pinned context, backend parity, and scoped answers      |
 | `npm run smoke:mcp`                        | MCP discovery, capture, resume, and decision lifecycle  |
 | `npm run test:loop`                        | ground → capture → re-ground → cite loop                |
 | `npm run test:ingest:unit` / `test:ingest` | ingestion pipeline (PDF/DOCX/XLSX fixtures)             |
@@ -85,8 +86,10 @@ Do not run `test` and `build` in parallel — both sync Markdown into
 Data flow: Markdown KB → derived index → three surfaces (CLI, MCP, Cockpit).
 Delete the index anytime; `--refresh` rebuilds it from the Markdown.
 
-- **`tools/grounding`** — deterministic indexing, retrieval, grounded synthesis
-  with file-and-line citations, and the eval harness.
+- **`tools/grounding`** — the workspace-pinned grounding application service
+  shared by CLI, MCP, and Cockpit, plus deterministic indexing, BM25/SQLite
+  retrieval, grounded synthesis with file-and-line citations, and the eval
+  harness.
 - **`tools/projects`** — the shared project model and workspace-pinned
   application service: parses canonical project records
   (`record_type: project`, `project_id`, `kb/projects/<id>/project.md`),
