@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin, ViteDevServer } from "vite";
+import { createProjectApplicationService } from "../../../tools/projects/project-application-service.js";
 import type { ReviewWorkspaceArgs } from "../../../tools/projects/project-review.js";
 import type { WorkspaceReviewReport } from "../../../tools/projects/types.js";
 import { loadWorkspaceContext } from "../../../tools/workspaces/config.js";
@@ -95,27 +96,20 @@ export async function handleWorkspaceReviewRequest(
     assertLocalRequest(getLocalRequestIdentity(req), false);
     if ((req.method || "GET").toUpperCase() !== "GET") throw methodNotAllowed("GET");
     const args = parseReviewQuery(requestUrl.searchParams);
-    const review = options.review || runWorkspaceReview;
-    const result = await withTimeout(
-      review(args, options.repoRoot, [...options.workspace.scanRoots], options.workspace),
-      options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    );
+    const reviewPromise = options.review
+      ? options.review(args, options.repoRoot, [...options.workspace.scanRoots], options.workspace)
+      : createProjectApplicationService({
+          repoRoot: options.repoRoot,
+          scanRoots: [...options.workspace.scanRoots],
+          workspace: options.workspace,
+        }).review(args);
+    const result = await withTimeout(reviewPromise, options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     sendJson(res, 200, { review: result.structured });
     return true;
   } catch (error) {
     sendReviewError(res, error);
     return true;
   }
-}
-
-async function runWorkspaceReview(
-  args: ReviewWorkspaceArgs,
-  repoRoot: string,
-  scanRoots: string[],
-  workspace: WorkspaceContext,
-): Promise<ReviewResult> {
-  const { reviewWorkspace } = await import("../../../tools/projects/project-review.js");
-  return reviewWorkspace(args, repoRoot, scanRoots, workspace);
 }
 
 function parseReviewQuery(searchParams: URLSearchParams): ReviewWorkspaceArgs {

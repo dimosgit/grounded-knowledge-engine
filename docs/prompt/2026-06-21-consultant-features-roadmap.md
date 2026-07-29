@@ -27,8 +27,10 @@ workspace boundaries, and migration.
 
 Decision Replay is tracked separately because it is a new product workflow,
 not one of the three consultant-foundation features. Its canonical local
-create/get/list slice is implemented; review, supersession, MCP, and Cockpit
-work remain:
+create/get/list/review/supersession lifecycle, full-profile MCP tools and
+resources, and Cockpit Ledger/Replay views are implemented. The local Cockpit
+also supports preview-before-apply review submission; the public build remains
+read-only:
 [Decision Replay](2026-06-21-decision-replay.md).
 
 Capture integrity and the local operator review loop are also tracked
@@ -98,6 +100,8 @@ demo workspace, project CLI, and Operator Cockpit.
 Deliver:
 
 - Canonical `project_id` and project manifest schema.
+- Workspace-pinned Project Application Service shared by CLI, MCP, and
+  Cockpit adapters.
 - Shared deterministic project parser/model with legacy `module`,
   `lifecycle`, and `Next 3 actions` compatibility.
 - `kb.resume_project`.
@@ -119,8 +123,9 @@ full GKE test suites.
 Introduce the trust boundary before any tunnel exposure.
 
 The immutable workspace context, realpath-confined roots, read-only policy, and
-adversarial isolation tests are implemented. Multi-vault lifecycle management
-and in-process workspace switching remain outside the thin delivered kernel.
+adversarial isolation tests are implemented. The setup adapter also registers,
+lists, and configures separately named vault entries without overwriting other
+profiles. In-process workspace switching remains deliberately excluded.
 
 Deliver:
 

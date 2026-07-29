@@ -50,7 +50,7 @@ flowchart TB
     subgraph engine[Local engine]
       CLI[CLI · tools/grounding<br/>index · retrieve · evaluate]
       PROJECTS[Project core · tools/projects<br/>parse · scope · resume · handoff]
-      DECISIONS[Decision core · tools/decisions<br/>create · get · list · stale state]
+      DECISIONS[Decision core · tools/decisions<br/>record · review · supersede · replay]
       MCP[MCP server · tools/kb-mcp-server<br/>semantic tools + resources over stdio]
       COCKPIT[Operator Cockpit · apps/cockpit<br/>shared project model]
     end
@@ -73,15 +73,16 @@ flowchart TB
     COCKPIT --> KB
 ```
 
-| Layer                                  | Role                                                                                                                                | Portability                          |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| **CLI** (`tools/grounding`)            | Deterministic index / retrieve / evaluate. Scriptable, CI-able, no agent.                                                           | Universal                            |
-| **Project core** (`tools/projects`)    | Canonical project parsing, strict membership, cited capsules, and handoff formatting.                                               | CLI/MCP/browser-safe shared model    |
-| **Decision core** (`tools/decisions`)  | Append-only canonical creation, exact retrieval, filtered listing, scoped citations, and review-state calculation.                  | Local service and CLI                |
-| **MCP server** (`tools/kb-mcp-server`) | Four-tool core catalog plus logical resources over a standard local protocol.                                                       | Any MCP client                       |
-| **Cockpit** (`apps/cockpit`)           | Optional browser preview over the same Markdown and project parser. The public preview is a static demo build, not a hosted engine. | Local web UI / static public preview |
-| **Index** (BM25 · SQLite)              | Derived retrieval data. Disposable — rebuilt from the docs.                                                                         | Regenerable                          |
-| **KB** (Markdown)                      | Your notes. The single source of truth.                                                                                             | Plain files                          |
+| Layer                                  | Role                                                                                                                                                                                           | Portability                          |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| **CLI** (`tools/grounding`)            | Deterministic index / retrieve / evaluate. Scriptable, CI-able, no agent.                                                                                                                      | Universal                            |
+| **Project core** (`tools/projects`)    | Workspace-pinned application service over canonical project administration, checkpoints, strict membership, review, cited capsules, and handoff formatting.                                    | Shared by CLI, MCP, and Cockpit      |
+| **Decision core** (`tools/decisions`)  | Workspace-pinned application service over canonical creation, exact retrieval, evidence review diffs, append-only history, supersession, and review-state calculation.                         | Shared by CLI, MCP, and Cockpit      |
+| **Question core** (`tools/questions`)  | Workspace-pinned application service over atomic, exactly deduplicated, workspace-authorized open-question mutation.                                                                           | Shared provider-neutral core         |
+| **MCP server** (`tools/kb-mcp-server`) | Four-tool core; the full profile adds decision operations and logical resources without expanding the daily-use catalog.                                                                       | Any MCP client                       |
+| **Cockpit** (`apps/cockpit`)           | Optional browser UI over shared project and decision parsers, with loopback-only preview/apply workflows in local development. The public preview is a static demo build, not a hosted engine. | Local web UI / static public preview |
+| **Index** (BM25 · SQLite)              | Derived retrieval data. Disposable — rebuilt from the docs.                                                                                                                                    | Regenerable                          |
+| **KB** (Markdown)                      | Your notes. The single source of truth.                                                                                                                                                        | Plain files                          |
 
 ## Design choices
 
@@ -90,14 +91,24 @@ flowchart TB
 - **Derived data is disposable.** The SQLite index is a cache of the Markdown, never the
   other way around — delete it and `--refresh` rebuilds it.
 - **Shared core, multiple surfaces.** CLI, MCP, and Cockpit reuse deterministic
-  grounding/project modules, while the initial decision domain is shared by its
-  local service and CLI. CI proves each exposed surface against the same
-  Markdown contracts.
+  grounding, project, decision, and open-question application services. CI
+  proves each exposed surface against the same Markdown contracts.
 - **Explicit project boundaries.** `project_id`, canonical folders,
   `source_roots`, and links define membership; similarity never silently expands
   scope.
+- **Process-isolated workspace vaults.** `setup:mcp` can register local roots and
+  generate one named client entry per vault. Each entry launches a process with
+  one immutable workspace root; there is no in-process switch or cross-workspace
+  search.
 - **Small semantic MCP catalog.** Daily-use tools remain bounded, while addressable
   context uses `gke://` resources.
+- **Decision Replay stays explicit.** The full profile exposes record, get,
+  list, review, and supersede operations. Decision mutation tools disappear
+  from discovery when writes are disabled; ledger and record reads remain
+  addressable as `gke://workspace/decisions` and
+  `gke://decision/{decisionId}`. Local Cockpit review requires a validated
+  dry-run preview before apply, and its endpoint is absent from production
+  bundles.
 - **Newline-delimited JSON over stdio** is the emitted MCP transport format.
   The parser accepts legacy `Content-Length` input frames for compatibility,
   while generated adapters use newline-delimited JSON to avoid client

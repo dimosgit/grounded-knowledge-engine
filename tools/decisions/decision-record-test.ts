@@ -6,7 +6,13 @@ import os from "node:os";
 import path from "node:path";
 import { createProject } from "../projects/project-service.js";
 import { loadWorkspaceContext } from "../workspaces/config.js";
-import { createDecision, getDecision, listDecisions } from "./decision-record.js";
+import {
+  createDecision,
+  getDecision,
+  listDecisions,
+  reviewDecision,
+  supersedeDecision,
+} from "./decision-record.js";
 
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "gke-decision-record-"));
 const outside = await fs.mkdtemp(path.join(os.tmpdir(), "gke-decision-outside-"));
@@ -34,6 +40,11 @@ try {
     root,
     "kb/sources/other/market.md",
     "# Other Evidence\n\nThis is not part of Alpha Pilot.\n",
+  );
+  await write(
+    root,
+    "kb/sources/alpha-pilot/new-market.md",
+    "# Updated Market Evidence\n\nA newer constraint weakens one assumption.\n",
   );
 
   const dryRun = await createDecision({
@@ -136,6 +147,150 @@ try {
   assert.deepEqual(
     filtered.map((decision) => decision.decisionId),
     [created.decisionId],
+  );
+
+  const reviewDryRun = await reviewDecision({
+    repoRoot: root,
+    workspace,
+    scanRoots: ["demo-kb", "kb"],
+    decisionId: created.decisionId,
+    reviewedAt: "2026-08-21",
+    reviewAfter: "2026-09-21",
+    reviewer: "decision-reviewer",
+    recommendationSupported: "uncertain",
+    assumptionsNeedingValidation: ["Confirm the newer constraint."],
+    evidence: [
+      {
+        path: "kb/sources/alpha-pilot/market.md",
+        line: 3,
+        classification: "unchanged",
+      },
+      {
+        path: "kb/sources/alpha-pilot/new-market.md",
+        line: 3,
+        classification: "weakened",
+      },
+    ],
+    notes: "Human validation is required.",
+    dryRun: true,
+  });
+  assert.equal(reviewDryRun.dryRun, true);
+  assert.deepEqual(
+    reviewDryRun.changes.map((change) => change.classification),
+    ["unchanged", "weakened"],
+  );
+  assert.match(reviewDryRun.content, /### Review 2026-08-21/);
+  assert.match(reviewDryRun.content, /review_after: 2026-09-21/);
+  assert.doesNotMatch(
+    await fs.readFile(path.join(root, created.path), "utf8"),
+    /### Review 2026-08-21/,
+  );
+
+  const reviewed = await reviewDecision({ ...reviewDryRunInput(reviewDryRun), dryRun: false });
+  assert.equal(reviewed.dryRun, false);
+  const reviewedRaw = await fs.readFile(path.join(root, created.path), "utf8");
+  assert.match(reviewedRaw, /evidence_checked_at: 2026-08-21/);
+  assert.match(reviewedRaw, /### Review 2026-08-21/);
+  assert.equal(
+    (reviewedRaw.match(/kb\/sources\/alpha-pilot\/market\.md:3 — Market Evidence/g) || []).length,
+    1,
+  );
+  const reviewedRecord = await getDecision(created.decisionId, {
+    repoRoot: root,
+    workspace,
+    scanRoots: ["demo-kb", "kb"],
+    asOf: "2026-09-20",
+  });
+  assert.equal(reviewedRecord.reviewState, "current");
+  assert.equal(reviewedRecord.evidenceCheckedAt, "2026-08-21");
+  await Promise.all([
+    reviewDecision({
+      repoRoot: root,
+      workspace,
+      scanRoots: ["demo-kb", "kb"],
+      decisionId: created.decisionId,
+      reviewedAt: "2026-08-21",
+      reviewAfter: "2026-09-21",
+      reviewer: "concurrent-reviewer-a",
+      recommendationSupported: true,
+      evidence: [{ path: "kb/sources/alpha-pilot/market.md", line: 3 }],
+    }),
+    reviewDecision({
+      repoRoot: root,
+      workspace,
+      scanRoots: ["demo-kb", "kb"],
+      decisionId: created.decisionId,
+      reviewedAt: "2026-08-21",
+      reviewAfter: "2026-09-21",
+      reviewer: "concurrent-reviewer-b",
+      recommendationSupported: true,
+      evidence: [{ path: "kb/sources/alpha-pilot/market.md", line: 3 }],
+    }),
+  ]);
+  const concurrentReviewRaw = await fs.readFile(path.join(root, created.path), "utf8");
+  assert.match(concurrentReviewRaw, /Reviewer: concurrent-reviewer-a/);
+  assert.match(concurrentReviewRaw, /Reviewer: concurrent-reviewer-b/);
+
+  const replacement = await createDecision({
+    repoRoot: root,
+    workspace,
+    scanRoots: ["demo-kb", "kb"],
+    decisionId: "select-the-pilot-location-v2",
+    projectId: "alpha-pilot",
+    title: "Select the pilot location",
+    status: "active",
+    owner: "decision-tester",
+    decidedAt: "2026-08-22",
+    evidenceCheckedAt: "2026-08-22",
+    reviewAfter: "2026-09-22",
+    confidence: "medium",
+    question: "Which location should host the revised pilot?",
+    recommendation: "Use the revised Alpha location.",
+    rationale: "The newer evidence changes the operating constraint.",
+    evidence: [{ path: "kb/sources/alpha-pilot/new-market.md", line: 3 }],
+  });
+  const supersedeDryRun = await supersedeDecision({
+    repoRoot: root,
+    workspace,
+    scanRoots: ["demo-kb", "kb"],
+    decisionId: created.decisionId,
+    replacementId: replacement.decisionId,
+    supersededAt: "2026-08-22",
+    reason: "New evidence changed the constraint.",
+    dryRun: true,
+  });
+  assert.match(supersedeDryRun.decisionContent, /status: superseded/);
+  assert.match(supersedeDryRun.replacementContent, /Supersedes \[select-the-pilot-location\]/);
+  assert.equal(
+    (
+      await getDecision(created.decisionId, {
+        repoRoot: root,
+        workspace,
+        scanRoots: ["demo-kb", "kb"],
+      })
+    ).status,
+    "active",
+  );
+  await supersedeDecision({ ...supersedeDryRunInput(supersedeDryRun), dryRun: false });
+  assert.equal(
+    (
+      await getDecision(created.decisionId, {
+        repoRoot: root,
+        workspace,
+        scanRoots: ["demo-kb", "kb"],
+      })
+    ).status,
+    "superseded",
+  );
+  assert.equal(
+    (
+      await getDecision("Select the pilot location", {
+        repoRoot: root,
+        workspace,
+        scanRoots: ["demo-kb", "kb"],
+      })
+    ).decisionId,
+    replacement.decisionId,
   );
 
   await assert.rejects(
@@ -345,7 +500,73 @@ try {
     "--json",
   ]);
   assert.equal(cliList.code, 0, cliList.stderr);
-  assert.ok(JSON.parse(cliList.stdout).length >= 2);
+  assert.ok(
+    JSON.parse(cliList.stdout).some(
+      (decision: { decisionId: string }) => decision.decisionId === "cli-decision",
+    ),
+  );
+
+  const cliReplacement = await runCli([
+    "create",
+    "cli-decision-v2",
+    "--repo-root",
+    root,
+    "--title",
+    "CLI decision v2",
+    "--status",
+    "active",
+    "--owner",
+    "decision-tester",
+    "--decided-at",
+    "2026-08-02",
+    "--evidence-checked-at",
+    "2026-08-02",
+    "--review-after",
+    "2026-09-02",
+    "--confidence",
+    "high",
+    "--question",
+    "Does the revised CLI decision work?",
+    "--recommendation",
+    "Use the revised CLI path.",
+    "--rationale",
+    "The evidence is explicit.",
+    "--evidence",
+    "kb/sources/other/market.md:3",
+  ]);
+  assert.equal(cliReplacement.code, 0, cliReplacement.stderr);
+  const cliReview = await runCli([
+    "review",
+    "cli-decision",
+    "--repo-root",
+    root,
+    "--reviewed-at",
+    "2026-08-02",
+    "--review-after",
+    "2026-09-02",
+    "--reviewer",
+    "cli-reviewer",
+    "--supported",
+    "uncertain",
+    "--evidence",
+    "kb/sources/other/market.md:3@new",
+    "--json",
+  ]);
+  assert.equal(cliReview.code, 0, cliReview.stderr);
+  assert.equal(JSON.parse(cliReview.stdout).changes[0].classification, "new");
+  const cliSupersede = await runCli([
+    "supersede",
+    "cli-decision",
+    "cli-decision-v2",
+    "--repo-root",
+    root,
+    "--superseded-at",
+    "2026-08-03",
+    "--reason",
+    "The revised CLI decision replaces it.",
+  ]);
+  assert.equal(cliSupersede.code, 0, cliSupersede.stderr);
+  assert.match(cliSupersede.stdout, /Superseded cli-decision with cli-decision-v2/);
 
   const demoDuplicate = "demo-kb/decisions/workspace-duplicate.md";
   await write(
@@ -433,6 +654,45 @@ async function write(repoRoot: string, relPath: string, content: string): Promis
   const target = path.join(repoRoot, relPath);
   await fs.mkdir(path.dirname(target), { recursive: true });
   await fs.writeFile(target, content, "utf8");
+}
+
+function reviewDryRunInput(result: Awaited<ReturnType<typeof reviewDecision>>) {
+  return {
+    repoRoot: root,
+    workspace: undefined,
+    scanRoots: ["demo-kb", "kb"],
+    decisionId: result.decisionId,
+    reviewedAt: result.reviewedAt,
+    reviewAfter: result.reviewAfter,
+    reviewer: "decision-reviewer",
+    recommendationSupported: result.recommendationSupported,
+    assumptionsNeedingValidation: result.assumptionsNeedingValidation,
+    evidence: [
+      {
+        path: "kb/sources/alpha-pilot/market.md",
+        line: 3,
+        classification: "unchanged" as const,
+      },
+      {
+        path: "kb/sources/alpha-pilot/new-market.md",
+        line: 3,
+        classification: "weakened" as const,
+      },
+    ],
+    notes: "Human validation is required.",
+  };
+}
+
+function supersedeDryRunInput(result: Awaited<ReturnType<typeof supersedeDecision>>) {
+  return {
+    repoRoot: root,
+    workspace: undefined,
+    scanRoots: ["demo-kb", "kb"],
+    decisionId: result.decisionId,
+    replacementId: result.replacementId,
+    supersededAt: "2026-08-22",
+    reason: "New evidence changed the constraint.",
+  };
 }
 
 async function exists(target: string): Promise<boolean> {

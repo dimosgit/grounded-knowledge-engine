@@ -78,6 +78,8 @@ async function testWorkspaceProcessIsolation(): Promise<void> {
         scanRoots: ["kb"],
         writeRoots: ["kb", ".gke", ".cache"],
         projects: [],
+        decisions: [],
+        decisionLedgerUri: "gke://workspace/decisions",
       },
       "workspace metadata is logical and includes the active read-only state",
     );

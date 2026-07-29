@@ -4,6 +4,9 @@
 
 `Shared Atomic Open-Question Mutation Service`
 
+**Status:** Implemented. The MCP handler and answer-and-capture abstention path
+use one workspace-pinned application service over the atomic repository.
+
 ## 2. Objective
 
 Move open-question mutation out of the MCP protocol handler into a deterministic
@@ -13,7 +16,7 @@ lost concurrent appends and exact duplicate questions.
 ## 3. Context
 
 - Product area: `Open-question capture, MCP answer-and-capture, local Cockpit, and canonical Markdown mutation`
-- Current behavior: `server.ts reads kb/open_questions.md, constructs the next full string outside its queued write, and writes it directly; this path does not share capture/application-service boundaries.`
+- Current behavior: `OpenQuestionApplicationService pins repository and workspace context, while its repository serializes read, exact dedupe, and atomic write. MCP add-open-question and answer-and-capture abstention both use this boundary.`
 - Problem to solve: `Concurrent requests can be based on stale content, protocol code owns repository behavior, and abstained Cockpit answers have no reusable save-as-open-question path.`
 
 ## 4. Scope
