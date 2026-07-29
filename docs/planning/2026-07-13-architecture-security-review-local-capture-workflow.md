@@ -63,10 +63,9 @@ escape rejection.
 1. **Delivered:** reuse one local-development request guard for Ask, capture,
    and project lifecycle mutations, with shared loopback, same-origin,
    content-type, and size rules.
-2. **Partially delivered:** MCP stdio, the search CLI, and local Cockpit now
-   share workspace-pinned grounding, project, decision, and open-question
-   services. Complete the remaining capture proposal/review orchestration
-   boundary without importing protocol handlers.
+2. **Delivered:** MCP stdio, the CLIs, and local Cockpit share
+   workspace-pinned grounding, project, decision, open-question, and capture
+   application services without importing protocol handlers into the core.
 3. Add route overrides to proposal apply only if real usage shows that
    rejecting and recapturing an ambiguous route is too slow. Avoid adding
    controls before that need is demonstrated.
@@ -106,5 +105,7 @@ escape rejection.
 - Implemented: MCP search/answer, the search CLI, and local Cockpit Ask now
   share one workspace-pinned grounding application service with project-scope
   filtering and BM25/SQLite parity.
-- Remaining: pin capture proposal planning, apply/reject, and grounded-capture
-  orchestration behind one application service shared by MCP and Cockpit.
+- Implemented: capture proposal planning, list/get/preview/apply/reject,
+  immediate unreviewed creation, grounded capture, and post-write refresh now
+  share one workspace-pinned application service across the capture CLI, MCP,
+  and local Cockpit.
