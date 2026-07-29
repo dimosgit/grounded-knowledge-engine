@@ -229,7 +229,7 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
         protocolVersion: negotiateProtocolVersion(params?.protocolVersion),
         capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
-        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). For ordinary grounded Q&A, call kb.answer_and_capture exactly once with responseMode=auto and responseFormat=compact. Do not call kb.search or kb.get_record first. After a successful call, return its answer, citations, capture status, tokenUsage, and timings immediately. Do not inspect or manually edit KB/navigation/digest files or run broad checks unless the result reports review/error or the user explicitly asks for maintenance. Use kb.search only for evidence-only requests, kb.get_record only for an explicitly requested record, and kb.resume_project for a named project. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled; automatic capture is skipped"}.`,
+        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). For ordinary grounded Q&A, call kb.answer_and_capture exactly once with responseMode=auto, responseFormat=compact, and captureStrategy=auto. Automatic retention is read-only: it does not create Markdown, open questions, or review proposals. Do not call kb.search or kb.get_record first. After a successful call, return its answer, citations, capture status, tokenUsage, and timings immediately. Use captureStrategy=note or captureStrategy=open_question only when the user explicitly asks to retain knowledge, and provide a deliberate title/routing context. Do not inspect or manually edit KB/navigation/digest files or run broad checks unless the user explicitly asks for maintenance. Use kb.search only for evidence-only requests, kb.get_record only for an explicitly requested record, and kb.resume_project for a named project. Writes are ${DEFAULT_ENABLE_WRITES ? "available for explicit retention" : "disabled"}.`,
       };
     case "ping":
       return {};
@@ -541,13 +541,7 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
   let strategy = captureStrategyRaw;
   const fastPathSkipEligible = Boolean(answer?.fastPath?.used && answer?.fastPath?.alreadyCaptured);
   if (captureStrategyRaw === "auto") {
-    if (!DEFAULT_ENABLE_WRITES) {
-      strategy = "none";
-    } else if (fastPathSkipEligible) {
-      strategy = "none";
-    } else {
-      strategy = answer.abstained ? "open_question" : "note";
-    }
+    strategy = "none";
   }
 
   let capture: any;
@@ -627,8 +621,10 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
       path: "(none)",
       reason: fastPathSkipEligible
         ? "Existing curated term note was reused via fast path."
-        : !DEFAULT_ENABLE_WRITES && captureStrategyRaw === "auto"
-          ? "Automatic capture skipped because writes are disabled."
+        : captureStrategyRaw === "auto"
+          ? DEFAULT_ENABLE_WRITES
+            ? "Automatic retention is read-only. Use captureStrategy=note or open_question only when the user explicitly asks to retain knowledge."
+            : "Automatic retention is read-only, and writes are disabled for this workspace."
           : "Capture disabled by caller (captureStrategy=none).",
     };
     captureMs = 0;
