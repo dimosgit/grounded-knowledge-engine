@@ -1,6 +1,6 @@
 ---
 name: grounded-knowledge-workflow
-description: Use Grounded Knowledge Engine to answer from local evidence, resume an explicitly identified project, and retain durable knowledge. Trigger when a user asks about their documents, previous research, project state, decisions, or wants useful new context preserved across Claude, Codex, Gemini, or another MCP-capable agent.
+description: Use Grounded Knowledge Engine to answer from local evidence, resume an explicitly identified project, create an explicit project checkpoint, and retain durable knowledge. Trigger when a user asks about their documents, previous research, project state, decisions, handoffs, or wants useful new context preserved across Claude, Codex, Gemini, GitHub Copilot, or another MCP-capable agent.
 ---
 
 # Grounded Knowledge Workflow
@@ -13,14 +13,13 @@ retrieval, project scope, citations, and writes.
 
 - For an ordinary definition, recall, explanation, or comparison, call
   `kb.answer_and_capture` exactly once with `responseMode: auto` and
-  `responseFormat: compact`.
+  `responseFormat: compact`, and `captureStrategy: auto`.
 - Do not call `kb.search` or `kb.get_record` before it. The answer tool performs
-  its own retrieval, grounding, deduplication, and capture planning.
+  its own retrieval and grounding. Automatic retention is read-only.
 - After a successful call, return the answer, citations, capture status,
   `tokenUsage`, and `timings` immediately.
-- Do not inspect the written note, edit navigation/digests, or run broad KB
-  checks afterward. Continue into maintenance only when the result reports an
-  error or review requirement, or the user explicitly asks for curation.
+- No note or review proposal is created by this fast path. Continue into
+  maintenance only when the user explicitly asks for curation or retention.
 
 ## Choose the operation
 
@@ -32,6 +31,12 @@ retrieval, project scope, citations, and writes.
    `kb.answer_and_capture`.
 5. For project creation and administration, use the deterministic `gke` project
    CLI rather than inventing an MCP file-management workflow.
+6. When the user explicitly asks to preserve a project handoff or progress
+   boundary, use `gke checkpoint`; never create one merely because a project was
+   viewed or resumed.
+7. When the user explicitly asks to preserve or inspect a durable decision, use
+   the local `gke decisions` CLI. Do not claim that review diffs, supersession,
+   MCP decision tools, or a Cockpit ledger exist yet.
 
 ## Ground before answering
 
@@ -70,10 +75,13 @@ retrieval, project scope, citations, and writes.
 - Capture only durable, reusable knowledge: decisions, verified explanations,
   project facts, unresolved questions, or procedures worth recalling later.
 - Avoid capturing transient chat, speculation, secrets, or duplicated material.
-- When writes are disabled, use `kb.answer_and_capture` as a read-only grounded
-  answer and report that capture was skipped.
-- When a write is consequential or the intended note is unclear, preview with
-  `dryRun` before persisting.
+- Keep `captureStrategy: auto` for ordinary Q&A; it never writes, even when
+  workspace writes are enabled.
+- Use `captureStrategy: note` or `captureStrategy: open_question` only when the
+  user explicitly asks to retain knowledge. Supply a deliberate title and
+  routing context rather than turning the raw question into a topic name.
+- For explicit retention, preview consequential or unclear writes with `dryRun`
+  before persisting.
 - Tell the user what was captured and where. Never imply a write occurred if it
   was skipped or rejected.
 
@@ -88,8 +96,33 @@ gke list
 gke show <project-id>
 gke update <project-id> --current-focus "<focus>"
 gke link <project-id> <workspace-relative-source>
+gke checkpoint <project-id> --title "<label>" \
+  --what-changed "<change>" --next-start "<starting point>" \
+  --evidence "<workspace-relative-path>:<line>"
 gke validate <project-id>
 ```
 
+Checkpoint evidence must be workspace-relative, line-addressed, and explicitly
+inside project scope. Preview uncertain checkpoint writes with `--dry-run`.
 Validate after creating, updating, or linking a project. Preserve Markdown as
 the canonical source of truth.
+
+## Administer decisions through the CLI
+
+Use explicit, cited inputs; do not convert an inferred recommendation into an
+active decision without the user's intent:
+
+```bash
+gke decisions create <decision-id> --title "<title>" \
+  --owner "<owner>" --status active --confidence medium \
+  --decided-at <YYYY-MM-DD> --evidence-checked-at <YYYY-MM-DD> \
+  --review-after <YYYY-MM-DD> --question "<question>" \
+  --recommendation "<recommendation>" --rationale "<rationale>" \
+  --evidence "<workspace-relative-path>:<line>"
+gke decisions get <decision-id> --as-of <YYYY-MM-DD>
+gke decisions list --review-state overdue
+```
+
+Active decisions require at least one validated evidence citation. Project
+decisions accept evidence only from explicit project scope. Use `--dry-run`
+before uncertain creation and preserve visible due/overdue warnings.

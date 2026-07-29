@@ -1,18 +1,31 @@
 # Feature Prompt Template
 
 ## 1. Feature Title
+
 `Decision Replay — Research Once, Reuse and Revalidate Decisions Later`
 
 ## 2. Objective
+
 Turn grounded research into a durable decision record that preserves the recommendation, alternatives, evidence, assumptions, caveats, and review date. A later agent session must be able to explain what was decided and why without repeating the original research, then revalidate only the evidence marked as stale. The feature should make GKE useful as decision infrastructure rather than only a document search layer.
 
+### Implementation status — 2026-07-29
+
+The checkpoint prerequisite and the first decision-domain slice are
+implemented. The local service/CLI can create append-only canonical decision
+records, validate project-scoped citations, retrieve by exact ID/path/title,
+filter the ledger, and calculate current/due/overdue review state. Review
+diffs, append-only review history, supersession, MCP decision operations, and
+Cockpit Decision Replay remain planned.
+
 ## 3. Context
+
 - Product area: `Grounding engine, MCP server, Markdown knowledge model, and Operator Cockpit`
-- Current behavior: `GKE retrieves cited evidence, captures topic/term notes, ingests documents, and recalls captured notes across MCP clients. It does not distinguish a decision from a general note, track decision validity, preserve alternatives, or compare an old decision against newer evidence.`
+- Current behavior: `GKE retrieves cited evidence, captures topic/term notes, ingests documents, recalls captured notes across MCP clients, and locally records structured decisions with explicit review dates. It does not yet append reviews, compare an old evidence snapshot against newer evidence, supersede decisions, or expose the decision lifecycle through MCP and the Cockpit.`
 - Problem to solve: `Consultants and technical users repeatedly research the same question because prior conclusions are buried in chats or undifferentiated notes. Even when a conclusion is found, the user cannot see whether its evidence is still current or which assumptions require revalidation.`
 - Normative data contract: [`docs/workspace-data-architecture.md`](../workspace-data-architecture.md)
 
 ## 4. Scope
+
 - In scope:
   1. Add a canonical Markdown decision record under `kb/decisions/`.
   2. Add MCP tools to record, retrieve, list, supersede, and review decisions.
@@ -28,6 +41,7 @@ Turn grounded research into a durable decision record that preserves the recomme
   5. Multi-user approval workflows in the first release.
 
 ## 5. Requirements
+
 1. Define a decision note schema with these minimum fields:
    - `decision_id`
    - `project_id`
@@ -69,6 +83,7 @@ Turn grounded research into a durable decision record that preserves the recomme
 15. Document a demo scenario that compares Valencia, Málaga, and Lisbon, records Valencia as the pilot recommendation, simulates a later session, and reviews the decision from newer evidence.
 
 ## 6. Technical Constraints
+
 1. Implement the decision, source, checkpoint, identifier, relationship, and citation contracts from `docs/workspace-data-architecture.md`.
 2. Extend the semantic MCP catalog and reusable output schemas established by MCP Core Modernization; decision records must also be addressable resources.
 3. Markdown under `kb/` remains canonical. SQLite/BM25 data remains derived and regenerable.
@@ -83,6 +98,7 @@ Turn grounded research into a durable decision record that preserves the recomme
 12. Avoid adding a network dependency to the local engine. External research remains the responsibility of the connected agent or a later connector.
 
 ## 7. Implementation Notes
+
 1. Suggested engine files:
    - `tools/decisions/types.ts`
    - `tools/decisions/decision-record.ts`
@@ -106,6 +122,7 @@ Turn grounded research into a durable decision record that preserves the recomme
 10. Update `docs/architecture.md` with the decision lifecycle and `README.md` with the user-facing value proposition after implementation.
 
 ## 8. Test Requirements
+
 1. Add or update automated tests for all changed behavior.
 2. Run relevant checks before commit:
    - Lint: `No dedicated lint script exists today; record lint as N/A unless the implementation adds one.`
@@ -114,6 +131,7 @@ Turn grounded research into a durable decision record that preserves the recomme
 3. Do not create a commit if any required check fails.
 
 ## 9. Acceptance Criteria
+
 1. A connected MCP client can record a cited decision and retrieve it in a fresh session without repeating the research.
 2. An overdue decision is always returned with a visible stale warning and its original evidence date.
 3. Reviewing a decision with newer local evidence produces a structured before/after diff without changing the original evidence snapshot.
@@ -123,17 +141,20 @@ Turn grounded research into a durable decision record that preserves the recomme
 7. Existing ingestion, grounding, capture, project board, and graph tests remain green.
 
 ## 10. Deliverables
+
 1. Code changes implementing the feature.
 2. Test changes proving correctness.
 3. Short implementation summary including test command results.
 
 ## 11. Mandatory Agent Rules
+
 1. Execute all required tests before creating any commit.
 2. Never commit code with failing tests.
 3. Report exact commands executed and whether each passed.
 4. Escalate blockers instead of skipping required validation.
 
 ## 12. Assumptions and Open Questions
+
 - Assumptions:
   1. The connected agent can perform external research when the user requests it, then pass citations/evidence into GKE.
   2. Decision review is primarily a human-supervised workflow; GKE provides traceability, not autonomous authority.

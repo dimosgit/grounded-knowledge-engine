@@ -35,6 +35,7 @@ export default defineConfig({
     setupFiles: "./src/test-setup.ts",
   },
   build: {
+    manifest: true,
     // Mermaid is large (~620 KB) but only loaded on demand via the dynamic
     // import in MarkdownArticle, so it lands in its own chunk that the initial
     // library and project views never fetch. Raise the size-warning ceiling
@@ -44,8 +45,12 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id: string) {
-          if (id.includes("react-markdown") || id.includes("remark-gfm")) {
-            return "markdown";
+          if (
+            id.includes("/node_modules/react/") ||
+            id.includes("/node_modules/react-dom/") ||
+            id.includes("/node_modules/scheduler/")
+          ) {
+            return "react-vendor";
           }
           return undefined;
         },
