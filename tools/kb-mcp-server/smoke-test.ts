@@ -362,6 +362,23 @@ try {
     /^open-question-[a-f0-9]{16}$/,
   );
 
+  const automaticNoCapture = await request("tools/call", {
+    name: "kb.answer_and_capture",
+    arguments: {
+      question: sharedQuestion,
+      mode: "generic",
+      track: "__no_such_track__",
+      strict: true,
+    },
+  });
+  assert.equal(automaticNoCapture.structuredContent?.answer?.abstained, true);
+  assert.equal(automaticNoCapture.structuredContent?.strategy, "none");
+  assert.equal(automaticNoCapture.structuredContent?.capture?.action, "skipped");
+  assert.match(
+    automaticNoCapture.structuredContent?.capture?.reason || "",
+    /automatic retention is read-only/i,
+  );
+
   const abstainedDuplicate = await request("tools/call", {
     name: "kb.answer_and_capture",
     arguments: {
@@ -369,6 +386,7 @@ try {
       mode: "generic",
       track: "__no_such_track__",
       strict: true,
+      captureStrategy: "open_question",
     },
   });
   assert.equal(abstainedDuplicate.structuredContent?.answer?.abstained, true);
@@ -485,6 +503,7 @@ try {
       mode: "generic",
       track: "__no_such_track__",
       strict: true,
+      captureStrategy: "open_question",
       dryRun: true,
     },
   });

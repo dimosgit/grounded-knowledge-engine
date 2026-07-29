@@ -62,25 +62,40 @@ import {
 } from "./lib/routes";
 import { useRecentPaths } from "./hooks/useRecentPaths";
 import { useRouteSync } from "./hooks/useRouteSync";
+import { useMarkdownBody } from "./hooks/useMarkdownBody";
+import { createMarkdownContentLoader } from "./lib/content-loader";
 import { renderHighlighted } from "./components/HighlightedText";
-import { HubView } from "./views/HubView";
-import { LibraryView } from "./views/LibraryView";
-import { ProjectBoardView } from "./views/ProjectBoardView";
-import { ProjectDetailView } from "./views/ProjectDetailView";
 
+const HubView = lazy(() =>
+  import("./views/HubView").then((module) => ({ default: module.HubView })),
+);
 const ContextGraphView = lazy(() =>
   import("./views/ContextGraphView").then((module) => ({ default: module.ContextGraphView })),
+);
+const LibraryView = lazy(() =>
+  import("./views/LibraryView").then((module) => ({ default: module.LibraryView })),
+);
+const ProjectBoardView = lazy(() =>
+  import("./views/ProjectBoardView").then((module) => ({ default: module.ProjectBoardView })),
+);
+const ProjectDetailView = lazy(() =>
+  import("./views/ProjectDetailView").then((module) => ({ default: module.ProjectDetailView })),
 );
 
 export { isExternalResource, normalizeDocPath, resolveMarkdownAssetPath, resolveMarkdownDocPath };
 
 const RECENT_ACTIVITY_COUNT = 3;
 
-const markdownModules = import.meta.glob("../content/**/*.md", {
-  query: "?raw",
+const catalogModules = import.meta.glob("../content/catalog.json", {
   import: "default",
   eager: true,
 });
+const markdownModules = import.meta.glob("../content/**/*.md", {
+  query: "?raw",
+  import: "default",
+});
+const catalogEntries = (Object.values(catalogModules)[0] || []) as Parameters<typeof buildDocs>[0];
+const markdownContentLoader = createMarkdownContentLoader(markdownModules);
 
 const DEFAULT_ACTIVE_TAG = "modules";
 const DEFAULT_HIDE_MERGED = true;
@@ -92,8 +107,19 @@ const DEFAULT_ACTIVE_TRACK =
     : "all";
 const DEFAULT_ACTIVE_ITEM = "all";
 
+function ViewLoading({ label }: { label: string }) {
+  return (
+    <div
+      className="min-h-screen bg-surface-main p-8 text-body-md text-on-surface-variant"
+      role="status"
+    >
+      Loading {label}…
+    </div>
+  );
+}
+
 export default function App() {
-  const docs = useMemo(() => buildDocs(markdownModules), []);
+  const docs = useMemo(() => buildDocs(catalogEntries), []);
   const currentYear = new Date().getFullYear();
   const initialHashPath = getHashPath();
   const initialDocFromHash = initialHashPath
@@ -224,10 +250,20 @@ export default function App() {
   }, [docs, viewMode, activePath, activeTag, hideMerged, activeTrack, activeItemType]);
 
   const activeDoc = docs.find((doc) => doc.path === activePath) || docs[0] || null;
+  const activeDocBody = useMarkdownBody(
+    markdownContentLoader,
+    activeDoc?.path || "",
+    viewMode === "library" && Boolean(activeDoc),
+  );
+  const activeDocContent = activeDocBody.status === "ready" ? activeDocBody.body : "";
   const activeDocInFilter = activeDoc
     ? filteredDocs.some((doc) => doc.path === activeDoc.path)
     : false;
-  const activeDocMetrics = activeDoc ? getDocMetrics(activeDoc.content) : null;
+  const activeDocMetrics = activeDoc
+    ? activeDocContent
+      ? getDocMetrics(activeDocContent)
+      : activeDoc.metrics
+    : null;
   const activeModuleDoc = useMemo(() => {
     if (!activeDoc) return null;
     return getModuleDocForDoc(activeDoc, docs, moduleContextByPath);
@@ -237,16 +273,18 @@ export default function App() {
   }, [activeDoc, docs, activeModuleDoc]);
   const digestQuickView = useMemo(() => {
     if (!activeDoc || activeDoc.docType !== "digest") return null;
-    return buildDigestQuickView(activeDoc.content);
-  }, [activeDoc]);
+    return activeDocContent
+      ? buildDigestQuickView(activeDocContent)
+      : activeDoc.digestQuickView || null;
+  }, [activeDoc, activeDocContent]);
   const quickRecall = useMemo(() => {
     if (!activeDoc) return null;
-    return buildQuickRecall(activeDoc.content);
-  }, [activeDoc]);
+    return activeDocContent ? buildQuickRecall(activeDocContent) : activeDoc.quickRecall || null;
+  }, [activeDoc, activeDocContent]);
   const readableDocContent = useMemo(() => {
-    if (!activeDoc) return "";
-    return stripMarkdownSection(activeDoc.content, "Quick recall");
-  }, [activeDoc]);
+    if (!activeDocContent) return "";
+    return stripMarkdownSection(activeDocContent, "Quick recall");
+  }, [activeDocContent]);
 
   const trackFilterOptions = useMemo(() => buildTrackFilterOptions(docs, tracks), [docs, tracks]);
 
@@ -401,9 +439,30 @@ export default function App() {
     [docs, recentPaths],
   );
 
-  const projectSummaries = useMemo(
+  const catalogProjectSummaries = useMemo(
     () => buildProjectSummaries(docs, lifecycleOverrides),
     [docs, lifecycleOverrides],
+  );
+  const catalogActiveProject = useMemo(
+    () => getActiveProject(catalogProjectSummaries, selectedProjectId),
+    [catalogProjectSummaries, selectedProjectId],
+  );
+  const activeProjectBody = useMarkdownBody(
+    markdownContentLoader,
+    catalogActiveProject?.sourceDocPath || "",
+    viewMode === "project" && Boolean(catalogActiveProject?.sourceDocPath),
+  );
+  const projectDocs = useMemo(() => {
+    if (activeProjectBody.status !== "ready" || !catalogActiveProject?.sourceDocPath) return docs;
+    return docs.map((doc) =>
+      doc.path === catalogActiveProject.sourceDocPath
+        ? { ...doc, content: activeProjectBody.body }
+        : doc,
+    );
+  }, [activeProjectBody.body, activeProjectBody.status, catalogActiveProject, docs]);
+  const projectSummaries = useMemo(
+    () => buildProjectSummaries(projectDocs, lifecycleOverrides),
+    [lifecycleOverrides, projectDocs],
   );
   const activeProject = useMemo(
     () => getActiveProject(projectSummaries, selectedProjectId),
@@ -485,78 +544,87 @@ export default function App() {
 
   if (viewMode === "hub") {
     return (
-      <HubView
-        docs={docs}
-        commandBarOpen={isCommandBarOpen}
-        onCommandBarOpenChange={setIsCommandBarOpen}
-        onCommand={() => setIsCommandBarOpen(true)}
-        onHub={goToHub}
-        onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-        onProjects={goToProjects}
-        onGraph={goToGraph}
-        onCommandSelect={(item) => openDoc(item.path)}
-        activeProject={activeProject}
-        activeModule={activeModuleForHub}
-        openQuestionsCount={openQuestionsCount}
-        projectCount={projectSummaries.length}
-        openQuestionItems={openQuestionItems}
-        tracks={tracks}
-        selectedTrack={selectedTrack}
-        selectedTrackKey={selectedTrackKey}
-        onTrackChange={setActiveTrack}
-        learningItemOrder={learningItemOrder}
-        learningItemLabels={learningItemLabels}
-        learningItemDescriptions={learningItemDescriptions}
-        onEnterLibrary={enterLibrary}
-        recentDocs={recentDocs}
-        onOpenDoc={openDoc}
-        getDocBadge={getDocBadge}
-        attentionCounts={attentionCounts}
-        attentionProjects={attentionProjects}
-        onAttentionFilter={openAttentionQueue}
-        onOpenProject={openProject}
-      />
+      <Suspense fallback={<ViewLoading label="operator hub" />}>
+        <HubView
+          docs={docs}
+          commandBarOpen={isCommandBarOpen}
+          onCommandBarOpenChange={setIsCommandBarOpen}
+          onCommand={() => setIsCommandBarOpen(true)}
+          onHub={goToHub}
+          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+          onProjects={goToProjects}
+          onGraph={goToGraph}
+          onCommandSelect={(item) => openDoc(item.path)}
+          activeProject={activeProject}
+          activeModule={activeModuleForHub}
+          openQuestionsCount={openQuestionsCount}
+          projectCount={projectSummaries.length}
+          openQuestionItems={openQuestionItems}
+          tracks={tracks}
+          selectedTrack={selectedTrack}
+          selectedTrackKey={selectedTrackKey}
+          onTrackChange={setActiveTrack}
+          learningItemOrder={learningItemOrder}
+          learningItemLabels={learningItemLabels}
+          learningItemDescriptions={learningItemDescriptions}
+          onEnterLibrary={enterLibrary}
+          recentDocs={recentDocs}
+          onOpenDoc={openDoc}
+          getDocBadge={getDocBadge}
+          attentionCounts={attentionCounts}
+          attentionProjects={attentionProjects}
+          onAttentionFilter={openAttentionQueue}
+          onOpenProject={openProject}
+        />
+      </Suspense>
     );
   }
 
   if (viewMode === "projects") {
     return (
-      <ProjectBoardView
-        docs={docs}
-        commandBarOpen={isCommandBarOpen}
-        onCommandBarOpenChange={setIsCommandBarOpen}
-        onCommand={() => setIsCommandBarOpen(true)}
-        onHub={goToHub}
-        onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-        onProjects={goToProjects}
-        onGraph={goToGraph}
-        onCommandSelect={(item) => openDoc(item.path)}
-        projectColumns={projectColumns}
-        onOpenProject={openProject}
-        onMoveProject={moveProject}
-        attentionFilter={projectAttentionFilter}
-        onAttentionFilterChange={setProjectAttentionFilter}
-        attentionCounts={attentionCounts}
-      />
+      <Suspense fallback={<ViewLoading label="project board" />}>
+        <ProjectBoardView
+          docs={docs}
+          commandBarOpen={isCommandBarOpen}
+          onCommandBarOpenChange={setIsCommandBarOpen}
+          onCommand={() => setIsCommandBarOpen(true)}
+          onHub={goToHub}
+          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+          onProjects={goToProjects}
+          onGraph={goToGraph}
+          onCommandSelect={(item) => openDoc(item.path)}
+          projectColumns={projectColumns}
+          onOpenProject={openProject}
+          onMoveProject={moveProject}
+          attentionFilter={projectAttentionFilter}
+          onAttentionFilterChange={setProjectAttentionFilter}
+          attentionCounts={attentionCounts}
+        />
+      </Suspense>
     );
   }
 
   if (viewMode === "project") {
     return (
-      <ProjectDetailView
-        docs={docs}
-        commandBarOpen={isCommandBarOpen}
-        onCommandBarOpenChange={setIsCommandBarOpen}
-        onCommand={() => setIsCommandBarOpen(true)}
-        onHub={goToHub}
-        onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-        onProjects={goToProjects}
-        onGraph={goToGraph}
-        onCommandSelect={(item) => openDoc(item.path)}
-        activeProject={activeProject}
-        linkedDocs={activeProjectLinkedDocs}
-        onOpenDoc={openDoc}
-      />
+      <Suspense fallback={<ViewLoading label="project details" />}>
+        <ProjectDetailView
+          docs={docs}
+          commandBarOpen={isCommandBarOpen}
+          onCommandBarOpenChange={setIsCommandBarOpen}
+          onCommand={() => setIsCommandBarOpen(true)}
+          onHub={goToHub}
+          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+          onProjects={goToProjects}
+          onGraph={goToGraph}
+          onCommandSelect={(item) => openDoc(item.path)}
+          activeProject={activeProject}
+          linkedDocs={activeProjectLinkedDocs}
+          onOpenDoc={openDoc}
+          bodyStatus={activeProjectBody.status}
+          bodyError={activeProjectBody.error}
+          onRetryBody={activeProjectBody.retry}
+        />
+      </Suspense>
     );
   }
 
@@ -592,56 +660,61 @@ export default function App() {
   }
 
   return (
-    <LibraryView
-      docs={docs}
-      commandBarOpen={isCommandBarOpen}
-      onCommandBarOpenChange={setIsCommandBarOpen}
-      onCommand={() => setIsCommandBarOpen(true)}
-      onHub={goToHub}
-      onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-      onProjects={goToProjects}
-      onGraph={goToGraph}
-      onCommandSelect={(item) => openDoc(item.path)}
-      isReadingMode={isReadingMode}
-      onToggleReadingMode={() => setIsReadingMode((current) => !current)}
-      displayTrackLabel={displayTrackLabel}
-      scopedDocs={scopedDocs}
-      curationStats={curationStats}
-      query={query}
-      onQueryChange={setQuery}
-      activeTrack={activeTrack}
-      onActiveTrackChange={setActiveTrack}
-      trackFilterOptions={trackFilterOptions}
-      activeItemType={activeItemType}
-      onActiveItemTypeChange={setActiveItemType}
-      learningItemOrder={learningItemOrder}
-      learningItemLabels={learningItemLabels}
-      libraryItemCounts={libraryItemCounts}
-      visibleTags={visibleTags}
-      activeTag={activeTag}
-      onActiveTagChange={setActiveTag}
-      tagLabels={tagLabels}
-      tagCounts={tagCounts}
-      hideMerged={hideMerged}
-      onHideMergedChange={setHideMerged}
-      groupedDocs={groupedDocs}
-      filteredDocs={filteredDocs}
-      activeDoc={activeDoc}
-      activeDocInFilter={activeDocInFilter}
-      activeDocMetrics={activeDocMetrics}
-      activeBreadcrumbs={activeBreadcrumbs}
-      activeModuleDoc={activeModuleDoc}
-      digestQuickView={digestQuickView}
-      quickRecall={quickRecall}
-      readableDocContent={readableDocContent}
-      onOpenDoc={openDoc}
-      onRevealActiveDoc={revealActiveDoc}
-      renderHighlighted={renderHighlighted}
-      getDocBadge={getDocBadge}
-      getDocGuidance={getDocGuidance}
-      resolveMarkdownDocPath={resolveMarkdownDocPath}
-      resolveMarkdownAssetPath={resolveMarkdownAssetPath}
-      currentYear={currentYear}
-    />
+    <Suspense fallback={<ViewLoading label="knowledge library" />}>
+      <LibraryView
+        docs={docs}
+        commandBarOpen={isCommandBarOpen}
+        onCommandBarOpenChange={setIsCommandBarOpen}
+        onCommand={() => setIsCommandBarOpen(true)}
+        onHub={goToHub}
+        onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+        onProjects={goToProjects}
+        onGraph={goToGraph}
+        onCommandSelect={(item) => openDoc(item.path)}
+        isReadingMode={isReadingMode}
+        onToggleReadingMode={() => setIsReadingMode((current) => !current)}
+        displayTrackLabel={displayTrackLabel}
+        scopedDocs={scopedDocs}
+        curationStats={curationStats}
+        query={query}
+        onQueryChange={setQuery}
+        activeTrack={activeTrack}
+        onActiveTrackChange={setActiveTrack}
+        trackFilterOptions={trackFilterOptions}
+        activeItemType={activeItemType}
+        onActiveItemTypeChange={setActiveItemType}
+        learningItemOrder={learningItemOrder}
+        learningItemLabels={learningItemLabels}
+        libraryItemCounts={libraryItemCounts}
+        visibleTags={visibleTags}
+        activeTag={activeTag}
+        onActiveTagChange={setActiveTag}
+        tagLabels={tagLabels}
+        tagCounts={tagCounts}
+        hideMerged={hideMerged}
+        onHideMergedChange={setHideMerged}
+        groupedDocs={groupedDocs}
+        filteredDocs={filteredDocs}
+        activeDoc={activeDoc}
+        activeDocInFilter={activeDocInFilter}
+        activeDocMetrics={activeDocMetrics}
+        activeBreadcrumbs={activeBreadcrumbs}
+        activeModuleDoc={activeModuleDoc}
+        digestQuickView={digestQuickView}
+        quickRecall={quickRecall}
+        readableDocContent={readableDocContent}
+        activeDocBodyStatus={activeDocBody.status}
+        activeDocBodyError={activeDocBody.error}
+        onRetryActiveDocBody={activeDocBody.retry}
+        onOpenDoc={openDoc}
+        onRevealActiveDoc={revealActiveDoc}
+        renderHighlighted={renderHighlighted}
+        getDocBadge={getDocBadge}
+        getDocGuidance={getDocGuidance}
+        resolveMarkdownDocPath={resolveMarkdownDocPath}
+        resolveMarkdownAssetPath={resolveMarkdownAssetPath}
+        currentYear={currentYear}
+      />
+    </Suspense>
   );
 }
