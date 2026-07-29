@@ -1,5 +1,5 @@
 import { applyUnreviewedCapture, persistCaptureProposal, planCapture } from "./capture-service.js";
-import { refreshCaptureRetrievalState } from "./capture-application-service.js";
+import { createGroundingApplicationService } from "../grounding/grounding-application-service.js";
 import type { CaptureCitation, CaptureProposal } from "./types.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
 
@@ -113,7 +113,11 @@ export async function captureGroundedAnswer(
     refresh:
       options.refresh ||
       (async () => {
-        await refreshCaptureRetrievalState(options.repoRoot, options.workspace);
+        await createGroundingApplicationService({
+          repoRoot: options.repoRoot,
+          workspace: options.workspace,
+          backend: process.env.KB_MCP_RETRIEVAL_BACKEND,
+        }).refresh();
       }),
   });
   return {

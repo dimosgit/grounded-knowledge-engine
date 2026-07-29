@@ -32,12 +32,7 @@ import {
   createProjectApplicationService,
   listProjectRecordsForWorkspace,
 } from "../projects/index.js";
-import {
-  applyUnreviewedCapture,
-  isCaptureProposalUnchanged,
-  persistCaptureProposal,
-  planCapture,
-} from "../capture/capture-service.js";
+import { createCaptureApplicationService } from "../capture/capture-application-service.js";
 import type { CaptureAction, CaptureSourceOperation } from "../capture/types.js";
 import type { IndexedDocument, SearchArgs, SearchHit, SearchResult } from "../grounding/types.js";
 import { createOpenQuestionApplicationService } from "../questions/index.js";
@@ -195,6 +190,13 @@ const decisionService = createDecisionApplicationService({
   scanRoots: [...workspace.scanRoots],
   workspace,
   refresh: scheduleDocumentRefresh,
+});
+
+const captureService = createCaptureApplicationService({
+  repoRoot,
+  workspace,
+  refresh: scheduleDocumentRefresh,
+  backend: DEFAULT_RETRIEVAL_BACKEND,
 });
 
 async function handleKbRecordDecision(args: JsonObject): Promise<ToolPayload> {
@@ -1024,9 +1026,7 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
   )
     ? (sourceOperationRaw as CaptureSourceOperation)
     : "upsert";
-  const plan = await planCapture({
-    repoRoot,
-    workspace,
+  const plan = await captureService.plan({
     sourceOperation,
     kind,
     title,
@@ -1061,18 +1061,14 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
     sourceOperation === "ingest" &&
     plan.targetExists &&
     plan.proposal.proposedAction === "replace" &&
-    (await isCaptureProposalUnchanged(repoRoot, plan.proposal, workspace));
+    (await captureService.isUnchanged(plan.proposal));
   let action = "unchanged";
   let proposalPath: string | null = null;
   if (!unchanged && plan.proposal.requiresReview) {
-    if (!dryRun) proposalPath = await persistCaptureProposal(repoRoot, plan.proposal, workspace);
+    if (!dryRun) proposalPath = await captureService.persist(plan.proposal);
     action = "proposed";
   } else if (!unchanged) {
-    const applied = await applyUnreviewedCapture(repoRoot, plan.proposal, {
-      dryRun,
-      refresh: scheduleDocumentRefresh,
-      workspace,
-    });
+    const applied = await captureService.applyUnreviewed(plan.proposal, { dryRun });
     action = applied.action;
   }
 

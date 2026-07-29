@@ -2,13 +2,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin, ViteDevServer } from "vite";
 import {
-  CaptureConflictError,
-  applyCaptureProposal,
-  listCaptureProposals,
-  previewCaptureProposal,
-  rejectCaptureProposal,
-} from "../../../tools/capture/capture-service.js";
-import { applyCaptureProposalAndRefresh } from "../../../tools/capture/capture-application-service.js";
+  createCaptureApplicationService,
+  type CaptureApplicationService,
+} from "../../../tools/capture/capture-application-service.js";
+import { CaptureConflictError } from "../../../tools/capture/capture-service.js";
 import type { CaptureAction, CaptureProposal } from "../../../tools/capture/types.js";
 import { loadWorkspaceContext } from "../../../tools/workspaces/config.js";
 import type { WorkspaceContext } from "../../../tools/workspaces/types.js";
@@ -43,6 +40,7 @@ export interface CaptureReviewPluginOptions {
 
 type CaptureReviewRequestOptions = Omit<CaptureReviewPluginOptions, "workspace"> & {
   workspace: WorkspaceContext;
+  captureService?: CaptureApplicationService;
 };
 
 export function createCaptureReviewPlugin(options: CaptureReviewPluginOptions): Plugin {
@@ -52,20 +50,27 @@ export function createCaptureReviewPlugin(options: CaptureReviewPluginOptions): 
     (workspacePromise ??= options.workspace
       ? Promise.resolve(options.workspace)
       : loadWorkspaceContext({ repoRoot }));
+  let requestOptionsPromise: Promise<CaptureReviewRequestOptions> | null = null;
+  const getRequestOptions = () =>
+    (requestOptionsPromise ??= getWorkspace().then((workspace) => ({
+      repoRoot,
+      workspace,
+      ...(options.refreshIndex ? { refreshIndex: options.refreshIndex } : {}),
+      captureService: createCaptureApplicationService({
+        repoRoot,
+        workspace,
+        refresh: options.refreshIndex,
+        backend: process.env.KB_MCP_RETRIEVAL_BACKEND,
+      }),
+    })));
 
   return {
     name: "capture-review-local-api",
     apply: "serve",
     configureServer(server: ViteDevServer) {
       server.middlewares.use((req, res, next) => {
-        void getWorkspace()
-          .then((workspace) =>
-            handleCaptureReviewRequest(req, res, {
-              repoRoot,
-              workspace,
-              ...(options.refreshIndex ? { refreshIndex: options.refreshIndex } : {}),
-            }),
-          )
+        void getRequestOptions()
+          .then((requestOptions) => handleCaptureReviewRequest(req, res, requestOptions))
           .then((handled) => {
             if (!handled) next();
           })
@@ -106,10 +111,18 @@ export async function handleCaptureReviewRequest(
   try {
     const method = (req.method || "GET").toUpperCase();
     assertLocalRequest(getLocalRequestIdentity(req), method !== "GET" && method !== "HEAD");
+    const captureService =
+      options.captureService ??
+      createCaptureApplicationService({
+        repoRoot: options.repoRoot,
+        workspace: options.workspace,
+        refresh: options.refreshIndex,
+        backend: process.env.KB_MCP_RETRIEVAL_BACKEND,
+      });
 
     if (requestUrl.pathname === PROPOSALS_PATH) {
       if (method !== "GET") throw methodNotAllowed("GET");
-      const proposals = await listCaptureProposals(options.repoRoot, options.workspace);
+      const proposals = await captureService.list();
       sendJson(res, 200, { proposals: proposals.map(toProposalSummary) });
       return true;
     }
@@ -122,11 +135,7 @@ export async function handleCaptureReviewRequest(
 
     if (!route.operation) {
       if (method !== "GET") throw methodNotAllowed("GET");
-      const review = await previewCaptureProposal(
-        options.repoRoot,
-        route.proposalId,
-        options.workspace,
-      );
+      const review = await captureService.preview(route.proposalId);
       sendJson(res, 200, {
         proposal: review.proposal,
         preview: {
@@ -157,25 +166,16 @@ export async function handleCaptureReviewRequest(
         );
       }
       const applyOptions = {
-        repoRoot: options.repoRoot,
-        workspace: options.workspace,
         proposalId: route.proposalId,
         action: action as CaptureAction,
       };
-      const result = options.refreshIndex
-        ? await applyCaptureProposal({ ...applyOptions, refresh: options.refreshIndex })
-        : await applyCaptureProposalAndRefresh(applyOptions);
+      const result = await captureService.apply(applyOptions);
       sendJson(res, 200, { result });
       return true;
     }
 
     assertOnlyKeys(body, []);
-    const result = await rejectCaptureProposal(
-      options.repoRoot,
-      route.proposalId,
-      false,
-      options.workspace,
-    );
+    const result = await captureService.reject(route.proposalId);
     sendJson(res, 200, { result });
     return true;
   } catch (error) {

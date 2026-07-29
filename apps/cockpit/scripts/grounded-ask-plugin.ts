@@ -11,10 +11,13 @@ import {
 } from "../../../tools/grounding/grounding-application-service.js";
 import type { IndexedDocument } from "../../../tools/grounding/types.js";
 import {
-  captureGroundedAnswer,
   type CaptureGroundedAnswerOptions,
   type CaptureGroundedAnswerResult,
 } from "../../../tools/capture/grounded-capture-service.js";
+import {
+  createCaptureApplicationService,
+  type CaptureApplicationService,
+} from "../../../tools/capture/capture-application-service.js";
 import { CaptureConflictError } from "../../../tools/capture/capture-service.js";
 import {
   createProjectApplicationService,
@@ -51,6 +54,7 @@ type GroundedAskRequestOptions = Omit<GroundedAskPluginOptions, "workspace"> & {
   workspace: WorkspaceContext;
   groundingService?: GroundingApplicationService;
   projectService?: ProjectApplicationService;
+  captureService?: CaptureApplicationService;
 };
 
 export function createGroundedAskPlugin(options: GroundedAskPluginOptions): Plugin {
@@ -75,6 +79,11 @@ export function createGroundedAskPlugin(options: GroundedAskPluginOptions): Plug
         repoRoot,
         scanRoots: [...workspace.scanRoots],
         workspace,
+      }),
+      captureService: createCaptureApplicationService({
+        repoRoot,
+        workspace,
+        backend: process.env.KB_MCP_RETRIEVAL_BACKEND,
       }),
     })));
   return {
@@ -187,7 +196,23 @@ export async function handleGroundedAskRequest(
     };
     const capture = options.capture
       ? await options.capture(captureOptions)
-      : await captureGroundedAnswer(captureOptions);
+      : await (
+          options.captureService ??
+          createCaptureApplicationService({
+            repoRoot: options.repoRoot,
+            workspace: options.workspace,
+            backend: process.env.KB_MCP_RETRIEVAL_BACKEND,
+          })
+        ).captureGrounded({
+          grounded,
+          title,
+          kind,
+          requestedPath: captureOptions.requestedPath,
+          track: captureOptions.track,
+          module: captureOptions.module,
+          projectId,
+          owner: "cockpit-local",
+        });
     sendJson(res, capture.action === "created" ? 201 : 202, { capture });
     return true;
   } catch (error) {

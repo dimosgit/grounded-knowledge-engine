@@ -513,6 +513,7 @@ see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
 | [`tools/projects`](tools/projects)           | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting.                            |
 | [`tools/decisions`](tools/decisions)         | Canonical decision creation, retrieval, review diffs, append-only history, supersession, and review-state warnings.                |
 | [`tools/questions`](tools/questions)         | Workspace-pinned application service for atomic, deduplicated, workspace-authorized open-question mutation.                        |
+| [`tools/capture`](tools/capture)             | Workspace-pinned application service for planning, proposal review, conflict-safe apply/reject, grounded capture, and refresh.     |
 | [`tools/kb-mcp-server`](tools/kb-mcp-server) | Provider-neutral stdio transport, MCP catalog, handlers, resources, profiles, and safety contracts.                                |
 | [`tools/ingest`](tools/ingest)               | Local document extraction and capture adapters.                                                                                    |
 | [`apps/cockpit`](apps/cockpit)               | Optional React preview over the same Markdown and shared project/decision models; hosted as a static demo at `gke.dimouzunov.com`. |

@@ -103,6 +103,11 @@ Delete the index anytime; `--refresh` rebuilds it from the Markdown.
   questions, serializes the read/decide/write critical section, authorizes
   canonical and operational paths through workspace policy, and refreshes
   retrieval only after a real mutation.
+- **`tools/capture`** — the workspace-pinned capture application service over
+  deterministic planning, proposal persistence/list/get/preview, conflict-safe
+  apply/reject, immediate unreviewed creates, and grounded-answer capture. The
+  CLI, MCP server, and local Cockpit adapters share this boundary; refresh runs
+  only after a real canonical mutation.
 - **`tools/kb-mcp-server`** — provider-neutral MCP server over stdio using
   newline-delimited JSON (legacy `Content-Length` input frames still parse).
   The `core` profile exposes exactly four tools (`kb.search`, `kb.get_record`,

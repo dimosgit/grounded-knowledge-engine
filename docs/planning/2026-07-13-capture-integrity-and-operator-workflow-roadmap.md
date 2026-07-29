@@ -5,7 +5,8 @@ daily attention in the engine/CLI/read-only MCP resource, source-aware
 ingestion, shared atomic open-question mutation, the local Cockpit
 project-scoped Ask/live review workflow, Cockpit daily attention, and Cockpit
 modal accessibility and content scaling are implemented. Optional local
-feedback metrics and broader application-service extraction remain planned.
+feedback metrics remain planned; the shared application-service extraction is
+implemented.
 **Review date:** 2026-07-29. **Repository:** Grounded Knowledge Engine.
 **Completed execution:** [Current Hardening and Operator Execution
 Plan](2026-07-14-current-hardening-and-operator-execution-plan.md).
@@ -315,9 +316,10 @@ the current MCP schemas and transport behavior throughout the refactor.
 ### Phase 3 — Close the local product loop
 
 1. Extract reusable application services. **Workspace-pinned grounding,
-   project, decision, and open-question application boundaries are implemented,
-   as are shared capture planning/application functions; broader capture
-   orchestration extraction remains planned.**
+   project, decision, open-question, and capture application boundaries are
+   implemented. Capture planning, proposal list/get/preview/apply/reject,
+   immediate creates, grounded capture, and refresh now share one pinned
+   boundary across the CLI, MCP server, and local Cockpit.**
 2. Add the local Cockpit Ask/Review drawer. **Implemented.**
 3. Split Cockpit metadata from lazily loaded bodies. **Implemented.**
 

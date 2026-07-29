@@ -1,12 +1,7 @@
 import path from "node:path";
 import process from "node:process";
-import {
-  getCaptureProposal,
-  listCaptureProposals,
-  rejectCaptureProposal,
-} from "./capture-service.js";
 import type { CaptureAction } from "./types.js";
-import { applyCaptureProposalAndRefresh } from "./capture-application-service.js";
+import { createCaptureApplicationService } from "./capture-application-service.js";
 import { loadWorkspaceContext } from "../workspaces/config.js";
 
 interface CaptureCliOptions {
@@ -29,9 +24,14 @@ export async function runCaptureCli(argv: string[], cwd = process.cwd()): Promis
   }
 
   const workspace = await loadWorkspaceContext({ repoRoot });
+  const captureService = createCaptureApplicationService({
+    repoRoot,
+    workspace,
+    backend: process.env.KB_MCP_RETRIEVAL_BACKEND,
+  });
 
   if (command === "list") {
-    const proposals = await listCaptureProposals(repoRoot, workspace);
+    const proposals = await captureService.list();
     if (json) console.log(JSON.stringify(proposals, null, 2));
     else if (!proposals.length) console.log("No pending capture proposals.");
     else {
@@ -46,7 +46,7 @@ export async function runCaptureCli(argv: string[], cwd = process.cwd()): Promis
 
   if (command === "show") {
     const proposalId = requireProposalId(options, "show");
-    const proposal = await getCaptureProposal(repoRoot, proposalId, workspace);
+    const proposal = await captureService.get(proposalId);
     if (json) console.log(JSON.stringify(proposal, null, 2));
     else {
       console.log(`${proposal.proposalId} (${proposal.proposedAction})`);
@@ -76,9 +76,7 @@ export async function runCaptureCli(argv: string[], cwd = process.cwd()): Promis
       );
     }
     const action = normalizeAction(actionValue);
-    const result = await applyCaptureProposalAndRefresh({
-      repoRoot,
-      workspace,
+    const result = await captureService.apply({
       proposalId,
       action,
       dryRun,
@@ -95,7 +93,7 @@ export async function runCaptureCli(argv: string[], cwd = process.cwd()): Promis
 
   if (command === "reject") {
     const proposalId = requireProposalId(options, "reject");
-    const result = await rejectCaptureProposal(repoRoot, proposalId, dryRun, workspace);
+    const result = await captureService.reject(proposalId, dryRun);
     if (json) console.log(JSON.stringify(result, null, 2));
     else console.log(`${dryRun ? "Would reject" : "Rejected"} ${result.proposalId}`);
     return 0;
