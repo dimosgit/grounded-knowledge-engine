@@ -75,7 +75,7 @@ flowchart TB
 
 | Layer                                  | Role                                                                                                                                                                                           | Portability                          |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| **CLI** (`tools/grounding`)            | Deterministic index / retrieve / evaluate. Scriptable, CI-able, no agent.                                                                                                                      | Universal                            |
+| **Grounding core** (`tools/grounding`) | Workspace-pinned application service over deterministic BM25/SQLite indexing, search, scoped grounded answers, refresh, and evaluation.                                                        | Shared by CLI, MCP, and Cockpit      |
 | **Project core** (`tools/projects`)    | Workspace-pinned application service over canonical project administration, checkpoints, strict membership, review, cited capsules, and handoff formatting.                                    | Shared by CLI, MCP, and Cockpit      |
 | **Decision core** (`tools/decisions`)  | Workspace-pinned application service over canonical creation, exact retrieval, evidence review diffs, append-only history, supersession, and review-state calculation.                         | Shared by CLI, MCP, and Cockpit      |
 | **Question core** (`tools/questions`)  | Workspace-pinned application service over atomic, exactly deduplicated, workspace-authorized open-question mutation.                                                                           | Shared provider-neutral core         |
@@ -90,9 +90,9 @@ flowchart TB
   hosted Cockpit preview is static demo content only, not a remote MCP service.
 - **Derived data is disposable.** The SQLite index is a cache of the Markdown, never the
   other way around — delete it and `--refresh` rebuilds it.
-- **Shared core, multiple surfaces.** CLI, MCP, and Cockpit reuse deterministic
-  grounding, project, decision, and open-question application services. CI
-  proves each exposed surface against the same Markdown contracts.
+- **Shared core, multiple surfaces.** CLI, MCP, and Cockpit reuse the
+  workspace-pinned grounding, project, decision, and open-question application
+  services. CI proves each exposed surface against the same Markdown contracts.
 - **Explicit project boundaries.** `project_id`, canonical folders,
   `source_roots`, and links define membership; similarity never silently expands
   scope.
