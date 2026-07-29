@@ -509,7 +509,7 @@ see [`docs/ingest-recipe.md`](docs/ingest-recipe.md). Developer details live in
 
 | Layer                                        | Responsibility                                                                                                                     |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| [`tools/grounding`](tools/grounding)         | Deterministic indexing, retrieval, grounded synthesis, and evaluation.                                                             |
+| [`tools/grounding`](tools/grounding)         | Workspace-pinned application service for deterministic BM25/SQLite retrieval, grounded synthesis, scoped answers, and evaluation.  |
 | [`tools/projects`](tools/projects)           | Canonical project parsing, strict scope resolution, resume capsules, citations, and handoff formatting.                            |
 | [`tools/decisions`](tools/decisions)         | Canonical decision creation, retrieval, review diffs, append-only history, supersession, and review-state warnings.                |
 | [`tools/questions`](tools/questions)         | Workspace-pinned application service for atomic, deduplicated, workspace-authorized open-question mutation.                        |

@@ -26,8 +26,8 @@ import {
   parseFrontmatter,
   parsePositiveInt,
 } from "../grounding/document-core.js";
-import { getKbRetriever } from "../grounding/retriever.js";
-import { answerGrounded, type GroundedTokenUsage } from "../grounding/answer-service.js";
+import type { GroundedTokenUsage } from "../grounding/answer-service.js";
+import { createGroundingApplicationService } from "../grounding/grounding-application-service.js";
 import {
   createProjectApplicationService,
   listProjectRecordsForWorkspace,
@@ -39,13 +39,7 @@ import {
   planCapture,
 } from "../capture/capture-service.js";
 import type { CaptureAction, CaptureSourceOperation } from "../capture/types.js";
-import type {
-  IndexedDocument,
-  KbRetriever,
-  SearchArgs,
-  SearchHit,
-  SearchResult,
-} from "../grounding/types.js";
+import type { IndexedDocument, SearchArgs, SearchHit, SearchResult } from "../grounding/types.js";
 import { createOpenQuestionApplicationService } from "../questions/index.js";
 import {
   createDecisionApplicationService,
@@ -126,25 +120,13 @@ let docCache = {
 };
 let pendingDocRefresh: Promise<void> | null = null;
 
-async function getRetriever(forceRefresh = false): Promise<KbRetriever> {
-  return getKbRetriever({
-    workspace,
-    repoRoot,
-    scanRoots: [...workspace.scanRoots],
-    cacheTtlMs: DEFAULT_CACHE_TTL_MS,
-    forceRefresh,
-  });
-}
-
-async function getSqliteRetriever(forceRefresh = false): Promise<KbRetriever> {
-  const { getSqliteKbRetriever } = await import("../grounding/sqlite-index.js");
-  return getSqliteKbRetriever({
-    workspace,
-    repoRoot,
-    scanRoots: [...workspace.scanRoots],
-    forceRefresh,
-  });
-}
+const groundingService = createGroundingApplicationService({
+  workspace,
+  repoRoot,
+  scanRoots: [...workspace.scanRoots],
+  cacheTtlMs: DEFAULT_CACHE_TTL_MS,
+  backend: DEFAULT_RETRIEVAL_BACKEND,
+});
 
 const tools = buildToolCatalog({
   profile: DEFAULT_MCP_PROFILE,
@@ -895,11 +877,7 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
 }
 
 async function buildGroundedAnswerPayload(args: JsonObject): Promise<ToolPayload> {
-  const structured = await answerGrounded(args, {
-    search: runSearch,
-    listDocuments: async () => await getDocuments(false),
-    domain: workspace.domain,
-  });
+  const structured = await groundingService.answer(args);
 
   let contentText: string;
   if (!structured.evidence.length) {
@@ -938,11 +916,10 @@ function formatTokenUsage(usage: GroundedTokenUsage | null | undefined): string 
 
 async function handleKbRefresh() {
   await getDocuments(true);
-  const retriever = await getRetriever(true);
-  const stats = retriever.getStats();
+  const stats = await groundingService.refresh("bm25");
   let sqliteStats: any = null;
   if (DEFAULT_RETRIEVAL_BACKEND === "sqlite") {
-    sqliteStats = (await getSqliteRetriever(true)).getStats();
+    sqliteStats = await groundingService.refresh("sqlite");
   }
   return {
     contentText: `Refreshed KB index. Documents: ${stats.documents}, chunks: ${stats.chunks}, tracks: ${Object.keys(stats.byTrack).length}, sources: ${Object.keys(stats.bySourceKind).length}${sqliteStats ? `, sqliteChunks: ${sqliteStats.chunks}` : ""}`,
@@ -951,10 +928,7 @@ async function handleKbRefresh() {
 }
 
 async function runSearch(args: JsonObject): Promise<SearchResult> {
-  const backend = normalizeRetrievalBackend(args?.backend);
-  const retriever =
-    backend === "sqlite" ? await getSqliteRetriever(false) : await getRetriever(false);
-  return retriever.search(args as SearchArgs);
+  return groundingService.search(args as SearchArgs & { backend?: unknown });
 }
 
 function buildDocumentPayload(doc: LocalDocument, maxChars: number) {
@@ -1000,7 +974,7 @@ function scheduleDocumentRefresh(): Promise<void> {
   pendingDocRefresh = new Promise<void>((resolve, reject) => {
     setTimeout(async () => {
       try {
-        await getDocuments(true);
+        await Promise.all([getDocuments(true), groundingService.refresh()]);
         resolve();
       } catch (error) {
         reject(error);
@@ -1164,12 +1138,7 @@ async function addOpenQuestion(options: JsonObject): Promise<any> {
 }
 
 async function refreshOpenQuestionRetrieval(): Promise<void> {
-  await getDocuments(true);
-  if (DEFAULT_RETRIEVAL_BACKEND === "sqlite") {
-    await getSqliteRetriever(true);
-  } else {
-    await getRetriever(true);
-  }
+  await Promise.all([getDocuments(true), groundingService.refresh()]);
 }
 
 function buildCapturedNoteBody({
