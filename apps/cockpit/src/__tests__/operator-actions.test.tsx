@@ -60,10 +60,13 @@ describe("local operator actions", () => {
     await user.click(screen.getByRole("button", { name: "Capture answer" }));
 
     expect(await screen.findByRole("button", { name: "Review now" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Open capture review queue" }),
+    ).not.toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Open capture review queue" })).toHaveTextContent(
-        "1",
-      ),
+      expect(
+        screen.getByRole("button", { name: "Open capture review queue", hidden: true }),
+      ).toHaveTextContent("1"),
     );
     expect(screen.queryByText("Capture review queue")).not.toBeInTheDocument();
 

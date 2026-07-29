@@ -3,6 +3,7 @@ import path from "node:path";
 import { getKbRetriever } from "../grounding/retriever.js";
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
+import { listProjectCheckpoints } from "./checkpoint-service.js";
 import {
   meaningfulSectionItems,
   parseProjectDocument,
@@ -56,6 +57,14 @@ export async function resumeProject(
   if (workspace) await authorizeWorkspaceRead(workspace, projectPath);
   const rawProject = await fs.readFile(projectPath, "utf8");
   const parsed = parseProjectDocument(rawProject, manifestDoc.relPath, manifestDoc.title);
+  const checkpoints = /(?:^|\/)kb\/projects\/[^/]+\/project\.md$/.test(manifestDoc.relPath)
+    ? await listProjectCheckpoints(parsed.manifest.projectId, {
+        repoRoot,
+        scanRoots,
+        workspace,
+      })
+    : [];
+  const latestCheckpoint = checkpoints[0];
   const projectDocs = allDocs.filter((doc) =>
     isDocumentInProject(
       doc,
@@ -75,6 +84,7 @@ export async function resumeProject(
     currentStatus ||
     "No current focus recorded.";
   const recentChanges =
+    latestCheckpoint?.whatChanged ||
     sectionSummary(parsed.sections.get("last-meaningful-change")) ||
     currentStatus ||
     "No recent change recorded.";
@@ -94,17 +104,28 @@ export async function resumeProject(
     ...projectDocs.filter((doc) => doc.relPath !== manifestDoc.relPath).map((doc) => doc.relPath),
   ]);
   const startHereBrief = outcome || currentStatus || currentFocus;
-  const citations = buildCitations(manifestDoc.relPath, parsed.sections, [
-    "outcome",
-    "current-status",
-    "current-focus",
-    "last-meaningful-change",
-    "active-decisions",
-    "blockers",
-    "open-questions",
-    "next-actions",
-    "key-documents",
-  ]);
+  const citations = [
+    ...(latestCheckpoint
+      ? [
+          {
+            path: latestCheckpoint.path,
+            line: latestCheckpoint.whatChangedLine,
+            section: "What changed",
+          },
+        ]
+      : []),
+    ...buildCitations(manifestDoc.relPath, parsed.sections, [
+      "outcome",
+      "current-status",
+      "current-focus",
+      "last-meaningful-change",
+      "active-decisions",
+      "blockers",
+      "open-questions",
+      "next-actions",
+      "key-documents",
+    ]),
+  ];
 
   const structured: ProjectCapsule = {
     projectId: parsed.manifest.projectId,

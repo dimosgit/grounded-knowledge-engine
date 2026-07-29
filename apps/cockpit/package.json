@@ -10,6 +10,7 @@
     "prebuild": "npm run sync:content -- --public",
     "build": "vite build",
     "test:production-boundary": "tsx scripts/production-boundary.ts",
+    "test:bundle-budget": "tsx scripts/bundle-budget.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "lint": "eslint src scripts",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"scripts/**/*.ts\" \"*.{ts,json}\"",
