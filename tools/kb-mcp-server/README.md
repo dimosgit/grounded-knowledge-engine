@@ -19,11 +19,13 @@ The default `core` profile exposes four semantic tools:
 
 The `full` profile additionally exposes:
 
+- `kb.get_decision` and `kb.list_decisions`;
 - `kb.get_topic` and `kb.get_term` compatibility aliases;
 - `kb.list_modules`;
 - `kb.answer_grounded`;
 - `kb.refresh`;
-- `kb.upsert_note` and `kb.add_open_question` when writes are enabled. Open
+- `kb.record_decision`, `kb.review_decision`, `kb.supersede_decision`,
+  `kb.upsert_note`, and `kb.add_open_question` when writes are enabled. Open
   questions use the shared atomic mutation service, so exact normalized
   duplicates return `unchanged` instead of adding another entry.
 
@@ -52,11 +54,21 @@ npm run setup:mcp -- --client github-copilot
 npm run setup:mcp -- --profile core
 npm run setup:mcp -- --profile full
 npm run setup:mcp -- --no-writes
+npm run setup:mcp -- --workspace client-alpha --workspace-root "/path/to/client-alpha"
+npm run setup:mcp -- --workspace client-alpha --client codex
+npm run setup:mcp -- --list-workspaces
 ```
 
 The GitHub adapter writes the shared `.mcp.json` used by Copilot CLI and a
 VS Code-specific `.vscode/mcp.json`. See
 [`docs/integrations/github-copilot.md`](../../docs/integrations/github-copilot.md).
+
+The first workspace command registers the root in the local, gitignored
+`.gke/workspaces.json` registry and generates `kb-client-alpha` without
+replacing existing entries. Named vaults default to writes disabled. `--writes`
+is accepted only when the selected vault's `.gke/workspace.json` is not
+read-only. Every generated entry launches a separate process with a frozen
+`KB_MCP_REPO_ROOT`; there is no runtime workspace switch.
 
 ## Project Context
 
@@ -108,6 +120,30 @@ npm run project -- link my-project notes/evidence.md
 Direct Markdown authoring remains supported at
 `kb/projects/<project-id>/project.md`.
 
+## Decision Replay
+
+The full profile reuses the shared decision domain rather than parsing or
+writing decision Markdown inside the protocol layer:
+
+- `kb.record_decision` validates cited local evidence and creates only under
+  `kb/decisions/`;
+- `kb.get_decision` resolves an ID, canonical path, or exact title;
+- `kb.list_decisions` filters by project, status, review state, owner, or tag;
+- `kb.review_decision` appends classified evidence changes without replacing
+  the original snapshot;
+- `kb.supersede_decision` preserves both records and adds bidirectional links.
+
+Record, review, and supersede are advertised only when writes are enabled and
+all support `dryRun`. Compact responses omit rendered Markdown bodies. Due and
+overdue reads carry explicit warnings.
+
+The same read model is addressable as:
+
+```text
+gke://workspace/decisions
+gke://decision/{decisionId}
+```
+
 ## Capture planning and review
 
 The capture domain keeps duplicate advice separate from write authorization.
@@ -136,8 +172,10 @@ The server advertises:
 
 - `gke://workspace/info`
 - `gke://workspace/review`
+- `gke://workspace/decisions`
 - `gke://record/{path}`
 - `gke://project/{projectId}/context`
+- `gke://decision/{decisionId}`
 
 Resources use logical, workspace-relative identifiers and do not expose host
 filesystem paths.
@@ -202,7 +240,7 @@ writes even if `KB_MCP_ENABLE_WRITES=true`.
 - Every advertised tool has a formal output schema and MCP safety annotations.
 - The `core` catalog is limited to four tools and 7,000 serialized schema
   characters.
-- The `full` catalog is limited to eleven tools and 13,500 characters.
+- The `full` catalog is limited to sixteen tools and 22,000 characters.
 - Real writes require `KB_MCP_ENABLE_WRITES=true`; `dryRun=true` remains
   available for write previews.
 - `kb.answer_grounded` is evidence-gated and can abstain.
@@ -222,7 +260,7 @@ npm run test:mcp:catalog  # profiles, schemas, annotations, and budgets
 npm run test:mcp:transport # framing, notifications, invalid JSON, and RPC errors
 npm run test:mcp:http     # loopback HTTP bridge: parity, auth, write-denial, limits
 npm run test:projects     # strict project resolution, isolation, resource parity
-npm run smoke:mcp         # discovery, resources, search, capture, reuse, resume
+npm run smoke:mcp         # discovery, capture, resume, and decision replay
 npm run test:loop         # ground → capture → re-ground → cite
 npm run test:retrieval    # isolated BM25 + SQLite category quality gate
 npm run eval -- --k 5 --runs 3 --refresh

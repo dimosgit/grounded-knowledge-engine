@@ -6,6 +6,7 @@ import { createCaptureReviewPlugin } from "./scripts/capture-review-plugin";
 import { createGroundedAskPlugin } from "./scripts/grounded-ask-plugin";
 import { createLifecycleWritebackPlugin } from "./scripts/lifecycle-writeback-plugin";
 import { createWorkspaceReviewPlugin } from "./scripts/workspace-review-plugin";
+import { createDecisionReviewPlugin } from "./scripts/decision-review-plugin";
 import { loadWorkspaceContext } from "../../tools/workspaces/config";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -23,6 +24,7 @@ export default defineConfig({
     createGroundedAskPlugin({ repoRoot, workspace }),
     createCaptureReviewPlugin({ repoRoot, workspace }),
     createWorkspaceReviewPlugin({ repoRoot, workspace }),
+    createDecisionReviewPlugin({ repoRoot, workspace }),
   ],
   server: process.env.PORT ? { port: Number(process.env.PORT), strictPort: true } : undefined,
   resolve: {

@@ -15,7 +15,8 @@ import {
   type CaptureGroundedAnswerResult,
 } from "../../../tools/capture/grounded-capture-service.js";
 import { CaptureConflictError } from "../../../tools/capture/capture-service.js";
-import { getProject, type LoadedProject } from "../../../tools/projects/project-service.js";
+import { createProjectApplicationService } from "../../../tools/projects/project-application-service.js";
+import type { LoadedProject } from "../../../tools/projects/project-service.js";
 import { isDocumentInProject } from "../../../tools/projects/project-scope.js";
 import { loadWorkspaceContext } from "../../../tools/workspaces/config.js";
 import type { WorkspaceContext } from "../../../tools/workspaces/types.js";
@@ -107,11 +108,11 @@ export async function handleGroundedAskRequest(
     const strict = optionalBoolean(body.strict, "strict") ?? true;
     const requestedProjectId = optionalString(body.projectId, "projectId", 120);
     const project = requestedProjectId
-      ? await getProject(requestedProjectId, {
+      ? await createProjectApplicationService({
           repoRoot: options.repoRoot,
           scanRoots: [...options.workspace.scanRoots],
           workspace: options.workspace,
-        })
+        }).get(requestedProjectId)
       : null;
     const projectId = project?.parsed.manifest.projectId;
     const answerInput: GroundedAnswerInput = {

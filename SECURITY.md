@@ -17,8 +17,14 @@ frontend over sanitized repository content; it does not expose user workspaces,
 the MCP server, or write tools. The most security-relevant areas are:
 
 - the MCP server's stdio handling (`tools/kb-mcp-server`),
-- the setup script that writes machine-local config (`npm run setup:claude`),
+- the setup script that writes machine-local config (`npm run setup:mcp`),
 - and any path/file handling in the CLI ingestion (`tools/grounding`).
+
+For sensitive client separation, register one workspace root per named MCP
+entry and run one process per workspace. The local `.gke/workspaces.json`
+registry contains absolute machine paths and must not be committed. Never
+combine client roots into one broad scan configuration or implement
+cross-workspace search as a convenience feature.
 
 Findings that require an attacker to already control your local filesystem or to supply
 malicious documents you then knowingly ingest are lower priority, but still welcome.

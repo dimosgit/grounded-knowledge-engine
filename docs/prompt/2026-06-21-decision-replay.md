@@ -13,14 +13,21 @@ Turn grounded research into a durable decision record that preserves the recomme
 The checkpoint prerequisite and the first decision-domain slice are
 implemented. The local service/CLI can create append-only canonical decision
 records, validate project-scoped citations, retrieve by exact ID/path/title,
-filter the ledger, and calculate current/due/overdue review state. Review
-diffs, append-only review history, supersession, MCP decision operations, and
-Cockpit Decision Replay remain planned.
+filter the ledger, calculate current/due/overdue review state, append structured
+reviews with classified evidence changes, and supersede decisions with
+bidirectional links. The MCP full profile exposes record, get, list, review,
+and supersede operations plus addressable ledger/detail resources. Cockpit
+Decision Ledger and Replay routes are implemented with the same browser-safe
+parser, stale warnings, evidence comparison, and a Valencia/Málaga/Lisbon demo.
+The local Cockpit now validates a review in dry-run mode before enabling an
+explicit apply to canonical Markdown. This loopback-only development endpoint
+is excluded from the static public build. MCP and CLI review remain available
+for automation.
 
 ## 3. Context
 
 - Product area: `Grounding engine, MCP server, Markdown knowledge model, and Operator Cockpit`
-- Current behavior: `GKE retrieves cited evidence, captures topic/term notes, ingests documents, recalls captured notes across MCP clients, and locally records structured decisions with explicit review dates. It does not yet append reviews, compare an old evidence snapshot against newer evidence, supersede decisions, or expose the decision lifecycle through MCP and the Cockpit.`
+- Current behavior: `GKE retrieves cited evidence, captures topic/term notes, ingests documents, recalls captured notes across MCP clients, and records structured decisions with explicit review dates. The CLI, MCP full profile, resources, and local Cockpit use one workspace-pinned Decision Application Service. The Cockpit previews and validates a review before applying it; the static public build remains read-only.`
 - Problem to solve: `Consultants and technical users repeatedly research the same question because prior conclusions are buried in chats or undifferentiated notes. Even when a conclusion is found, the user cannot see whether its evidence is still current or which assumptions require revalidation.`
 - Normative data contract: [`docs/workspace-data-architecture.md`](../workspace-data-architecture.md)
 

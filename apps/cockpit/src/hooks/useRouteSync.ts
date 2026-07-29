@@ -11,6 +11,8 @@ export function useRouteSync({
   setSelectedGraphPath,
   setSelectedProjectId,
   setProjectAttentionFilter,
+  setSelectedDecisionId,
+  setDecisionLedgerFilter,
   setViewMode,
 }) {
   useEffect(() => {
@@ -28,6 +30,16 @@ export function useRouteSync({
       if (route.mode === "project") {
         setSelectedProjectId(route.projectId || "");
         setViewMode("project");
+        return;
+      }
+      if (route.mode === "decisions") {
+        if (route.decisionFilter) setDecisionLedgerFilter(route.decisionFilter);
+        setViewMode("decisions");
+        return;
+      }
+      if (route.mode === "decision") {
+        setSelectedDecisionId(route.decisionId || "");
+        setViewMode("decision");
         return;
       }
       if (route.mode === "graph") {
@@ -66,6 +78,8 @@ export function useRouteSync({
     setSelectedGraphPath,
     setSelectedProjectId,
     setProjectAttentionFilter,
+    setSelectedDecisionId,
+    setDecisionLedgerFilter,
     setViewMode,
   ]);
 }
