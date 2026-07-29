@@ -90,3 +90,6 @@ jobs:
 
       - name: Production bundle boundary
         run: npm run test:production-boundary
+
+      - name: Initial bundle budget
+        run: npm run test:bundle-budget

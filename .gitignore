@@ -17,3 +17,4 @@ kb/
 .claude/skills/
 .codex/config.toml
 .gemini/settings.json
+.vscode/mcp.json

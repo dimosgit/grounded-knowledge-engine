@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildCatalogEntries, type CatalogSource } from "./catalog-generator.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -187,6 +188,38 @@ async function copyContentTree(sourceDir: string, destinationDir: string): Promi
   return { markdown, assets };
 }
 
+async function collectMarkdownSources(
+  directory: string,
+  relativeDirectory = "",
+): Promise<CatalogSource[]> {
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+  const sources: CatalogSource[] = [];
+
+  for (const entry of entries) {
+    const relativePath = path.posix.join(relativeDirectory, entry.name);
+    const targetPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      sources.push(...(await collectMarkdownSources(targetPath, relativePath)));
+    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
+      sources.push({
+        path: relativePath,
+        content: await fs.readFile(targetPath, "utf8"),
+      });
+    }
+  }
+
+  return sources.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+async function writeCatalog(): Promise<void> {
+  const sources = await collectMarkdownSources(contentRoot);
+  const catalog = buildCatalogEntries(sources);
+  await fs.writeFile(
+    path.join(contentRoot, "catalog.json"),
+    `${JSON.stringify(catalog, null, 2)}\n`,
+  );
+}
+
 export async function syncContent(options: SyncContentOptions = {}): Promise<SyncStats> {
   const sourceFolders = parseSourceFolders(options);
   await fs.rm(contentRoot, { recursive: true, force: true });
@@ -216,6 +249,8 @@ export async function syncContent(options: SyncContentOptions = {}): Promise<Syn
     if (copyDecision.markdown) markdown += 1;
     if (copyDecision.asset) assets += 1;
   }
+
+  await writeCatalog();
 
   return {
     total: markdown + assets,

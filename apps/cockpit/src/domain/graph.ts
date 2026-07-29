@@ -39,10 +39,9 @@ function resolveMarkdownHref(href, sourcePath, docsByPath) {
 }
 
 function getGraphDocMeta(doc, docsByPath) {
+  const links = Array.isArray(doc.links) ? doc.links : getSectionLinks(doc.content || "");
   const outgoingPaths = new Set(
-    getSectionLinks(doc.content)
-      .map((link) => resolveMarkdownHref(link.href, doc.path, docsByPath))
-      .filter(Boolean),
+    links.map((link) => resolveMarkdownHref(link.href, doc.path, docsByPath)).filter(Boolean),
   );
   const moduleKey = getDocModuleKey(doc);
   if (moduleKey && doc.docType !== "module") {
@@ -55,7 +54,7 @@ function getGraphDocMeta(doc, docsByPath) {
     moduleKey,
     tags: normalizeFrontmatterList(doc.frontmatter?.tags),
     outgoingPaths,
-    searchableText: `${doc.title}\n${doc.path}\n${doc.content}`.toLowerCase(),
+    searchableText: `${doc.title}\n${doc.path}\n${doc.searchIndexNormalized || ""}`.toLowerCase(),
   };
 }
 
@@ -196,7 +195,7 @@ export function buildContextGraph(focusDoc, docs) {
 
   for (const source of relationships.slice(0, 8)) {
     const sourceMeta: any = metaByPath.get(source.doc.path);
-    for (const targetPath of sourceMeta.outgoingPaths) {
+    for (const targetPath of sourceMeta.outgoingPaths as Set<string>) {
       if (!visiblePaths.has(targetPath) || targetPath === focusDoc.path) continue;
       if (edges.some((edge) => edge.from === source.doc.path && edge.to === targetPath)) continue;
       edges.push({
@@ -341,7 +340,8 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
       path: doc.path,
       trackKey: doc.track,
       summary: "client context",
-      count: docs.filter((item) => item.content.includes(doc.path)).length,
+      count: docs.filter((item) => getGraphDocMeta(item, docsByPath).outgoingPaths.has(doc.path))
+        .length,
     });
     addEdge(`track:${doc.track}`, `client:${doc.path}`, "track owns client", 2);
   }
@@ -370,7 +370,7 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
   for (const doc of moduleDocs) {
     const sourceModuleKey = getDocModuleKey(doc) || doc.path;
     const sourceMeta = getGraphDocMeta(doc, docsByPath);
-    for (const targetPath of sourceMeta.outgoingPaths) {
+    for (const targetPath of sourceMeta.outgoingPaths as Set<string>) {
       const targetDoc = docsByPath.get(targetPath);
       if (!targetDoc || targetDoc.docType !== "module") continue;
       const targetModuleKey = getDocModuleKey(targetDoc) || targetDoc.path;

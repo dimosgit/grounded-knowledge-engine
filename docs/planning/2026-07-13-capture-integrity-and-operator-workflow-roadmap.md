@@ -2,11 +2,13 @@
 
 **Status:** In progress — capture P0, policy routing, project task capture,
 daily attention in the engine/CLI/read-only MCP resource, source-aware
-ingestion, shared atomic open-question mutation, and the local Cockpit
-project-scoped Ask/live review workflow, and Cockpit daily attention are
-implemented. Cockpit scaling remains planned. **Review date:** 2026-07-14. **Repository:** Grounded
-Knowledge Engine. **Current execution:** [Current Hardening and Operator
-Execution Plan](2026-07-14-current-hardening-and-operator-execution-plan.md).
+ingestion, shared atomic open-question mutation, the local Cockpit
+project-scoped Ask/live review workflow, Cockpit daily attention, and Cockpit
+modal accessibility and content scaling are implemented. Optional local
+feedback metrics and broader application-service extraction remain planned.
+**Review date:** 2026-07-29. **Repository:** Grounded Knowledge Engine.
+**Completed execution:** [Current Hardening and Operator Execution
+Plan](2026-07-14-current-hardening-and-operator-execution-plan.md).
 
 ## Product decision
 
@@ -251,6 +253,12 @@ reject it without switching away from the Cockpit.
 
 ### P2 — Cockpit Content Scaling
 
+**Implementation status:** Implemented on 2026-07-29. Content sync emits a
+deterministic bounded catalog; full Markdown bodies, top-level routes, Markdown
+rendering, graph rendering, and Mermaid remain lazy. Loaded bodies are cached
+and concurrent requests are deduplicated. The production manifest is checked
+in CI against a 350 KB raw and 120 KB gzip initial JavaScript budget.
+
 #### Outcome
 
 Cockpit startup cost does not grow linearly with every complete Markdown body.
@@ -263,8 +271,7 @@ Cockpit startup cost does not grow linearly with every complete Markdown body.
 - Preserve offline static preview behavior and hash-route deep links.
 - Add an initial-bundle budget to Cockpit CI.
 
-This is a scaling improvement, not a current public-demo blocker. The demo
-corpus is intentionally small.
+The public demo remains fully static and navigable without a server API.
 
 ### P2 — MCP Application-Service Extraction
 
@@ -310,7 +317,7 @@ the current MCP schemas and transport behavior throughout the refactor.
 1. Extract reusable application services. **Grounded answer and capture
    application boundaries implemented; broader extraction remains planned.**
 2. Add the local Cockpit Ask/Review drawer. **Implemented.**
-3. Split Cockpit metadata from lazily loaded bodies.
+3. Split Cockpit metadata from lazily loaded bodies. **Implemented.**
 
 ## Shared constraints
 

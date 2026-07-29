@@ -270,13 +270,11 @@ function buildProjectGlance(project) {
 export function buildOpenQuestionItems(docs) {
   const openQuestionsDoc = docs.find((doc) => doc.path === "kb/open_questions.md");
   if (!openQuestionsDoc) return [];
-  return listItems(openQuestionsDoc.content)
-    .slice(0, 6)
-    .map((label, index) => ({
-      id: `open-question-${index}`,
-      label,
-      path: openQuestionsDoc.path,
-    }));
+  return (openQuestionsDoc.openQuestionItems || []).slice(0, 6).map((label, index) => ({
+    id: `open-question-${index}`,
+    label,
+    path: openQuestionsDoc.path,
+  }));
 }
 
 export function getActiveProject(projectSummaries, selectedProjectId) {
@@ -405,7 +403,9 @@ function isProjectDoc(doc): boolean {
   const explicitType = doc.frontmatter?.type;
   if (explicitType && explicitType !== "project") return false;
   return ["Current status", "Current focus", "Next 3 actions", "Next actions", "Blockers"].some(
-    (heading) => new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "m").test(doc.content || ""),
+    (heading) =>
+      (doc.headings || []).includes(heading) ||
+      new RegExp(`^##\\s+${escapeRegExp(heading)}\\s*$`, "m").test(doc.content || ""),
   );
 }
 
@@ -501,14 +501,6 @@ function normalizeFrontmatterScalar(value): string {
 
 function asMarkdownList(items: string[]): string[] {
   return items.length ? items.map((item) => `- ${item}`) : ["- None recorded."];
-}
-
-function listItems(content: string): string[] {
-  return content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => /^[-*]\s+/.test(line))
-    .map((line) => line.replace(/^[-*]\s+/, ""));
 }
 
 function unique(items: string[]): string[] {

@@ -1,6 +1,6 @@
 # Workspace Data Architecture
 
-**Status:** Normative target architecture. **Last updated:** 2026-06-23.
+**Status:** Normative target architecture. **Last updated:** 2026-07-29.
 
 This document is the shared data contract for:
 
@@ -135,9 +135,12 @@ recommended structure for sensitive multi-client use.
 
 ## Workspace boundary
 
-**Implementation status:** the engine runs against a single workspace today (one
-repository root resolved from `KB_MCP_REPO_ROOT`). Multiple isolated workspace
-vaults and the cross-workspace leakage guard are planned, not yet implemented.
+**Implementation status:** the thin local leakage guard is implemented. Each
+process resolves one immutable workspace context, realpath-confines configured
+scan roots and read/write targets, enforces read-only policy, and exposes safe
+workspace identity through the existing resource. Multi-vault lifecycle
+management, in-process workspace switching, and cross-workspace search remain
+planned; sensitive workspaces still use separate roots and processes.
 
 A workspace represents one trust domain, such as:
 
@@ -261,7 +264,7 @@ adding a second incompatible frontend-only parser.
 **Implementation status:** the canonical record, shared parser, project-scoped
 resume, Cockpit rendering, and project create/list/show/validate CLI are
 implemented. Controlled field/section updates and explicit source-link commands
-are also implemented. Checkpoint creation remains planned.
+are also implemented. Explicit checkpoint creation is implemented.
 
 Path:
 
@@ -326,8 +329,10 @@ Rules:
 
 ## Checkpoint record
 
-**Implementation status:** this is the normative target format. Automatic or
-CLI checkpoint creation is not implemented yet.
+**Implementation status:** implemented for explicit CLI/service creation,
+listing, project-scoped evidence validation, append-only collision protection,
+and recent-checkpoint project resume. Automatic checkpoint creation remains
+deliberately unsupported.
 
 Path:
 
@@ -377,8 +382,11 @@ Rules:
 
 ## Decision record
 
-**Implementation status:** this is the normative target format. Decision-replay
-capture and review are planned, not yet implemented.
+**Implementation status:** canonical decision creation, parsing, exact
+retrieval, filtered listing, scoped evidence validation, and stale-state
+calculation are implemented through the local service and CLI. Review history
+mutation, supersession, MCP operations, and Cockpit Decision Replay remain
+planned.
 
 Path:
 
@@ -715,9 +723,10 @@ Migration must remain incremental:
    is available.
 10. Remove compatibility paths only in a later major schema version.
 
-Implemented migration slices now include project records, source records,
-workspace configuration, workspace-local derived caches, and source-aware
-ingestion. Checkpoints and decision records remain planned.
+Implemented migration slices now include project records, checkpoint records,
+the initial decision record lifecycle, source records, workspace configuration,
+workspace-local derived caches, and source-aware ingestion. Decision review and
+supersession remain planned.
 
 No bulk migration should occur without:
 
