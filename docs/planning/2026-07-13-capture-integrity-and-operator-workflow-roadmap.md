@@ -10,6 +10,8 @@ implemented.
 **Review date:** 2026-07-29. **Repository:** Grounded Knowledge Engine.
 **Completed execution:** [Current Hardening and Operator Execution
 Plan](2026-07-14-current-hardening-and-operator-execution-plan.md).
+**Next proposed execution:** [Operator Cockpit Action Center and Workspace
+Clarity Plan](2026-07-29-operator-cockpit-action-center-plan.md).
 
 ## Product decision
 
