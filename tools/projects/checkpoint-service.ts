@@ -49,6 +49,9 @@ export interface ProjectCheckpoint {
   evidence: CheckpointEvidence[];
   path: string;
   whatChangedLine: number;
+  completedLine: number;
+  currentBlockerLine: number;
+  nextStartingPointLine: number;
 }
 
 export interface CreatedProjectCheckpoint extends ProjectCheckpoint {
@@ -151,7 +154,10 @@ export async function createProjectCheckpoint(
     nextStartingPoint,
     evidence,
     path: relPath,
-    whatChangedLine: checkpointWhatChangedLine(content),
+    whatChangedLine: checkpointSectionLine(content, "What changed"),
+    completedLine: checkpointSectionLine(content, "Completed"),
+    currentBlockerLine: checkpointSectionLine(content, "Current blocker"),
+    nextStartingPointLine: checkpointSectionLine(content, "Next starting point"),
     content,
     dryRun: Boolean(options.dryRun),
   };
@@ -215,6 +221,12 @@ function parseCheckpoint(raw: string, relPath: string): ProjectCheckpoint {
   const title = raw.match(/^#\s+Checkpoint\s+[—-]\s+(.+?)\s*$/m)?.[1]?.trim() || checkpointId;
   const whatChangedSection = parsed.sections.get("what-changed");
   if (!whatChangedSection) throw new Error(`Checkpoint at ${relPath} is missing What changed.`);
+  const completedSection = parsed.sections.get("completed");
+  const currentBlockerSection = parsed.sections.get("current-blocker");
+  const nextStartingPointSection = parsed.sections.get("next-starting-point");
+  if (!nextStartingPointSection) {
+    throw new Error(`Checkpoint at ${relPath} is missing Next starting point.`);
+  }
 
   return {
     checkpointId,
@@ -224,15 +236,15 @@ function parseCheckpoint(raw: string, relPath: string): ProjectCheckpoint {
     createdAt,
     author,
     whatChanged: requireText(whatChangedSection.content, "What changed"),
-    completed: parseList(parsed.sections.get("completed")?.content || ""),
-    currentBlocker: cleanText(parsed.sections.get("current-blocker")?.content) || "None recorded.",
-    nextStartingPoint: requireText(
-      parsed.sections.get("next-starting-point")?.content,
-      "Next starting point",
-    ),
+    completed: parseList(completedSection?.content || ""),
+    currentBlocker: cleanText(currentBlockerSection?.content) || "None recorded.",
+    nextStartingPoint: requireText(nextStartingPointSection.content, "Next starting point"),
     evidence: parseEvidence(parsed.sections.get("evidence")?.content || ""),
     path: relPath,
     whatChangedLine: whatChangedSection.line,
+    completedLine: completedSection?.line || whatChangedSection.line,
+    currentBlockerLine: currentBlockerSection?.line || whatChangedSection.line,
+    nextStartingPointLine: nextStartingPointSection.line,
   };
 }
 
@@ -311,7 +323,12 @@ function isEvidenceInProject(
   });
 }
 
-function renderCheckpoint(values: Omit<ProjectCheckpoint, "path" | "whatChangedLine">): string {
+function renderCheckpoint(
+  values: Omit<
+    ProjectCheckpoint,
+    "path" | "whatChangedLine" | "completedLine" | "currentBlockerLine" | "nextStartingPointLine"
+  >,
+): string {
   return `---
 schema_version: 1
 record_type: checkpoint
@@ -455,9 +472,9 @@ function findSection(lines: string[], oneBasedLine: number): string {
   return "Document";
 }
 
-function checkpointWhatChangedLine(content: string): number {
+function checkpointSectionLine(content: string, heading: string): number {
   const lines = content.split(/\r?\n/);
-  const index = lines.findIndex((line) => line.trim() === "## What changed");
+  const index = lines.findIndex((line) => line.trim() === `## ${heading}`);
   return index + 1;
 }
 

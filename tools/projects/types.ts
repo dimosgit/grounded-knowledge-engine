@@ -100,11 +100,17 @@ export interface WorkspaceReviewReport {
 export interface ProjectCapsule {
   projectId: string;
   title: string;
+  status: string;
   startHereBrief: string;
   currentFocus: string;
   recentChanges: string;
+  recommendedNextAction: string;
   activeDecisions: string[];
+  blockers: string[];
+  openQuestions: string[];
   blockersAndQuestions: string[];
+  completedSinceCheckpoint: string[];
+  latestCheckpointAt: string;
   nextThreeActions: string[];
   keyDocuments: string[];
   citations: ProjectCitation[];

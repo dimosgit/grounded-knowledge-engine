@@ -12,11 +12,26 @@ const canonicalDemo = await resumeProject({ projectId: "router-rollout" }, publi
   "kb",
 ]);
 assert.equal(canonicalDemo.structured.title, "Router Rollout");
+assert.equal(canonicalDemo.structured.status, "active");
 assert.match(canonicalDemo.structured.currentFocus, /project-resume capsule/i);
+assert.equal(
+  canonicalDemo.structured.recommendedNextAction,
+  "Open the project in the Operator Cockpit.",
+);
+assert.deepEqual(canonicalDemo.structured.blockers, [
+  "The Microsoft tunnel proof remains outside this milestone.",
+]);
+assert.deepEqual(canonicalDemo.structured.openQuestions, [
+  "Which project-resume interaction should lead the public demonstration?",
+]);
 assert.ok(
   canonicalDemo.structured.keyDocuments.includes("demo-kb/sources/router-rollout/evidence.md"),
 );
 assert.ok(!canonicalDemo.contentText.includes("transport project"));
+assert.ok(
+  canonicalDemo.contentText.indexOf("## Do next") <
+    canonicalDemo.contentText.indexOf("## What changed"),
+);
 
 const legacyDemo = await resumeProject({ projectId: "project-tracking" }, publicRepoRoot, [
   "demo-kb",
@@ -132,6 +147,7 @@ Completed.
 
   const alpha = await resumeProject({ projectId: "client-alpha" }, root, ["kb"]);
   assert.equal(alpha.structured.title, "Client Alpha Rollout");
+  assert.equal(alpha.structured.status, "active");
   assert.equal(alpha.structured.currentFocus, "Validate the deployment checklist.");
   assert.equal(
     alpha.structured.recentChanges,
@@ -142,6 +158,11 @@ Completed.
     "Run the dry run.",
     "Record the result.",
   ]);
+  assert.equal(alpha.structured.recommendedNextAction, "Finish the checklist.");
+  assert.deepEqual(alpha.structured.blockers, ["Waiting for security review."]);
+  assert.deepEqual(alpha.structured.openQuestions, ["Who owns production access?"]);
+  assert.deepEqual(alpha.structured.completedSinceCheckpoint, []);
+  assert.equal(alpha.structured.latestCheckpointAt, "");
   assert.ok(alpha.structured.keyDocuments.includes("kb/sources/client-alpha/evidence.md"));
   assert.ok(!alpha.contentText.includes("Beta-only"));
   assert.ok(
@@ -157,6 +178,10 @@ Completed.
   const completed = await resumeProject({ projectId: "completed-project" }, root, ["kb"]);
   assert.deepEqual(completed.structured.blockersAndQuestions, []);
   assert.deepEqual(completed.structured.nextThreeActions, []);
+  assert.equal(
+    completed.structured.recommendedNextAction,
+    "Project completed; no next action required.",
+  );
 
   await assert.rejects(
     () => resumeProject({ projectId: "missing-project" }, root, ["kb"]),
@@ -177,6 +202,7 @@ Completed.
     await client.initialize("project-context-test");
     const resumed = await client.callTool("kb.resume_project", { projectId: "client-alpha" });
     assert.equal(resumed.structuredContent?.projectId, "client-alpha");
+    assert.equal(resumed.structuredContent?.recommendedNextAction, "Finish the checklist.");
     const resource = await client.request("resources/read", {
       uri: "gke://project/client-alpha/context",
     });
