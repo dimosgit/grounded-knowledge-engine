@@ -82,7 +82,9 @@ describe("cockpit major flows", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Daily attention" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Review what needs attention" }),
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Open questions: \d+ project contexts/i }));
 
     expect(await screen.findByRole("heading", { name: "Project Board" })).toBeInTheDocument();
@@ -93,6 +95,20 @@ describe("cockpit major flows", () => {
         "true",
       );
     });
+  });
+
+  test("positions the Cockpit as an optional review layer without dead controls", async () => {
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: /Keep your agent grounded/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Cockpit is optional")).toBeInTheDocument();
+    expect(screen.getByText("Primary workflow")).toBeInTheDocument();
+    expect(screen.getByText("Local workspace")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New Document" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Settings" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Support" })).not.toBeInTheDocument();
   });
 
   test("project detail keeps the first screen compact and progress evidence-based", async () => {
