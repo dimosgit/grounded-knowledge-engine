@@ -5,6 +5,12 @@
 **Repository:** Grounded Knowledge Engine.
 **Primary surface:** `apps/cockpit`.
 
+**Progress note (2026-07-30):** The first presentational slice is implemented:
+Mission Control now explains the IDE-first workflow, exposes existing review
+destinations, displays a safe generic workspace posture, and removes misleading
+disabled shell controls. The workspace-context adapter, unified Operator Inbox,
+and typed command palette remain planned.
+
 ## Product decision
 
 Build a workspace-aware Operator Inbox and upgrade the global command palette

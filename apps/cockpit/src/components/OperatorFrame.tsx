@@ -2,22 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
-  Archive,
   BookOpen,
+  Database,
   Grid2X2,
-  HelpCircle,
-  History,
   LayoutDashboard,
   Menu,
   Network,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
   Rocket,
   Scale,
   Search,
-  Settings,
-  UserCircle,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { useModalSurface } from "../hooks/useModalSurface";
@@ -74,7 +70,6 @@ export function OperatorFrame({
       },
     },
     { key: "graph", label: "Context Graph", icon: Network, onClick: onGraph },
-    { key: "settings", label: "Settings", icon: Settings, disabled: true },
   ];
 
   function runNavAction(action) {
@@ -134,7 +129,9 @@ export function OperatorFrame({
                   <div className="font-display text-headline-sm font-semibold">
                     Operator Cockpit
                   </div>
-                  <div className="text-metadata text-on-surface-variant">Technical Lead</div>
+                  <div className="text-metadata text-on-surface-variant">
+                    Inspect · review · understand
+                  </div>
                 </div>
               </button>
               <button
@@ -147,14 +144,7 @@ export function OperatorFrame({
                 <X size={18} />
               </button>
 
-              <button
-                className="mb-8 flex w-full items-center justify-center gap-2 rounded bg-primary px-4 py-2 text-label-caps font-semibold uppercase text-on-primary opacity-70"
-                type="button"
-                disabled
-              >
-                <Plus size={16} />
-                New Document
-              </button>
+              <WorkspaceStatus />
 
               <nav className="flex flex-1 flex-col gap-1" aria-label="Mobile operator views">
                 {navItems.map((item) => {
@@ -169,9 +159,8 @@ export function OperatorFrame({
                         isActive
                           ? "bg-surface-container-high text-primary"
                           : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                      } ${item.disabled ? "cursor-not-allowed opacity-45" : ""}`}
+                      }`}
                       onClick={() => runNavAction(item.onClick)}
-                      disabled={item.disabled}
                       aria-current={isActive ? "page" : undefined}
                     >
                       <Icon className="shrink-0" size={20} />
@@ -181,23 +170,10 @@ export function OperatorFrame({
                 })}
               </nav>
 
-              <div className="mt-auto flex flex-col gap-1 border-t border-border-subtle pt-4">
-                <button
-                  className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45"
-                  disabled
-                  type="button"
-                >
-                  <HelpCircle size={20} />
-                  Support
-                </button>
-                <button
-                  className="flex cursor-not-allowed items-center gap-3 rounded px-3 py-3 text-on-surface-variant opacity-45"
-                  disabled
-                  type="button"
-                >
-                  <Archive size={20} />
-                  Archive
-                </button>
+              <div className="mt-auto border-t border-border-subtle pt-4">
+                <p className="px-3 text-metadata text-on-surface-variant">
+                  Local-first · provider-neutral
+                </p>
               </div>
             </motion.aside>
           </motion.div>,
@@ -225,7 +201,9 @@ export function OperatorFrame({
             </div>
             <div className={isNavCollapsed ? "hidden" : ""}>
               <div className="font-display text-headline-sm font-semibold">Operator Cockpit</div>
-              <div className="text-metadata text-on-surface-variant">Technical Lead</div>
+              <div className="text-metadata text-on-surface-variant">
+                Inspect · review · understand
+              </div>
             </div>
           </button>
           <button
@@ -241,17 +219,7 @@ export function OperatorFrame({
           </button>
         </div>
 
-        <button
-          className={`mb-8 flex w-full items-center justify-center gap-2 rounded bg-primary text-label-caps font-semibold uppercase text-on-primary opacity-70 ${
-            isNavCollapsed ? "h-10 px-0 py-0" : "px-4 py-2"
-          }`}
-          type="button"
-          disabled
-          title="New Document"
-        >
-          <Plus size={16} />
-          <span className={isNavCollapsed ? "sr-only" : ""}>New Document</span>
-        </button>
+        <WorkspaceStatus collapsed={isNavCollapsed} />
 
         <nav className="flex flex-1 flex-col gap-1" aria-label="Operator views">
           {navItems.map((item) => {
@@ -266,9 +234,8 @@ export function OperatorFrame({
                   isActive
                     ? "bg-surface-container-high text-primary"
                     : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                } ${isNavCollapsed ? "h-11 justify-center px-0" : "gap-3 px-3 py-2"} ${item.disabled ? "cursor-not-allowed opacity-45" : ""}`}
+                } ${isNavCollapsed ? "h-11 justify-center px-0" : "gap-3 px-3 py-2"}`}
                 onClick={() => runNavAction(item.onClick)}
-                disabled={item.disabled}
                 aria-current={isActive ? "page" : undefined}
                 aria-label={item.label}
                 title={item.label}
@@ -280,32 +247,11 @@ export function OperatorFrame({
           })}
         </nav>
 
-        <div className="mt-auto flex flex-col gap-1 border-t border-border-subtle pt-4">
-          <button
-            className={`flex cursor-not-allowed items-center rounded text-on-surface-variant opacity-45 ${
-              isNavCollapsed ? "h-11 justify-center px-0" : "gap-3 px-3 py-2"
-            }`}
-            disabled
-            type="button"
-            aria-label="Support"
-            title="Support"
-          >
-            <HelpCircle size={20} />
-            <span className={isNavCollapsed ? "sr-only" : ""}>Support</span>
-          </button>
-          <button
-            className={`flex cursor-not-allowed items-center rounded text-on-surface-variant opacity-45 ${
-              isNavCollapsed ? "h-11 justify-center px-0" : "gap-3 px-3 py-2"
-            }`}
-            disabled
-            type="button"
-            aria-label="Archive"
-            title="Archive"
-          >
-            <Archive size={20} />
-            <span className={isNavCollapsed ? "sr-only" : ""}>Archive</span>
-          </button>
-        </div>
+        {!isNavCollapsed && (
+          <p className="mt-auto border-t border-border-subtle px-3 pt-4 text-metadata text-on-surface-variant">
+            Local-first · provider-neutral
+          </p>
+        )}
       </aside>
 
       <main
@@ -325,18 +271,11 @@ export function OperatorFrame({
               {title}
             </div>
           </div>
-          <div className="mx-6 hidden shrink-0 items-center gap-5 text-label-caps uppercase text-on-surface-variant lg:flex">
-            <button type="button" className="hover:text-primary">
-              Recent
-            </button>
-            <button type="button" className="cursor-not-allowed opacity-45" disabled>
-              Pinned
-            </button>
-            <button type="button" className="cursor-not-allowed opacity-45" disabled>
-              Shared
-            </button>
-          </div>
           <div className="flex shrink-0 items-center gap-3 text-primary">
+            <div className="hidden items-center gap-2 rounded-full border border-status-done/30 bg-status-done/10 px-3 py-1.5 text-metadata font-semibold text-status-done lg:flex">
+              <ShieldCheck size={14} />
+              Local engine
+            </div>
             {import.meta.env.DEV && (
               <OperatorActions projectId={askProjectId} projectTitle={askProjectTitle} />
             )}
@@ -352,12 +291,43 @@ export function OperatorFrame({
                 ⌘ K
               </span>
             </button>
-            <History size={20} className="hidden shrink-0 md:block" />
-            <UserCircle size={22} className="shrink-0" />
           </div>
         </header>
         {children}
       </main>
+    </div>
+  );
+}
+
+function WorkspaceStatus({ collapsed = false }: { collapsed?: boolean }) {
+  const isDemo = import.meta.env.PROD;
+  const label = isDemo ? "Demo workspace" : "Local workspace";
+  const policy = isDemo ? "Read-only preview" : "Workspace policy active";
+
+  return (
+    <div
+      className={`mb-6 rounded-lg border border-primary/20 bg-primary-container/10 ${
+        collapsed ? "flex h-12 items-center justify-center px-0" : "p-3"
+      }`}
+      title={`${label} · ${policy}`}
+      aria-label={`${label}: ${policy}`}
+    >
+      {collapsed ? (
+        <Database size={19} className="text-primary" />
+      ) : (
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-primary-container/20 text-primary">
+            <Database size={17} />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-body-md font-semibold text-on-surface">{label}</div>
+            <div className="mt-0.5 flex items-center gap-1.5 text-metadata text-status-done">
+              <span className="h-1.5 w-1.5 rounded-full bg-status-done" />
+              {policy}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
