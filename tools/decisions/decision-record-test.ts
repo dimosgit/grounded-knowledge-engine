@@ -705,10 +705,10 @@ async function exists(target: string): Promise<boolean> {
 }
 
 async function runCli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
-  const tsxBin = path.resolve("node_modules/.bin/tsx");
+  const tsxEntry = path.resolve("node_modules/tsx/dist/cli.mjs");
   const cliPath = path.resolve("tools/cli.ts");
   return await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [tsxBin, cliPath, "decisions", ...args], {
+    const child = spawn(process.execPath, [tsxEntry, cliPath, "decisions", ...args], {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"],
     });
