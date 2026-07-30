@@ -87,6 +87,7 @@ export function buildProjectSummaries(
           : normalizeFrontmatterScalar(doc.frontmatter?.lifecycle) || manifest.status || ""
       ).toLowerCase();
       const completed = isCompletedProjectStatus(resolvedStatus);
+      const recordedNextActions = meaningfulSectionItems(sections.get("next-actions"));
       // Single source of truth for tasks: when the record has a checklist,
       // "next" is derived from its open items (in progress first, then not
       // started, in checklist order — checklists are priority-ordered among
@@ -99,10 +100,13 @@ export function buildProjectSummaries(
       ].map((task) => task.text);
       const nextActions = completed
         ? []
-        : (derivedNextActions.length
-            ? derivedNextActions
-            : meaningfulSectionItems(sections.get("next-actions"))
-          ).slice(0, 5);
+        : (derivedNextActions.length ? derivedNextActions : recordedNextActions).slice(0, 5);
+      const recommendedNextAction = completed
+        ? "Project completed; no next action required."
+        : recordedNextActions[0] || nextActions[0] || "No next action recorded.";
+      const nextThreeActions = completed
+        ? []
+        : unique([recommendedNextAction, ...recordedNextActions]).slice(0, 3);
       const keyDocuments = unique([
         ...sectionItems(sections.get("key-documents")).map(stripMarkdownLink),
         ...explicitPaths.map((item) => resolveLogicalPath(doc.path, item)),
@@ -120,6 +124,7 @@ export function buildProjectSummaries(
         id: manifest.projectId,
         baseId: manifest.projectId,
         title: manifest.title || doc.title,
+        status: manifest.status || resolvedStatus || "unknown",
         track: doc.track,
         trackLabel: doc.trackLabel,
         module: normalizeFrontmatterScalar(doc.frontmatter?.module) || manifest.projectId,
@@ -128,10 +133,14 @@ export function buildProjectSummaries(
         currentStatus,
         currentFocus,
         recentChanges,
+        recommendedNextAction,
         activeDecisions,
         blockers,
         openQuestions,
         blockersAndQuestions: [...blockers, ...openQuestions],
+        completedSinceCheckpoint: [],
+        latestCheckpointAt: "",
+        nextThreeActions,
         nextActions,
         keyDocuments,
         updated: manifest.updated || normalizeFrontmatterScalar(doc.frontmatter?.updated),
@@ -256,6 +265,7 @@ export function compactProjectText(value: string, maxLength: number): string {
 function buildProjectGlance(project) {
   return {
     startHere: compactProjectText(project.startHereBrief, 180),
+    recommendedNextAction: compactProjectText(project.recommendedNextAction, 180),
     currentFocus: compactProjectText(project.currentFocus, 160),
     recentChanges: compactProjectText(project.recentChanges, 160),
     blocker: compactProjectText(project.blockers[0] || "", 160),
@@ -349,26 +359,40 @@ export function buildProjectLinkedDocs(activeProject, _projectContextGraph, docs
 // renderProjectCapsule, minus the line-level citations the frontend parser
 // does not track. Used by the detail view's "Download Markdown" action.
 export function formatResumeCapsule(project) {
+  const followingActions = (project.nextThreeActions || []).filter(
+    (action) => action !== project.recommendedNextAction,
+  );
   return [
     `# Resume: ${project.title}`,
     "",
-    "## Start here",
-    project.startHereBrief || "No start-here brief recorded.",
+    `Status: ${project.status || "unknown"}`,
+    "",
+    "## Do next",
+    project.recommendedNextAction || "No next action recorded.",
+    "",
+    "## What changed",
+    project.recentChanges || "No recent change recorded.",
+    "",
+    "## Completed since last checkpoint",
+    ...asMarkdownList(project.completedSinceCheckpoint || []),
+    "",
+    "## What is blocked",
+    ...asMarkdownList(project.blockers || []),
+    "",
+    "## What was decided",
+    ...asMarkdownList(project.activeDecisions || []),
+    "",
+    "## Open questions",
+    ...asMarkdownList(project.openQuestions || []),
     "",
     "## Current focus",
     project.currentFocus || "No current focus recorded.",
     "",
-    "## Recent changes",
-    project.recentChanges || "No recent change recorded.",
+    "## Following actions",
+    ...asMarkdownList(followingActions),
     "",
-    "## Active decisions",
-    ...asMarkdownList(project.activeDecisions || []),
-    "",
-    "## Blockers and open questions",
-    ...asMarkdownList(project.blockersAndQuestions || []),
-    "",
-    "## Next actions",
-    ...asMarkdownList((project.nextActions || []).slice(0, 3)),
+    "## Project outcome",
+    project.startHereBrief || "No project outcome recorded.",
     "",
     "## Key documents",
     ...asMarkdownList(project.keyDocuments || []),
@@ -379,16 +403,23 @@ export function formatTechnicalPeerHandoff(project) {
   return [
     `# Technical handoff: ${project.title}`,
     "",
-    "## Facts",
+    "## Continue from here",
+    `- Do next: ${project.recommendedNextAction || "No next action recorded."}`,
     `- Current focus: ${project.currentFocus || "Not recorded."}`,
     `- Recent change: ${project.recentChanges || "Not recorded."}`,
+    ...(project.completedSinceCheckpoint || []).map((item) => `- Completed: ${item}`),
+    "",
+    "## Decisions",
     ...(project.activeDecisions || []).map((item) => `- Decision: ${item}`),
     "",
-    "## Risks and unresolved questions",
-    ...asMarkdownList(project.blockersAndQuestions || []),
+    "## Blockers",
+    ...asMarkdownList(project.blockers || []),
     "",
-    "## Recommended next actions",
-    ...asMarkdownList((project.nextActions || []).slice(0, 3)),
+    "## Open questions",
+    ...asMarkdownList(project.openQuestions || []),
+    "",
+    "## Next actions",
+    ...asMarkdownList(project.nextThreeActions || []),
     "",
     "## Evidence",
     `- ${project.sourceDocPath}`,

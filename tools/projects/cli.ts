@@ -119,6 +119,17 @@ export async function runProjectCli(argv: string[], cwd = process.cwd()): Promis
     return 0;
   }
 
+  if (command === "resume") {
+    const projectId = parsed.positionals[0];
+    if (!projectId || parsed.positionals.length > 1) {
+      throw new Error("Usage: gke project resume <project-id> [--json]");
+    }
+    const result = await projectService.resume(projectId);
+    if (json) console.log(JSON.stringify(result.structured, null, 2));
+    else console.log(result.contentText);
+    return 0;
+  }
+
   if (command === "show") {
     const projectId = parsed.positionals[0];
     if (!projectId) throw new Error("Usage: gke show <project-id>");
@@ -330,6 +341,7 @@ function assertKnownOptions(command: string | undefined, options: CliOptions): v
     ],
     list: [],
     review: ["as-of", "since", "state", "scan-root"],
+    resume: [],
     show: ["raw"],
     validate: [],
     update: [
@@ -374,6 +386,7 @@ Usage:
   gke checkpoint <project-id> [options]
   gke list [--json]
   gke review [project-id] [--as-of <date>] [--since <date-or-timestamp>] [--state <state>]
+  gke project resume <project-id> [--json]
   gke show <project-id> [--raw|--json]
   gke validate [project-id] [--json]
   gke update <project-id> [options]

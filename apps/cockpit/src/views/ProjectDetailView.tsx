@@ -5,12 +5,11 @@ import {
   ArrowDown,
   BarChart3,
   CheckCircle2,
+  CircleHelp,
   ClipboardCopy,
   FileText,
   History,
-  ListChecks,
   Sparkles,
-  Square,
   Target,
 } from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
@@ -110,9 +109,15 @@ export function ProjectDetailView({
   };
   const openTaskCount = taskCounts.total - taskCounts.done;
   const hasBlocker = Boolean(activeProject?.glance?.blocker);
-  const nextItems = activeProject?.glance?.nextActions?.length
-    ? activeProject.glance.nextActions
-    : [activeProject?.statusBucket === "done" ? "None — delivered." : "Review project source doc"];
+  const recommendedNextAction =
+    activeProject?.glance?.recommendedNextAction ||
+    activeProject?.recommendedNextAction ||
+    (activeProject?.statusBucket === "done"
+      ? "Project completed; no next action required."
+      : "Review project source doc.");
+  const latestDecision =
+    activeProject?.glance?.activeDecisions?.[0] || "No active decision recorded.";
+  const latestQuestion = activeProject?.glance?.openQuestions?.[0] || "No open question recorded.";
   const progressPhase = PROGRESS_PHASE[activeProject?.statusBucket] || PROGRESS_PHASE.reference;
   const progressPercent =
     activeProject?.statusBucket === "done" ? 100 : activeProject?.progressPercent;
@@ -243,89 +248,102 @@ export function ProjectDetailView({
           )}
         </section>
 
-        <section>
-          <h2 className="mb-4 font-display text-headline-sm text-on-surface">At a glance</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-              <div className="mb-3 flex items-center justify-between text-metadata uppercase text-on-surface-variant">
-                Now
-                <Target size={18} className="text-primary" />
+        <section
+          aria-labelledby="continue-here-heading"
+          className="overflow-hidden rounded-xl border border-primary/30 bg-surface-container-low shadow-sm"
+        >
+          <div className="grid gap-6 border-b border-border-subtle bg-primary/5 p-5 md:grid-cols-[minmax(0,1fr)_240px] md:p-6">
+            <div>
+              <div className="mb-3 flex items-center gap-2 text-label-caps font-semibold uppercase text-primary">
+                <Target size={17} />
+                Action-first resume
               </div>
-              <p className="line-clamp-4 text-body-md text-on-surface">
+              <h2
+                id="continue-here-heading"
+                className="font-display text-headline-sm text-on-surface"
+              >
+                Continue here
+              </h2>
+              <p className="mt-3 max-w-3xl font-display text-headline-md leading-snug text-on-surface">
+                {recommendedNextAction}
+              </p>
+              <p className="mt-3 max-w-3xl text-body-md text-on-surface-variant">
+                <span className="font-semibold text-on-surface">Current focus:</span>{" "}
                 {activeProject?.glance?.currentFocus || "No current focus found."}
               </p>
-            </article>
-            <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-              <div className="mb-3 flex items-center justify-between text-metadata uppercase text-on-surface-variant">
-                Next
-                <ListChecks size={18} />
-              </div>
-              <ul className="space-y-2 text-body-md text-on-surface">
-                {nextItems.map((item, index) => (
-                  <li className="flex items-start gap-2" key={`${item}-${index}`}>
-                    <Square size={16} className="mt-0.5 shrink-0 text-on-surface-variant" />
-                    <span className="line-clamp-2">{item}</span>
-                  </li>
-                ))}
-              </ul>
               <button
-                className="mt-3 inline-flex items-center gap-1.5 text-label-caps font-semibold uppercase text-primary hover:underline"
+                className="mt-4 inline-flex items-center gap-1.5 text-label-caps font-semibold uppercase text-primary hover:underline"
                 type="button"
                 onClick={jumpToTaskBoard}
               >
-                {tasks.length ? `Full task board (${openTaskCount} open)` : "Open source doc"}
+                {tasks.length ? `Open task board (${openTaskCount} open)` : "Open source doc"}
                 <ArrowDown size={14} />
               </button>
+            </div>
+            <div className="rounded-lg border border-border-subtle bg-surface-container p-4">
+              <div className="flex items-center justify-between text-metadata uppercase text-on-surface-variant">
+                Progress
+                <BarChart3 size={18} className="text-track-ai" />
+              </div>
+              <div className="mt-3 font-display text-headline-md text-on-surface">
+                {progressPhase.label}
+              </div>
+              {typeof progressPercent === "number" ? (
+                <>
+                  <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
+                    <div
+                      className="h-full rounded-full bg-track-ai"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 text-metadata text-on-surface-variant">
+                    {progressPercent}% complete
+                    {taskCounts.total > 0 ? ` · ${taskCounts.done}/${taskCounts.total} tasks` : ""}
+                  </div>
+                </>
+              ) : (
+                <div className="mt-3 text-metadata text-on-surface-variant">
+                  Not measured — add a weighted task checklist.
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 divide-y divide-border-subtle md:grid-cols-2 md:divide-x md:divide-y-0 xl:grid-cols-4">
+            <article className="p-4">
+              <div className="mb-2 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
+                <History size={16} className="text-primary" />
+                What changed
+              </div>
+              <p className="line-clamp-3 text-body-md text-on-surface">
+                {activeProject?.glance?.recentChanges || "No recent change recorded."}
+              </p>
             </article>
-            <article
-              className={`rounded-lg border p-5 ${
-                hasBlocker
-                  ? "border-status-blocked/30 bg-status-blocked/10"
-                  : "border-status-done/30 bg-status-done/5"
-              }`}
-            >
+            <article className="p-4">
               <div
-                className={`mb-3 flex items-center justify-between text-metadata uppercase ${
+                className={`mb-2 flex items-center gap-2 text-metadata uppercase ${
                   hasBlocker ? "text-status-blocked" : "text-status-done"
                 }`}
               >
-                Risk
-                {hasBlocker ? <AlertTriangle size={18} /> : <CheckCircle2 size={18} />}
+                {hasBlocker ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
+                What is blocked
               </div>
-              <p className="line-clamp-4 text-body-md text-on-surface">
+              <p className="line-clamp-3 text-body-md text-on-surface">
                 {activeProject?.glance?.blocker || "No active blockers."}
               </p>
             </article>
-            <article className="rounded-lg border border-border-subtle bg-surface-container-low p-5">
-              <div className="mb-3 flex items-center justify-between text-metadata uppercase text-on-surface-variant">
-                Progress Phase
-                <BarChart3 size={18} className="text-track-ai" />
+            <article className="p-4">
+              <div className="mb-2 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
+                <CheckCircle2 size={16} className="text-primary" />
+                What was decided
               </div>
-              <>
-                <div className="font-display text-headline-md text-on-surface">
-                  {progressPhase.label}
-                </div>
-                {typeof progressPercent === "number" ? (
-                  <>
-                    <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-surface-container-high">
-                      <div
-                        className="h-full rounded-full bg-track-ai"
-                        style={{ width: `${progressPercent}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 text-metadata text-on-surface-variant">
-                      {progressPercent}% complete
-                      {taskCounts.total > 0
-                        ? ` · ${taskCounts.done}/${taskCounts.total} tasks`
-                        : ""}
-                    </div>
-                  </>
-                ) : (
-                  <div className="mt-3 text-metadata text-on-surface-variant">
-                    Not measured — add a weighted task checklist.
-                  </div>
-                )}
-              </>
+              <p className="line-clamp-3 text-body-md text-on-surface">{latestDecision}</p>
+            </article>
+            <article className="p-4">
+              <div className="mb-2 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
+                <CircleHelp size={16} className="text-primary" />
+                Open question
+              </div>
+              <p className="line-clamp-3 text-body-md text-on-surface">{latestQuestion}</p>
             </article>
           </div>
         </section>

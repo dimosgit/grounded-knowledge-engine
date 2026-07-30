@@ -10,6 +10,7 @@ export async function runGkeCli(argv: string[], cwd = process.cwd()): Promise<nu
   const [command, ...rest] = argv;
   if (command === "capture") return runCaptureCli(rest, cwd);
   if (command === "decisions") return runDecisionCli(rest, cwd);
+  if (command === "project") return runProjectCli(rest, cwd);
   return runProjectCli(argv, cwd);
 }
 

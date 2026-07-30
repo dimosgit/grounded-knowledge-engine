@@ -111,13 +111,18 @@ describe("cockpit major flows", () => {
     expect(screen.queryByRole("button", { name: "Support" })).not.toBeInTheDocument();
   });
 
-  test("project detail keeps the first screen compact and progress evidence-based", async () => {
+  test("project detail starts with the next action and keeps progress evidence-based", async () => {
     const user = userEvent.setup();
     window.location.hash = "#/project/router-rollout";
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: /Router Rollout/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "At a glance" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Continue here" })).toBeInTheDocument();
+    expect(screen.getByText("Open the project in the Operator Cockpit.")).toBeInTheDocument();
+    expect(screen.getByText("What changed")).toBeInTheDocument();
+    expect(screen.getByText("What is blocked")).toBeInTheDocument();
+    expect(screen.getByText("What was decided")).toBeInTheDocument();
+    expect(screen.getByText("Open question")).toBeInTheDocument();
     expect(screen.getByText(/58% complete/)).toBeInTheDocument();
     expect(
       screen.queryByText(/Not measured — add a weighted task checklist/i),

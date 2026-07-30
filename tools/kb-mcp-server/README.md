@@ -73,14 +73,18 @@ read-only. Every generated entry launches a separate process with a frozen
 ## Project Context
 
 `kb.resume_project` accepts an explicit `projectId` and returns a compact
-structured capsule containing:
+action-first structured briefing containing:
 
-- title and start-here brief;
-- current focus and recent changes;
-- active decisions;
-- blockers and open questions;
-- the next three actions;
+- the recommended next action;
+- current focus, recent changes, and completed checkpoint work;
+- separately structured active decisions, blockers, and open questions;
+- up to three ordered actions;
 - key documents and line citations.
+
+When a checkpoint exists, its `Next starting point` becomes the recommended
+action and its change, completed work, and blocker are cited directly. Without
+a checkpoint, resume falls back deterministically to the canonical project
+record.
 
 Canonical project records live at `kb/projects/<project-id>/project.md` or the
 equivalent configured scan root. Membership is determined through explicit
