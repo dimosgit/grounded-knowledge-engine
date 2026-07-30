@@ -1,10 +1,15 @@
 import {
   AlertTriangle,
   ArrowRight,
-  BookOpen,
+  Bot,
   CalendarClock,
+  CheckCircle2,
+  Code2,
+  Database,
   FileText,
   HelpCircle,
+  SearchCheck,
+  ShieldCheck,
   Target,
 } from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
@@ -45,7 +50,7 @@ export function HubView({
   return (
     <OperatorFrame
       activeView="hub"
-      title="Knowledge Base"
+      title="Mission Control"
       commandBar={
         <CommandBar
           items={docs}
@@ -61,32 +66,122 @@ export function HubView({
       onGraph={onGraph}
     >
       <div className="mx-auto flex max-w-cockpit flex-col gap-8 px-4 py-8 md:px-8">
-        <section className="flex flex-col justify-between gap-4 border-b border-border-subtle pb-6 md:flex-row md:items-center">
-          <div>
-            <h1 className="font-display text-display-lg text-on-surface">Mission Control</h1>
-            <p className="mt-2 text-body-md text-on-surface-variant">
-              System operations running normally. {openQuestionsCount} unresolved items and{" "}
-              {projectCount} project contexts indexed.
-            </p>
+        <section className="relative overflow-hidden rounded-xl border border-primary/25 bg-surface-container-low p-6 shadow-2xl shadow-black/10 md:p-8">
+          <div className="pointer-events-none absolute -right-24 -top-40 h-96 w-96 rounded-full bg-primary-container/15 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-48 left-1/4 h-80 w-80 rounded-full bg-status-done/10 blur-3xl" />
+          <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.25fr)_minmax(310px,0.75fr)] lg:items-center">
+            <div>
+              <div className="mb-4 flex flex-wrap items-center gap-3">
+                <span className="inline-flex items-center gap-2 rounded-full border border-status-done/30 bg-status-done/10 px-3 py-1.5 text-label-caps uppercase text-status-done">
+                  <span className="h-1.5 w-1.5 rounded-full bg-status-done" />
+                  Local agent memory online
+                </span>
+                <span className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-surface px-3 py-1.5 text-metadata text-on-surface-variant">
+                  <ShieldCheck size={14} className="text-primary" />
+                  Cockpit is optional
+                </span>
+              </div>
+              <h1 className="max-w-3xl font-display text-display-lg text-on-surface md:text-[46px] md:leading-[1.08]">
+                Keep your agent grounded.
+                <span className="block text-primary">Stay in your IDE.</span>
+              </h1>
+              <p className="mt-4 max-w-2xl text-body-md leading-6 text-on-surface-variant md:text-[16px]">
+                GKE works through Codex, Claude Code, and any MCP client. Open the Cockpit only when
+                you want to inspect evidence, review changes, or understand project state.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => onAttentionFilter("needs-attention")}
+                  className="inline-flex items-center gap-2 rounded bg-primary px-4 py-3 text-body-md font-semibold text-on-primary shadow-lg shadow-primary-container/10 hover:bg-primary/90"
+                >
+                  <ShieldCheck size={17} />
+                  Review attention
+                </button>
+                <button
+                  type="button"
+                  aria-label="Open learning library"
+                  onClick={() => onEnterLibrary({ trackKey: selectedTrackKey, itemType: "all" })}
+                  className="inline-flex items-center gap-2 rounded border border-outline-variant bg-surface-container px-4 py-3 text-body-md font-semibold text-on-surface hover:border-primary hover:text-primary"
+                >
+                  <SearchCheck size={17} />
+                  Browse evidence
+                </button>
+                <button
+                  type="button"
+                  onClick={onProjects}
+                  className="inline-flex items-center gap-2 rounded border border-border-subtle bg-surface px-4 py-3 text-body-md font-semibold text-on-surface-variant hover:border-primary hover:text-primary"
+                >
+                  <Database size={17} />
+                  Project context
+                </button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface/80 p-4 backdrop-blur">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-label-caps uppercase text-on-surface-variant">
+                  Primary workflow
+                </span>
+                <Code2 size={17} className="text-primary" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {["Codex", "Claude", "MCP"].map((surface) => (
+                  <div
+                    key={surface}
+                    className="rounded border border-border-subtle bg-surface-container px-2 py-3 text-center text-metadata font-semibold text-on-surface"
+                  >
+                    {surface}
+                  </div>
+                ))}
+              </div>
+              <div className="my-3 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border-subtle" />
+                <span className="font-mono text-code-sm text-primary">local GKE core</span>
+                <div className="h-px flex-1 bg-border-subtle" />
+              </div>
+              <div className="flex items-center gap-3 rounded border border-primary/25 bg-primary-container/10 p-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded bg-primary-container/20 text-primary">
+                  <Bot size={18} />
+                </div>
+                <div>
+                  <div className="text-body-md font-semibold text-on-surface">
+                    Cockpit review layer
+                  </div>
+                  <div className="text-metadata text-on-surface-variant">
+                    Inspect · review · trace
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => onEnterLibrary({ trackKey: selectedTrackKey, itemType: "all" })}
-            className="flex items-center gap-2 rounded border border-outline-variant bg-surface-container px-4 py-3 text-label-caps font-semibold uppercase text-on-surface hover:border-primary hover:text-primary"
-          >
-            <BookOpen size={17} />
-            Open learning library
-          </button>
+
+          <div className="relative mt-7 grid grid-cols-2 gap-3 border-t border-border-subtle pt-5 md:grid-cols-4">
+            {[
+              [docs.length, "records indexed"],
+              [projectCount, "project contexts"],
+              [openQuestionsCount, "open questions"],
+              ["Ready", "cited retrieval"],
+            ].map(([value, label]) => (
+              <div key={label} className="flex items-center gap-3">
+                <CheckCircle2 size={16} className="shrink-0 text-status-done" />
+                <div>
+                  <div className="text-body-md font-semibold text-on-surface">{value}</div>
+                  <div className="text-metadata text-on-surface-variant">{label}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section aria-labelledby="daily-attention-title">
           <div className="mb-4 flex items-end justify-between gap-4">
             <div>
               <h2 id="daily-attention-title" className="font-display text-headline-sm">
-                Daily attention
+                Review what needs attention
               </h2>
               <p className="mt-1 text-body-md text-on-surface-variant">
-                Reviews, blockers, and project questions derived from canonical Markdown.
+                Canonical project signals—reviews, blockers, and open questions—in one place.
               </p>
             </div>
             <button
@@ -94,7 +189,7 @@ export function HubView({
               onClick={() => onAttentionFilter("needs-attention")}
               className="text-label-caps uppercase text-primary"
             >
-              View attention queue
+              Open full queue
             </button>
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
