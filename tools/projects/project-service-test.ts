@@ -546,7 +546,7 @@ async function runCli(
   const tsxBin = path.resolve("node_modules/.bin/tsx");
   const cliPath = path.resolve(entrypoint);
   return await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [tsxBin, cliPath, ...args], {
+    const child = spawn(tsxBin, [cliPath, ...args], {
       cwd: process.cwd(),
       stdio: ["ignore", "pipe", "pipe"],
     });
