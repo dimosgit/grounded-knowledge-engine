@@ -7,16 +7,24 @@ const { structured } = await resumeProject({ projectId }, process.cwd(), ["demo-
 const oneLine = (value: string) => value.replace(/\s+/g, " ").trim();
 
 console.log(`Project: ${structured.title} (${structured.projectId})`);
+console.log(`Status: ${structured.status}`);
+console.log(`Do next: ${oneLine(structured.recommendedNextAction)}`);
+console.log(`Changed: ${oneLine(structured.recentChanges)}`);
 console.log(`Focus: ${oneLine(structured.currentFocus)}`);
-console.log(`Recent: ${oneLine(structured.recentChanges)}`);
+for (const item of structured.completedSinceCheckpoint.slice(0, 2)) {
+  console.log(`Completed: ${oneLine(item)}`);
+}
+for (const blocker of structured.blockers.slice(0, 2)) {
+  console.log(`Blocked: ${oneLine(blocker)}`);
+}
 for (const decision of structured.activeDecisions.slice(0, 2)) {
-  console.log(`Decision: ${oneLine(decision)}`);
+  console.log(`Decided: ${oneLine(decision)}`);
 }
-for (const item of structured.blockersAndQuestions.slice(0, 2)) {
-  console.log(`Risk/question: ${oneLine(item)}`);
+for (const question of structured.openQuestions.slice(0, 2)) {
+  console.log(`Question: ${oneLine(question)}`);
 }
-structured.nextThreeActions.forEach((action, index) => {
-  console.log(`Next ${index + 1}: ${oneLine(action)}`);
+structured.nextThreeActions.slice(1).forEach((action, index) => {
+  console.log(`Then ${index + 1}: ${oneLine(action)}`);
 });
 const firstCitation = structured.citations[0];
 if (firstCitation) {

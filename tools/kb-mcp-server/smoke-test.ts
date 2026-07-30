@@ -291,6 +291,10 @@ try {
   assert.equal(resumed.isError, undefined);
   assert.equal(resumed.structuredContent?.projectId, "project-tracking");
   assert.match(resumed.structuredContent?.currentFocus || "", /router demo/i);
+  assert.equal(
+    resumed.structuredContent?.recommendedNextAction,
+    "Prove local retrieval against the tiny KB slice.",
+  );
   assert.equal(resumed.structuredContent?.nextThreeActions?.length, 3);
   assert.ok(
     resumed.structuredContent?.citations?.every(

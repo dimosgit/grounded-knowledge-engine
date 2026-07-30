@@ -69,7 +69,7 @@ try {
     createdAt: "2026-07-29",
     whatChanged: "The acceptance workflow now passes.",
     completed: ["Ran the focused suite.", "Recorded the evidence."],
-    currentBlocker: "None recorded.",
+    currentBlocker: "Waiting for the release window.",
     nextStartingPoint: "Run the complete engine suite.",
     evidence: [
       { path: "kb/sources/alpha-pilot/evidence.md", line: 3 },
@@ -93,11 +93,25 @@ try {
   assert.equal(listed[0].checkpointId, created.checkpointId);
   assert.equal(listed[0].whatChanged, "The acceptance workflow now passes.");
   assert.deepEqual(listed[0].completed, ["Ran the focused suite.", "Recorded the evidence."]);
+  assert.equal(listed[0].currentBlocker, "Waiting for the release window.");
   assert.equal(listed[0].evidence[0].section, "Pilot Evidence");
+  assert.ok(listed[0].nextStartingPointLine > listed[0].whatChangedLine);
 
   const resumed = await resumeProject({ projectId: "alpha-pilot" }, root, ["kb"], workspace);
   assert.equal(resumed.structured.recentChanges, "The acceptance workflow now passes.");
+  assert.equal(resumed.structured.recommendedNextAction, "Run the complete engine suite.");
+  assert.deepEqual(resumed.structured.completedSinceCheckpoint, [
+    "Ran the focused suite.",
+    "Recorded the evidence.",
+  ]);
+  assert.deepEqual(resumed.structured.blockers, ["Waiting for the release window."]);
+  assert.equal(resumed.structured.latestCheckpointAt, "2026-07-29");
   assert.ok(resumed.structured.citations.some((citation) => citation.path === created.path));
+  assert.ok(
+    resumed.structured.citations.some(
+      (citation) => citation.path === created.path && citation.section === "Next starting point",
+    ),
+  );
 
   await assert.rejects(
     () =>

@@ -359,6 +359,7 @@ Duplicate.
     const helpResult = await runCli(["help"]);
     assert.equal(helpResult.code, 0, helpResult.stderr);
     assert.match(helpResult.stdout, /gke review \[project-id\]/);
+    assert.match(helpResult.stdout, /gke project resume <project-id>/);
     assert.match(helpResult.stdout, /--state <due\|overdue\|all>/);
 
     await fs.mkdir(path.join(cliRoot, "demo-kb"), { recursive: true });
@@ -416,6 +417,21 @@ Duplicate.
     ]);
     assert.equal(updateResult.code, 0, updateResult.stderr);
     assert.match(updateResult.stdout, /Updated project cli-project/);
+
+    const resumeResult = await runCli(["resume", "cli-project", "--repo-root", cliRoot]);
+    assert.equal(resumeResult.code, 0, resumeResult.stderr);
+    assert.match(resumeResult.stdout, /## Do next\nValidate the project\./);
+    assert.match(resumeResult.stdout, /## What changed/);
+    assert.match(resumeResult.stdout, /## What is blocked/);
+
+    const namespacedResumeResult = await runCli(
+      ["project", "resume", "cli-project", "--repo-root", cliRoot, "--json"],
+      "tools/cli.ts",
+    );
+    assert.equal(namespacedResumeResult.code, 0, namespacedResumeResult.stderr);
+    const resumeCapsule = JSON.parse(namespacedResumeResult.stdout);
+    assert.equal(resumeCapsule.projectId, "cli-project");
+    assert.equal(resumeCapsule.recommendedNextAction, "Validate the project.");
 
     const taskResult = await runCli([
       "task",
@@ -523,9 +539,12 @@ async function exists(filePath: string): Promise<boolean> {
   }
 }
 
-async function runCli(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+async function runCli(
+  args: string[],
+  entrypoint = "tools/projects/cli.ts",
+): Promise<{ code: number; stdout: string; stderr: string }> {
   const tsxBin = path.resolve("node_modules/.bin/tsx");
-  const cliPath = path.resolve("tools/projects/cli.ts");
+  const cliPath = path.resolve(entrypoint);
   return await new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [tsxBin, cliPath, ...args], {
       cwd: process.cwd(),

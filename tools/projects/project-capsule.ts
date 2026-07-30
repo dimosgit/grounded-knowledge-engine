@@ -5,6 +5,7 @@ import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
 import { listProjectCheckpoints } from "./checkpoint-service.js";
 import {
+  isPlaceholderSectionItem,
   meaningfulSectionItems,
   parseProjectDocument,
   sectionItems,
@@ -89,16 +90,28 @@ export async function resumeProject(
     currentStatus ||
     "No recent change recorded.";
   const activeDecisions = meaningfulSectionItems(parsed.sections.get("active-decisions"));
-  const blockersAndQuestions = [
+  const blockers = unique([
+    ...(latestCheckpoint && !isPlaceholderSectionItem(latestCheckpoint.currentBlocker)
+      ? [latestCheckpoint.currentBlocker]
+      : []),
     ...meaningfulSectionItems(parsed.sections.get("blockers")),
-    ...meaningfulSectionItems(parsed.sections.get("open-questions")),
-  ];
+  ]);
+  const openQuestions = meaningfulSectionItems(parsed.sections.get("open-questions"));
+  const blockersAndQuestions = [...blockers, ...openQuestions];
   const completed = ["completed", "complete", "done", "shipped", "delivered"].includes(
     parsed.manifest.status.toLowerCase(),
   );
+  const recordedNextActions = meaningfulSectionItems(parsed.sections.get("next-actions"));
+  const recommendedNextAction = completed
+    ? "Project completed; no next action required."
+    : latestCheckpoint?.nextStartingPoint || recordedNextActions[0] || "No next action recorded.";
   const nextThreeActions = completed
     ? []
-    : meaningfulSectionItems(parsed.sections.get("next-actions")).slice(0, 3);
+    : unique([
+        ...(recommendedNextAction === "No next action recorded." ? [] : [recommendedNextAction]),
+        ...recordedNextActions,
+      ]).slice(0, 3);
+  const completedSinceCheckpoint = latestCheckpoint?.completed || [];
   const keyDocuments = unique([
     ...sectionItems(parsed.sections.get("key-documents")),
     ...projectDocs.filter((doc) => doc.relPath !== manifestDoc.relPath).map((doc) => doc.relPath),
@@ -111,6 +124,29 @@ export async function resumeProject(
             path: latestCheckpoint.path,
             line: latestCheckpoint.whatChangedLine,
             section: "What changed",
+          },
+          ...(completedSinceCheckpoint.length
+            ? [
+                {
+                  path: latestCheckpoint.path,
+                  line: latestCheckpoint.completedLine,
+                  section: "Completed",
+                },
+              ]
+            : []),
+          ...(blockers.includes(latestCheckpoint.currentBlocker)
+            ? [
+                {
+                  path: latestCheckpoint.path,
+                  line: latestCheckpoint.currentBlockerLine,
+                  section: "Current blocker",
+                },
+              ]
+            : []),
+          {
+            path: latestCheckpoint.path,
+            line: latestCheckpoint.nextStartingPointLine,
+            section: "Next starting point",
           },
         ]
       : []),
@@ -130,14 +166,20 @@ export async function resumeProject(
   const structured: ProjectCapsule = {
     projectId: parsed.manifest.projectId,
     title: parsed.manifest.title,
+    status: parsed.manifest.status || "unknown",
     startHereBrief,
     currentFocus,
     recentChanges,
+    recommendedNextAction,
     activeDecisions,
+    blockers,
+    openQuestions,
     blockersAndQuestions,
+    completedSinceCheckpoint,
+    latestCheckpointAt: latestCheckpoint?.createdAt || "",
     nextThreeActions,
     keyDocuments,
-    citations,
+    citations: uniqueCitations(citations),
   };
 
   return {
@@ -147,26 +189,40 @@ export async function resumeProject(
 }
 
 export function renderProjectCapsule(capsule: ProjectCapsule): string {
+  const followingActions = capsule.nextThreeActions.filter(
+    (action) => action !== capsule.recommendedNextAction,
+  );
   return [
     `# Resume: ${capsule.title}`,
     "",
-    "## Start here",
-    capsule.startHereBrief,
+    `Status: ${capsule.status}`,
+    "",
+    "## Do next",
+    capsule.recommendedNextAction,
+    "",
+    "## What changed",
+    capsule.recentChanges,
+    "",
+    "## Completed since last checkpoint",
+    ...asMarkdownList(capsule.completedSinceCheckpoint),
+    "",
+    "## What is blocked",
+    ...asMarkdownList(capsule.blockers),
+    "",
+    "## What was decided",
+    ...asMarkdownList(capsule.activeDecisions),
+    "",
+    "## Open questions",
+    ...asMarkdownList(capsule.openQuestions),
     "",
     "## Current focus",
     capsule.currentFocus,
     "",
-    "## Recent changes",
-    capsule.recentChanges,
+    "## Following actions",
+    ...asMarkdownList(followingActions),
     "",
-    "## Active decisions",
-    ...asMarkdownList(capsule.activeDecisions),
-    "",
-    "## Blockers and open questions",
-    ...asMarkdownList(capsule.blockersAndQuestions),
-    "",
-    "## Next actions",
-    ...asMarkdownList(capsule.nextThreeActions),
+    "## Project outcome",
+    capsule.startHereBrief,
     "",
     "## Key documents",
     ...asMarkdownList(capsule.keyDocuments),
@@ -182,15 +238,22 @@ export function formatTechnicalPeerHandoff(capsule: ProjectCapsule): string {
   return [
     `# Technical handoff: ${capsule.title}`,
     "",
-    "## Facts",
+    "## Continue from here",
+    `- Do next: ${capsule.recommendedNextAction}`,
     `- Current focus: ${capsule.currentFocus}`,
     `- Recent change: ${capsule.recentChanges}`,
+    ...capsule.completedSinceCheckpoint.map((item) => `- Completed: ${item}`),
+    "",
+    "## Decisions",
     ...capsule.activeDecisions.map((item) => `- Decision: ${item}`),
     "",
-    "## Risks and unresolved questions",
-    ...asMarkdownList(capsule.blockersAndQuestions),
+    "## Blockers",
+    ...asMarkdownList(capsule.blockers),
     "",
-    "## Recommended next actions",
+    "## Open questions",
+    ...asMarkdownList(capsule.openQuestions),
+    "",
+    "## Next actions",
     ...asMarkdownList(capsule.nextThreeActions),
     "",
     "## Evidence",
@@ -216,4 +279,14 @@ function asMarkdownList(items: string[]): string[] {
 
 function unique(items: string[]): string[] {
   return [...new Set(items.filter(Boolean))];
+}
+
+function uniqueCitations(citations: ProjectCitation[]): ProjectCitation[] {
+  const seen = new Set<string>();
+  return citations.filter((citation) => {
+    const key = `${citation.path}:${citation.line}:${citation.section}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
