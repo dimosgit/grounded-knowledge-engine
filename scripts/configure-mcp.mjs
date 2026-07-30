@@ -83,7 +83,7 @@ const clients =
   requestedClient === "all" ? ["claude", "codex", "gemini", "github-copilot"] : [requestedClient];
 const isWindows = process.platform === "win32";
 const nodeBin = process.execPath;
-const tsxBin = join(repoRoot, "node_modules", ".bin", isWindows ? "tsx.cmd" : "tsx");
+const tsxEntry = join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
 const serverEntry = join(repoRoot, SERVER_ENTRY_REL);
 const serverEnv = {
   KB_MCP_PROFILE: requestedProfile,
@@ -334,7 +334,7 @@ function configureSharedMcpJson() {
     [serverName]: {
       type: "stdio",
       command: nodeBin,
-      args: [tsxBin, serverEntry],
+      args: [tsxEntry, serverEntry],
       env: serverEnv,
     },
   };
@@ -370,7 +370,7 @@ function configureCodex() {
     managedTomlStart(serverName),
     `[mcp_servers.${serverName}]`,
     `command = ${quoteToml(nodeBin)}`,
-    `args = [${quoteToml(tsxBin)}, ${quoteToml(serverEntry)}]`,
+    `args = [${quoteToml(tsxEntry)}, ${quoteToml(serverEntry)}]`,
     envBlock.trimEnd(),
     managedTomlEnd(serverName),
   ]
@@ -388,7 +388,7 @@ function configureGemini() {
     ...(settings.mcpServers ?? {}),
     [serverName]: {
       command: nodeBin,
-      args: [tsxBin, serverEntry],
+      args: [tsxEntry, serverEntry],
       cwd: repoRoot,
       env: serverEnv,
     },
@@ -405,7 +405,7 @@ function configureGithubCopilot() {
     [serverName]: {
       type: "stdio",
       command: nodeBin,
-      args: [tsxBin, serverEntry],
+      args: [tsxEntry, serverEntry],
       env: serverEnv,
     },
   };
@@ -413,15 +413,15 @@ function configureGithubCopilot() {
 }
 
 // 1. Dependencies -------------------------------------------------------------
-if (!existsSync(tsxBin)) {
+if (!existsSync(tsxEntry)) {
   step("Installing dependencies (npm install)…");
   execFileSync(isWindows ? "npm.cmd" : "npm", ["install"], {
     cwd: repoRoot,
     stdio: "inherit",
   });
 }
-if (!existsSync(tsxBin)) {
-  console.error(`\n✗ tsx not found at ${tsxBin} even after npm install. Aborting.`);
+if (!existsSync(tsxEntry)) {
+  console.error(`\n✗ tsx not found at ${tsxEntry} even after npm install. Aborting.`);
   process.exit(1);
 }
 if (!existsSync(serverEntry)) {
@@ -457,7 +457,7 @@ if (skipSmoke) {
 } else {
   step("Verifying the shared MCP server handshake…");
   try {
-    execFileSync(nodeBin, [tsxBin, join(repoRoot, SMOKE_TEST_REL)], {
+    execFileSync(nodeBin, [tsxEntry, join(repoRoot, SMOKE_TEST_REL)], {
       cwd: repoRoot,
       stdio: "inherit",
       env: { ...process.env, KB_MCP_ENABLE_WRITES: enableWrites ? "true" : "" },
