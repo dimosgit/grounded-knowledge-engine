@@ -18,10 +18,9 @@ import { OperatorFrame } from "../components/OperatorFrame";
 
 export function HubView({
   docs,
-  commandBarOpen,
-  onCommandBarOpenChange,
+  palette,
+  operatorRequest,
   onCommand,
-  onCommandSelect,
   onHub,
   onLibrary,
   onProjects,
@@ -44,6 +43,7 @@ export function HubView({
   getDocBadge,
   attentionCounts,
   attentionProjects,
+  onOpenAttention,
   onAttentionFilter,
   onOpenProject,
 }) {
@@ -51,19 +51,13 @@ export function HubView({
     <OperatorFrame
       activeView="hub"
       title="Mission Control"
-      commandBar={
-        <CommandBar
-          items={docs}
-          isOpen={commandBarOpen}
-          onOpenChange={onCommandBarOpenChange}
-          onSelect={onCommandSelect}
-        />
-      }
+      commandBar={<CommandBar {...palette} />}
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
+      operatorRequest={operatorRequest}
     >
       <div className="mx-auto flex max-w-cockpit flex-col gap-8 px-4 py-8 md:px-8">
         <section className="relative overflow-hidden rounded-xl border border-primary/25 bg-surface-container-low p-6 shadow-2xl shadow-black/10 md:p-8">
@@ -92,7 +86,7 @@ export function HubView({
               <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => onAttentionFilter("needs-attention")}
+                  onClick={onOpenAttention}
                   className="inline-flex items-center gap-2 rounded bg-primary px-4 py-3 text-body-md font-semibold text-on-primary shadow-lg shadow-primary-container/10 hover:bg-primary/90"
                 >
                   <ShieldCheck size={17} />
@@ -186,7 +180,7 @@ export function HubView({
             </div>
             <button
               type="button"
-              onClick={() => onAttentionFilter("needs-attention")}
+              onClick={onOpenAttention}
               className="text-label-caps uppercase text-primary"
             >
               Open full queue

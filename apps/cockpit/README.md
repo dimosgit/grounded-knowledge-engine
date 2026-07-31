@@ -131,7 +131,9 @@ Markdown source files (demo-kb/ plus kb/ for local preview)
 ### Components
 
 - `src/components/OperatorFrame.tsx`: shared cockpit frame, sidebar, top bar, command entry.
-- `src/components/CommandBar.tsx`: quick search and command navigation.
+- `src/components/CommandBar.tsx`: the `Cmd/Ctrl+K` command palette — grouped,
+  bounded navigation over documents, projects, decisions, views, and review
+  surfaces. Presentation and interaction only; it never mutates.
 - `src/components/MarkdownArticle.tsx`: Markdown rendering, Mermaid, links, images, TOC behavior.
 - `src/components/ProjectCard.tsx`: compact project card used by the board.
 - `src/components/HighlightedText.tsx`: search-result highlighting helper.
@@ -147,10 +149,17 @@ The domain layer is pure data transformation where possible.
   summaries, status buckets, board columns, linked documents, and handoffs.
 - `src/domain/graph.ts`: relationship scoring; major-node focus options; overview/focused graph construction; context graph for project detail pages.
 - `src/domain/hub.ts`: dashboard summaries.
+- `src/domain/command-palette.ts`: typed command-palette entries for documents,
+  projects, decisions, views, and review actions; deterministic ranking,
+  grouping, the 20-result ceiling, quick actions, and recent-destination
+  parsing/serialization.
 
 ### Hooks
 
 - `src/hooks/useRecentPaths.ts`: persists recently opened docs in localStorage.
+- `src/hooks/useRecentDestinations.ts`: persists recent palette destinations as
+  versioned, bounded canonical ids in localStorage, degrading to no history when
+  storage is blocked or malformed.
 - `src/hooks/useRouteSync.ts`: syncs hash/popstate routes into app state.
 - `src/hooks/useGraphInteractions.ts`: graph zoom, pan-like movement, reset, and node repositioning.
 

@@ -1,27 +1,48 @@
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { ArrowRight, Command, FileText, Search } from "lucide-react";
+import {
+  ArrowRight,
+  Command,
+  FileText,
+  Grid2X2,
+  LayoutDashboard,
+  Scale,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { useModalSurface } from "../hooks/useModalSurface";
 import { cn } from "../lib/utils";
-import { matchesSearchFields } from "../lib/search";
+import {
+  buildCommandPaletteResult,
+  type CommandPaletteEntry,
+  type CommandPaletteKind,
+} from "../domain/command-palette";
 
-interface CommandItem {
-  path: string;
-  title: string;
-  searchIndex: string;
-  searchIndexNormalized: string;
-  searchIndexCompact: string;
-}
-
-interface CommandBarProps {
-  items: CommandItem[];
+export interface CommandBarProps {
+  entries: CommandPaletteEntry[];
+  recentIds?: string[];
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSelect: (item: CommandItem) => void;
+  /** Single typed destination callback. Selection never mutates anything. */
+  onSelect: (entry: CommandPaletteEntry) => void;
 }
 
-export function CommandBar({ items, isOpen, onOpenChange, onSelect }: CommandBarProps) {
+const KIND_ICONS: Record<CommandPaletteKind, typeof FileText> = {
+  "review-action": Sparkles,
+  view: LayoutDashboard,
+  project: Grid2X2,
+  decision: Scale,
+  document: FileText,
+};
+
+export function CommandBar({
+  entries,
+  recentIds = [],
+  isOpen,
+  onOpenChange,
+  onSelect,
+}: CommandBarProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -35,21 +56,11 @@ export function CommandBar({ items, isOpen, onOpenChange, onSelect }: CommandBar
     initialFocusRef: inputRef,
   });
 
-  const filteredItems = useMemo(() => {
-    if (!query) return [];
-    return items
-      .filter((item) =>
-        matchesSearchFields(
-          {
-            raw: item.searchIndex,
-            normalized: item.searchIndexNormalized,
-            compact: item.searchIndexCompact,
-          },
-          query,
-        ),
-      )
-      .slice(0, 20);
-  }, [items, query]);
+  const result = useMemo(
+    () => buildCommandPaletteResult({ entries, query, recentIds }),
+    [entries, query, recentIds],
+  );
+  const options = result.options;
 
   useEffect(() => {
     const handleShortcut = (event: globalThis.KeyboardEvent) => {
@@ -66,40 +77,45 @@ export function CommandBar({ items, isOpen, onOpenChange, onSelect }: CommandBar
     setSelectedIndex(0);
   }, [query]);
 
-  const activeOptionId =
-    filteredItems.length > 0 ? `${listboxId}-option-${selectedIndex}` : undefined;
-  const resultStatus = query
-    ? filteredItems.length
-      ? `${filteredItems.length} result${filteredItems.length === 1 ? "" : "s"} available.`
-      : `No results for ${query}.`
-    : "Start typing to search.";
+  useEffect(() => {
+    // A closed palette always reopens on the quick actions, never a stale query.
+    if (!isOpen) setQuery("");
+  }, [isOpen]);
+
+  const activeIndex = options.length ? Math.min(selectedIndex, options.length - 1) : 0;
+  const activeEntry = options[activeIndex];
+  const activeOptionId = activeEntry ? `${listboxId}-option-${activeIndex}` : undefined;
+  const activeGroupLabel = activeEntry
+    ? result.groups.find((group) => group.entries.includes(activeEntry))?.label || ""
+    : "";
+  const resultStatus = buildResultStatus(query, options.length, activeGroupLabel, result.mode);
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      if (filteredItems.length > 0) {
-        setSelectedIndex((previous) => (previous + 1) % filteredItems.length);
+      if (options.length > 0) {
+        setSelectedIndex((previous) => (previous + 1) % options.length);
       }
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      if (filteredItems.length > 0) {
-        setSelectedIndex(
-          (previous) => (previous - 1 + filteredItems.length) % filteredItems.length,
-        );
+      if (options.length > 0) {
+        setSelectedIndex((previous) => (previous - 1 + options.length) % options.length);
       }
     } else if (event.key === "Enter") {
-      const selectedItem = filteredItems[selectedIndex];
-      if (selectedItem) selectItem(selectedItem);
+      const selectedEntry = options[activeIndex];
+      if (selectedEntry) selectEntry(selectedEntry);
     }
   }
 
-  function selectItem(item: CommandItem) {
-    onSelect(item);
+  function selectEntry(entry: CommandPaletteEntry) {
+    onSelect(entry);
     onOpenChange(false);
     setQuery("");
   }
 
   if (typeof document === "undefined") return null;
+
+  let optionIndex = -1;
 
   return createPortal(
     isOpen ? (
@@ -116,10 +132,11 @@ export function CommandBar({ items, isOpen, onOpenChange, onSelect }: CommandBar
         transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
       >
         <h2 id={titleId} className="sr-only">
-          Search local knowledge
+          Command palette
         </h2>
         <p id={descriptionId} className="sr-only">
-          Search indexed notes and use the arrow keys to choose a result.
+          Search documents, projects, decisions, and views, then use the arrow keys to choose a
+          destination. Nothing here writes to the knowledge base.
         </p>
         <button
           type="button"
@@ -133,7 +150,10 @@ export function CommandBar({ items, isOpen, onOpenChange, onSelect }: CommandBar
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: -20 }}
           transition={{ duration: shouldReduceMotion ? 0 : 0.16 }}
-          className="fixed left-1/2 top-[15%] z-[101] w-full max-w-xl -translate-x-1/2 overflow-hidden rounded-lg border border-border-subtle bg-surface-sidebar shadow-2xl"
+          // Centered with auto margins rather than a translate: framer-motion
+          // owns `transform` here, so a Tailwind translate class is overwritten
+          // and the panel drifts off a narrow viewport.
+          className="fixed inset-x-4 top-[15%] z-[101] mx-auto max-w-xl overflow-hidden rounded-lg border border-border-subtle bg-surface-sidebar shadow-2xl"
         >
           <div className="flex items-center border-b border-border-subtle px-4 py-3">
             <Search strokeWidth={2.4} className="mr-3 h-3.5 w-3.5 text-primary" />
@@ -144,7 +164,7 @@ export function CommandBar({ items, isOpen, onOpenChange, onSelect }: CommandBar
               aria-expanded="true"
               aria-controls={listboxId}
               aria-activedescendant={activeOptionId}
-              placeholder="Search notes, terms, commands..."
+              placeholder="Search documents, projects, decisions, views..."
               className="flex-1 border-none bg-transparent text-[13.5px] font-medium text-on-surface outline-none placeholder:text-on-surface-variant"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -159,53 +179,75 @@ export function CommandBar({ items, isOpen, onOpenChange, onSelect }: CommandBar
           <div
             id={listboxId}
             role="listbox"
-            aria-label="Knowledge search results"
+            aria-label="Command palette results"
             className="max-h-[400px] overflow-y-auto p-2"
           >
-            {filteredItems.length > 0 ? (
-              filteredItems.map((item, index) => (
-                <button
-                  id={`${listboxId}-option-${index}`}
-                  key={item.path}
-                  type="button"
-                  role="option"
-                  tabIndex={-1}
-                  aria-selected={index === selectedIndex}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded p-3 text-left transition-all",
-                    index === selectedIndex
-                      ? "bg-surface-container-high text-primary shadow-sm"
-                      : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
-                  )}
-                  onMouseEnter={() => setSelectedIndex(index)}
-                  onClick={() => selectItem(item)}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "rounded p-2",
-                        index === selectedIndex ? "bg-surface-sidebar" : "bg-surface-container",
-                      )}
-                    >
-                      <FileText className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold leading-tight">{item.title}</div>
-                      <div className="mt-0.5 text-[11px] opacity-70">{item.path}</div>
-                    </div>
+            {options.length > 0 ? (
+              result.groups.map((group) => (
+                <div key={group.key} role="group" aria-label={group.label}>
+                  <div
+                    className="px-3 pb-1 pt-3 text-label-caps uppercase text-on-surface-variant"
+                    aria-hidden="true"
+                  >
+                    {group.label}
                   </div>
-                  {index === selectedIndex && (
-                    <ArrowRight strokeWidth={2.8} className="mr-1 h-3.5 w-3.5 text-primary" />
-                  )}
-                </button>
+                  {group.entries.map((entry) => {
+                    optionIndex += 1;
+                    const index = optionIndex;
+                    const Icon = KIND_ICONS[entry.kind];
+                    const isActive = index === activeIndex;
+                    return (
+                      <button
+                        id={`${listboxId}-option-${index}`}
+                        key={entry.id}
+                        type="button"
+                        role="option"
+                        tabIndex={-1}
+                        aria-selected={isActive}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded p-3 text-left transition-all",
+                          isActive
+                            ? "bg-surface-container-high text-primary shadow-sm"
+                            : "text-on-surface-variant hover:bg-surface-container hover:text-on-surface",
+                        )}
+                        onMouseEnter={() => setSelectedIndex(index)}
+                        onClick={() => selectEntry(entry)}
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <div
+                            className={cn(
+                              "rounded p-2",
+                              isActive ? "bg-surface-sidebar" : "bg-surface-container",
+                            )}
+                          >
+                            <Icon className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-bold leading-tight">{entry.title}</div>
+                            <div className="mt-0.5 truncate text-[11px] opacity-70">
+                              {entry.subtitle}
+                            </div>
+                          </div>
+                        </div>
+                        {isActive && (
+                          <ArrowRight
+                            strokeWidth={2.8}
+                            className="ml-2 mr-1 h-3.5 w-3.5 shrink-0 text-primary"
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               ))
             ) : query ? (
               <div className="py-12 text-center text-sm text-on-surface-variant">
-                No results for &quot;{query}&quot;
+                No matches for &quot;{query}&quot;
               </div>
             ) : (
               <div className="py-8 text-center text-sm italic text-on-surface-variant">
-                Start typing to search...
+                Start with a quick action, or type to search documents, projects, decisions, and
+                views.
               </div>
             )}
           </div>
@@ -217,4 +259,20 @@ export function CommandBar({ items, isOpen, onOpenChange, onSelect }: CommandBar
     ) : null,
     document.body,
   );
+}
+
+function buildResultStatus(
+  query: string,
+  optionCount: number,
+  activeGroupLabel: string,
+  mode: "suggestions" | "search",
+): string {
+  const group = activeGroupLabel ? ` Active group: ${activeGroupLabel}.` : "";
+  if (mode === "suggestions") {
+    return optionCount
+      ? `${optionCount} suggestion${optionCount === 1 ? "" : "s"} available.${group}`
+      : "Start typing to search.";
+  }
+  if (!optionCount) return `No results for ${query}.`;
+  return `${optionCount} result${optionCount === 1 ? "" : "s"} available.${group}`;
 }

@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   BookOpen,
   Database,
   Grid2X2,
+  Inbox,
   LayoutDashboard,
   Menu,
   Network,
@@ -31,6 +32,7 @@ export function OperatorFrame({
   onGraph,
   askProjectId = undefined,
   askProjectTitle = undefined,
+  operatorRequest = undefined,
 }) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const mobileNavCloseRef = useRef<HTMLButtonElement>(null);
@@ -57,8 +59,31 @@ export function OperatorFrame({
     }
   }, [isNavCollapsed]);
 
+  // Memoized so a re-render never re-fires the drawers' open effects; only a new
+  // operator request (with a fresh requestId) changes identity.
+  const captureReviewRequest = useMemo(
+    () =>
+      operatorRequest?.action === "capture-review"
+        ? { proposalId: operatorRequest.proposalId, requestId: operatorRequest.requestId }
+        : undefined,
+    [operatorRequest],
+  );
+  const askRequest = useMemo(
+    () =>
+      operatorRequest?.action === "ask" ? { requestId: operatorRequest.requestId } : undefined,
+    [operatorRequest],
+  );
+
   const navItems = [
     { key: "hub", label: "Mission Control", icon: LayoutDashboard, onClick: onHub },
+    {
+      key: "attention",
+      label: "Attention Inbox",
+      icon: Inbox,
+      onClick: () => {
+        window.location.hash = "/attention";
+      },
+    },
     { key: "library", label: "Knowledge Base", icon: BookOpen, onClick: onLibrary },
     { key: "projects", label: "Project Board", icon: Grid2X2, onClick: onProjects },
     {
@@ -277,16 +302,21 @@ export function OperatorFrame({
               Local engine
             </div>
             {import.meta.env.DEV && (
-              <OperatorActions projectId={askProjectId} projectTitle={askProjectTitle} />
+              <OperatorActions
+                projectId={askProjectId}
+                projectTitle={askProjectTitle}
+                captureReviewRequest={captureReviewRequest}
+                askRequest={askRequest}
+              />
             )}
             <button
               type="button"
               onClick={onCommand}
               className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded border border-border-subtle bg-surface-container px-3 py-2 text-on-surface-variant hover:border-primary hover:text-primary"
-              aria-label="Quick Search"
+              aria-label="Command palette (Command or Control K)"
             >
               <Search size={16} className="shrink-0" />
-              <span className="hidden text-body-md md:inline">Quick Search</span>
+              <span className="hidden text-body-md md:inline">Command palette</span>
               <span className="hidden rounded border border-border-subtle bg-surface-container-high px-1.5 py-0.5 font-mono text-[11px] lg:inline-block">
                 ⌘ K
               </span>

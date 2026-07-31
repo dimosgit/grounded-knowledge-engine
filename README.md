@@ -23,17 +23,17 @@ workspace only.
 
 ## What is implemented
 
-| Capability                   | Current behavior                                                                                                                                                                                                                                         |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Grounded retrieval**       | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations.                                                                                                                                                                            |
-| **Durable capture**          | Clear learning is captured immediately; ambiguous routing, duplicates, and destructive replacements enter a conflict-safe local review queue.                                                                                                            |
-| **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                                                                                                                                  |
-| **Project resume**           | `kb.resume_project` and `gke project resume` return the same action-first, cited briefing: what to do next, what changed, completed work, blockers, decisions, questions, current focus, and supporting documents.                                       |
-| **Project checkpoints**      | `gke checkpoint` creates append-only, project-scoped handoff records with validated workspace-relative evidence citations; the latest checkpoint takes precedence when choosing where the next session should start.                                     |
-| **Daily project review**     | `gke review` and `gke://workspace/review` return due reviews, attention reasons, and explicitly scoped project changes since an ISO date.                                                                                                                |
-| **One MCP server**           | Claude Code, Codex, Gemini CLI, and GitHub Copilot use the same local `kb` server and knowledge base.                                                                                                                                                    |
-| **Operator Cockpit**         | The React Cockpit eagerly loads a bounded catalog, loads full Markdown on demand, and adds daily-attention summaries and Board filters. Local development also adds grounded Ask, capture review, decision review, and source-provenance project deltas. |
-| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                                                                                                            |
+| Capability                   | Current behavior                                                                                                                                                                                                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Grounded retrieval**       | BM25 or SQLite FTS5 search over local Markdown, with file-and-line citations.                                                                                                                                                                                                                                       |
+| **Durable capture**          | Clear learning is captured immediately; ambiguous routing, duplicates, and destructive replacements enter a conflict-safe local review queue.                                                                                                                                                                       |
+| **Document ingestion**       | PDF, DOCX, XLSX, Markdown, and text are extracted locally, scrubbed, normalized, captured, and indexed.                                                                                                                                                                                                             |
+| **Project resume**           | `kb.resume_project` and `gke project resume` return the same action-first, cited briefing: what to do next, what changed, completed work, blockers, decisions, questions, current focus, and supporting documents.                                                                                                  |
+| **Project checkpoints**      | `gke checkpoint` creates append-only, project-scoped handoff records with validated workspace-relative evidence citations; the latest checkpoint takes precedence when choosing where the next session should start.                                                                                                |
+| **Daily project review**     | `gke review` and `gke://workspace/review` return due reviews, attention reasons, and explicitly scoped project changes since an ISO date.                                                                                                                                                                           |
+| **One MCP server**           | Claude Code, Codex, Gemini CLI, and GitHub Copilot use the same local `kb` server and knowledge base.                                                                                                                                                                                                               |
+| **Operator Cockpit**         | The React Cockpit eagerly loads a bounded catalog, loads full Markdown on demand, and provides a filterable Attention Inbox across projects, captures, decisions, questions, and changed evidence. Local development also adds grounded Ask, capture review, decision review, and source-provenance project deltas. |
+| **Bounded protocol surface** | The default MCP profile contains four semantic tools with output schemas, safety annotations, and CI-enforced schema budgets.                                                                                                                                                                                       |
 
 ## The compounding loop
 
@@ -456,7 +456,11 @@ first 2,200 body characters per document; this bounded prefix replaces
 unbounded full-body substring search so startup size does not scale with the
 complete corpus. The Cockpit provides:
 
-- Mission Control and quick search;
+- Mission Control and a filterable Attention Inbox;
+- a typed `Cmd/Ctrl+K` command palette that reaches documents, projects,
+  decisions, and primary views, and opens review surfaces without writing —
+  it ranks bounded, grouped results from catalog metadata only, never loads
+  Markdown bodies, and omits local-only review actions from the public build;
 - a Markdown knowledge library;
 - a project board;
 - structured project detail with focus, changes, decisions, questions,

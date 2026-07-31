@@ -1,15 +1,31 @@
 # Operator Cockpit Action Center and Workspace Clarity Plan
 
-**Status:** Proposed.
+**Status:** In progress.
 **Review date:** 2026-08-12.
 **Repository:** Grounded Knowledge Engine.
 **Primary surface:** `apps/cockpit`.
 
-**Progress note (2026-07-30):** The first presentational slice is implemented:
+**Progress note (2026-07-30):** The first two UI slices are implemented.
 Mission Control now explains the IDE-first workflow, exposes existing review
 destinations, displays a safe generic workspace posture, and removes misleading
-disabled shell controls. The workspace-context adapter, unified Operator Inbox,
-and typed command palette remain planned.
+disabled shell controls. The new `#/attention` Operator Inbox deterministically
+composes project, capture, decision, question, and changed-evidence signals;
+supports urgency, kind, and project filters with browser-history-safe URLs; and
+keeps catalog-backed results usable when either local request fails.
+
+**Progress note (2026-07-31):** Phase 3 is implemented. `Cmd/Ctrl+K` now opens a
+typed command palette (`src/domain/command-palette.ts`) over documents,
+projects, decisions, primary views, and the existing review surfaces. Ranking is
+pure and deterministic (exact before prefix before substring, ties broken by
+kind then id) and bounded to 20 options; results are grouped with accessible
+group labels; an empty query offers quick actions plus recent destinations
+persisted as versioned, bounded canonical ids in `localStorage`. Selection flows
+through one App-owned destination callback shared with the Operator Inbox: it
+navigates, or opens the Ask/Capture Review drawer, and never writes. Review-
+action entries are compiled out of the static public build. Shared capture state
+ownership moved from `AttentionView` up to `App.tsx` in the same change. The
+safe workspace-context adapter and the Phase 4 responsive/accessibility evidence
+sweep remain planned.
 
 ## Product decision
 

@@ -81,11 +81,9 @@ function TaskRow({ task, dotClassName, muted = false }) {
 }
 
 export function ProjectDetailView({
-  docs,
-  commandBarOpen,
-  onCommandBarOpenChange,
+  palette,
+  operatorRequest,
   onCommand,
-  onCommandSelect,
   onHub,
   onLibrary,
   onProjects,
@@ -149,14 +147,7 @@ export function ProjectDetailView({
     <OperatorFrame
       activeView="projects"
       title={activeProject?.title || "Project Context"}
-      commandBar={
-        <CommandBar
-          items={docs}
-          isOpen={commandBarOpen}
-          onOpenChange={onCommandBarOpenChange}
-          onSelect={onCommandSelect}
-        />
-      }
+      commandBar={<CommandBar {...palette} />}
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
@@ -164,6 +155,7 @@ export function ProjectDetailView({
       onGraph={onGraph}
       askProjectId={activeProject?.id}
       askProjectTitle={activeProject?.title}
+      operatorRequest={operatorRequest}
     >
       <div className="mx-auto flex max-w-[1200px] flex-col gap-10 px-4 py-8 md:px-8">
         {bodyStatus === "loading" && (

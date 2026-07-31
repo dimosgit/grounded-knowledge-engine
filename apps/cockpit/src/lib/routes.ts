@@ -1,3 +1,10 @@
+import {
+  isOperatorInboxKind,
+  isOperatorInboxPriority,
+  sanitizeOperatorProjectFilter,
+  type OperatorInboxFilters,
+} from "../domain/operator-inbox";
+
 export function normalizePathname(pathname) {
   if (!pathname) return "/";
   if (pathname === "/") return "/";
@@ -9,6 +16,19 @@ export function getHashRoute() {
   const hashPath = normalizePathname(hash.slice(1).split("?")[0] || "/");
   if (hashPath === "/hub") {
     return { mode: "hub", path: null };
+  }
+  if (hashPath === "/attention") {
+    const queryString = hash.slice(1).split("?")[1] || "";
+    const query = new URLSearchParams(queryString);
+    const requestedKind = query.get("kind") || "all";
+    const requestedPriority = query.get("priority") || "all";
+    return {
+      mode: "attention",
+      path: null,
+      inboxKind: isOperatorInboxKind(requestedKind) ? requestedKind : "all",
+      inboxPriority: isOperatorInboxPriority(requestedPriority) ? requestedPriority : "all",
+      inboxProjectId: sanitizeOperatorProjectFilter(query.get("project") || ""),
+    };
   }
   if (hashPath === "/projects") {
     const queryString = hash.slice(1).split("?")[1] || "";
@@ -93,6 +113,16 @@ export function setHashPath(path) {
 
 export function setHashHub() {
   window.location.hash = "/hub";
+}
+
+export function setHashAttention(filters: OperatorInboxFilters) {
+  const query = new URLSearchParams();
+  if (filters.kind !== "all") query.set("kind", filters.kind);
+  if (filters.priority !== "all") query.set("priority", filters.priority);
+  const projectId = sanitizeOperatorProjectFilter(filters.projectId);
+  if (projectId) query.set("project", projectId);
+  const queryString = query.toString();
+  window.location.hash = queryString ? `/attention?${queryString}` : "/attention";
 }
 
 export function setHashProjects(attentionFilter = "") {
