@@ -13,6 +13,9 @@ export function useRouteSync({
   setProjectAttentionFilter,
   setSelectedDecisionId,
   setDecisionLedgerFilter,
+  setInboxKind,
+  setInboxPriority,
+  setInboxProjectId,
   setViewMode,
 }) {
   useEffect(() => {
@@ -20,6 +23,13 @@ export function useRouteSync({
       const route = getAppRoute();
       if (route.mode === "hub") {
         setViewMode("hub");
+        return;
+      }
+      if (route.mode === "attention") {
+        setInboxKind(route.inboxKind || "all");
+        setInboxPriority(route.inboxPriority || "all");
+        setInboxProjectId(route.inboxProjectId || "");
+        setViewMode("attention");
         return;
       }
       if (route.mode === "projects") {
@@ -80,6 +90,9 @@ export function useRouteSync({
     setProjectAttentionFilter,
     setSelectedDecisionId,
     setDecisionLedgerFilter,
+    setInboxKind,
+    setInboxPriority,
+    setInboxProjectId,
     setViewMode,
   ]);
 }

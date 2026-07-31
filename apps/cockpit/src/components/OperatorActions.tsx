@@ -7,9 +7,18 @@ import { CaptureReviewDrawer } from "./CaptureReviewDrawer";
 interface OperatorActionsProps {
   projectId?: string;
   projectTitle?: string;
+  /** Open the review queue, optionally preselecting one pending proposal. */
+  captureReviewRequest?: { proposalId?: string; requestId: number };
+  /** Open the Ask drawer. Opening reads; it never captures on its own. */
+  askRequest?: { requestId: number };
 }
 
-export function OperatorActions({ projectId, projectTitle }: OperatorActionsProps) {
+export function OperatorActions({
+  projectId,
+  projectTitle,
+  captureReviewRequest,
+  askRequest,
+}: OperatorActionsProps) {
   const [proposals, setProposals] = useState<CaptureProposalSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
@@ -48,6 +57,12 @@ export function OperatorActions({ projectId, projectTitle }: OperatorActionsProp
     return () => window.removeEventListener("focus", refreshOnFocus);
   }, [refreshProposals]);
 
+  useEffect(() => {
+    if (!captureReviewRequest) return;
+    setReviewOpen(true);
+    void refreshProposals(captureReviewRequest.proposalId);
+  }, [captureReviewRequest, refreshProposals]);
+
   function handleCapture(capture: GroundedCaptureResult) {
     const proposalId = capture.action === "proposed" ? capture.proposal?.proposalId : undefined;
     if (proposalId) void refreshProposals(proposalId);
@@ -64,6 +79,7 @@ export function OperatorActions({ projectId, projectTitle }: OperatorActionsProp
         key={projectId || "workspace"}
         projectId={projectId}
         projectTitle={projectTitle}
+        openRequest={askRequest?.requestId}
         onCapture={handleCapture}
         onReviewProposal={openReview}
       />

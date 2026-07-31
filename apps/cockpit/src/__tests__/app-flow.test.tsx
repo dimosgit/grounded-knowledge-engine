@@ -57,17 +57,46 @@ describe("cockpit major flows", () => {
     ).toBeGreaterThan(0);
   });
 
-  test("quick search command bar finds notes globally", async () => {
+  test("command palette finds notes globally", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.click(screen.getByRole("button", { name: /Quick Search/i }));
-    const commandSearch = await screen.findByPlaceholderText("Search notes, terms, commands...");
+    await user.click(screen.getByRole("button", { name: /Command palette/i }));
+    const commandSearch = await screen.findByPlaceholderText(
+      "Search documents, projects, decisions, views...",
+    );
     await user.type(commandSearch, "sampling");
 
     expect(
       await screen.findByRole("option", { name: /MCP Source Notes: Sampling/i }),
     ).toBeInTheDocument();
+  });
+
+  test("command palette reaches projects, decisions, and views, then navigates", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: /Command palette/i }));
+    const commandSearch = await screen.findByPlaceholderText(
+      "Search documents, projects, decisions, views...",
+    );
+
+    await user.type(commandSearch, "decision replay");
+    expect(await screen.findByRole("group", { name: "Views" })).toBeInTheDocument();
+    const viewOption = await screen.findByRole("option", { name: /Decision Replay/i });
+    await user.click(viewOption);
+
+    expect(window.location.hash).toBe("#/decisions");
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument(),
+    );
+
+    // Reopening shows the destination we just used, without retaining the query.
+    await user.click(screen.getByRole("button", { name: /Command palette/i }));
+    expect(await screen.findByRole("group", { name: "Recent destinations" })).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Search documents, projects, decisions, views..."),
+    ).toHaveValue("");
   });
 
   test("project board surfaces the demo project", async () => {
@@ -95,6 +124,44 @@ describe("cockpit major flows", () => {
         "true",
       );
     });
+  });
+
+  test("opens one filterable attention inbox across catalog-backed signals", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Review attention" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "What needs your attention now?" }),
+    ).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/attention");
+    expect(screen.getAllByText("Project").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Decision").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Question").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Decisions" }));
+    expect(window.location.hash).toBe("#/attention?kind=decision");
+    expect(screen.getByText(/signals shown/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Router Project Board/i })).not.toBeInTheDocument();
+  });
+
+  test("falls back safely when attention route filters are malformed", async () => {
+    window.location.hash = "#/attention?kind=write&priority=critical&project=../../private";
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "What needs your attention now?" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "All signals" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Any urgency" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("combobox", { name: "Project" })).toHaveValue("");
   });
 
   test("positions the Cockpit as an optional review layer without dead controls", async () => {

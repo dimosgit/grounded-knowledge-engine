@@ -67,10 +67,9 @@ function QuickRecallCard({ quickRecall, digestQuickView }) {
 
 export function LibraryView({
   docs,
-  commandBarOpen,
-  onCommandBarOpenChange,
+  palette,
+  operatorRequest,
   onCommand,
-  onCommandSelect,
   onHub,
   onLibrary,
   onProjects,
@@ -123,19 +122,13 @@ export function LibraryView({
     <OperatorFrame
       activeView="library"
       title="Knowledge Base"
-      commandBar={
-        <CommandBar
-          items={docs}
-          isOpen={commandBarOpen}
-          onOpenChange={onCommandBarOpenChange}
-          onSelect={onCommandSelect}
-        />
-      }
+      commandBar={<CommandBar {...palette} />}
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
+      operatorRequest={operatorRequest}
     >
       <div className={`app-shell cockpit-library${isReadingMode ? " reading-mode" : ""}`}>
         <aside className="sidebar">

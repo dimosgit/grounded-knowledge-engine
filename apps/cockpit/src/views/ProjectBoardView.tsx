@@ -12,11 +12,9 @@ const columns = [
 ];
 
 export function ProjectBoardView({
-  docs,
-  commandBarOpen,
-  onCommandBarOpenChange,
+  palette,
+  operatorRequest,
   onCommand,
-  onCommandSelect,
   onHub,
   onLibrary,
   onProjects,
@@ -34,19 +32,13 @@ export function ProjectBoardView({
     <OperatorFrame
       activeView="projects"
       title="Project Board"
-      commandBar={
-        <CommandBar
-          items={docs}
-          isOpen={commandBarOpen}
-          onOpenChange={onCommandBarOpenChange}
-          onSelect={onCommandSelect}
-        />
-      }
+      commandBar={<CommandBar {...palette} />}
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
+      operatorRequest={operatorRequest}
     >
       <div className="px-4 pt-8 md:px-8">
         <h1 className="font-display text-display-lg text-on-surface">Project Board</h1>

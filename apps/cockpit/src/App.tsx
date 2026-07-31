@@ -60,8 +60,22 @@ import {
   type DecisionLedgerFilter,
 } from "./domain/decisions";
 import {
+  type OperatorActionRequest,
+  type OperatorDestination,
+  type OperatorInboxKindFilter,
+  type OperatorInboxPriorityFilter,
+  type OperatorReviewAction,
+  type OperatorViewKey,
+} from "./domain/operator-inbox";
+import {
+  composeCommandPaletteEntries,
+  type CommandPaletteBinding,
+  type CommandPaletteEntry,
+} from "./domain/command-palette";
+import {
   getAppRoute,
   getHashPath,
+  setHashAttention,
   setHashGraph,
   setHashHub,
   setHashDecision,
@@ -70,6 +84,7 @@ import {
   setHashProject,
   setHashProjects,
 } from "./lib/routes";
+import { useRecentDestinations } from "./hooks/useRecentDestinations";
 import { useRecentPaths } from "./hooks/useRecentPaths";
 import { useRouteSync } from "./hooks/useRouteSync";
 import { useMarkdownBody } from "./hooks/useMarkdownBody";
@@ -100,6 +115,9 @@ const DecisionReplayView = lazy(() =>
   import("./views/DecisionReplayView").then((module) => ({
     default: module.DecisionReplayView,
   })),
+);
+const AttentionView = lazy(() =>
+  import("./views/AttentionView").then((module) => ({ default: module.AttentionView })),
 );
 
 export { isExternalResource, normalizeDocPath, resolveMarkdownAssetPath, resolveMarkdownDocPath };
@@ -154,6 +172,7 @@ export default function App() {
   const [viewMode, setViewMode] = useState(() => {
     const route = initialRoute;
     if (route.mode === "hub") return "hub";
+    if (route.mode === "attention") return "attention";
     if (route.mode === "projects") return "projects";
     if (route.mode === "project") return "project";
     if (route.mode === "decisions") return "decisions";
@@ -163,6 +182,7 @@ export default function App() {
   });
   const [isReadingMode, setIsReadingMode] = useState(false);
   const [isCommandBarOpen, setIsCommandBarOpen] = useState(false);
+  const [operatorRequest, setOperatorRequest] = useState<OperatorActionRequest | undefined>();
   const [moduleContextByPath, setModuleContextByPath] = useState({});
   const [selectedProjectId, setSelectedProjectId] = useState(initialRoute.projectId || "");
   const [selectedDecisionId, setSelectedDecisionId] = useState(initialRoute.decisionId || "");
@@ -174,6 +194,13 @@ export default function App() {
   const [projectAttentionFilter, setProjectAttentionFilter] = useState<ProjectAttentionFilter>(
     (initialRoute.attentionFilter as ProjectAttentionFilter) || "all",
   );
+  const [inboxKind, setInboxKind] = useState<OperatorInboxKindFilter>(
+    (initialRoute.inboxKind as OperatorInboxKindFilter) || "all",
+  );
+  const [inboxPriority, setInboxPriority] = useState<OperatorInboxPriorityFilter>(
+    (initialRoute.inboxPriority as OperatorInboxPriorityFilter) || "all",
+  );
+  const [inboxProjectId, setInboxProjectId] = useState(initialRoute.inboxProjectId || "");
   const [selectedGraphPath, setSelectedGraphPath] = useState(initialRoute.focusPath || "overview");
   const [graphQuery, setGraphQuery] = useState("");
   const [activePath, setActivePath] = useState(() => {
@@ -187,6 +214,7 @@ export default function App() {
     );
   });
   const recentPaths = useRecentPaths(activePath);
+  const { recentIds, rememberDestination } = useRecentDestinations();
   useRouteSync({
     docs,
     setActiveItemType,
@@ -199,6 +227,9 @@ export default function App() {
     setProjectAttentionFilter,
     setSelectedDecisionId,
     setDecisionLedgerFilter,
+    setInboxKind,
+    setInboxPriority,
+    setInboxProjectId,
     setViewMode,
   });
 
@@ -408,6 +439,17 @@ export default function App() {
     setHashHub();
   }
 
+  function goToAttention(
+    filters = { kind: inboxKind, priority: inboxPriority, projectId: inboxProjectId },
+  ) {
+    setIsReadingMode(false);
+    setInboxKind(filters.kind);
+    setInboxPriority(filters.priority);
+    setInboxProjectId(filters.projectId);
+    setViewMode("attention");
+    setHashAttention(filters);
+  }
+
   function goToProjects() {
     setIsReadingMode(false);
     setViewMode("projects");
@@ -471,6 +513,47 @@ export default function App() {
     setSelectedDecisionId(decisionId);
     setViewMode("decision");
     setHashDecision(decisionId);
+  }
+
+  function openView(view: OperatorViewKey) {
+    if (view === "hub") return goToHub();
+    if (view === "attention") return goToAttention();
+    if (view === "library") {
+      return enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType });
+    }
+    if (view === "projects") return goToProjects();
+    if (view === "decisions") return goToDecisions(decisionLedgerFilter);
+    return goToGraph();
+  }
+
+  /**
+   * Opening a review surface is navigation, not a mutation: the drawer still owns
+   * every write and still asks before it makes one. A monotonic requestId keeps
+   * repeat requests for the same action observable without colliding.
+   */
+  function requestOperatorAction(action: OperatorReviewAction, proposalId?: string) {
+    setOperatorRequest((current) => ({
+      action,
+      proposalId,
+      requestId: (current?.requestId ?? 0) + 1,
+    }));
+  }
+
+  function openOperatorDestination(destination: OperatorDestination) {
+    switch (destination.kind) {
+      case "project":
+        return openProject(destination.projectId);
+      case "decision":
+        return openDecision(destination.decisionId);
+      case "document":
+        return openDoc(destination.path);
+      case "view":
+        return openView(destination.view);
+      case "capture":
+        return requestOperatorAction("capture-review", destination.proposalId);
+      case "review":
+        return requestOperatorAction(destination.action);
+    }
   }
 
   const activeModuleForHub = useMemo(() => buildHubModuleSummary(docs), [docs]);
@@ -585,6 +668,32 @@ export default function App() {
     [activeProject, docs, projectContextGraph],
   );
   const decisionSummaries = useMemo(() => buildDecisionSummaries(docs), [docs]);
+  const paletteEntries = useMemo(
+    () =>
+      composeCommandPaletteEntries({
+        documents: docs,
+        projects: projectSummaries,
+        decisions: decisionSummaries,
+        // Review drawers exist only in the local dev shell; the static public
+        // build must never advertise a control it cannot honor.
+        includeReviewActions: import.meta.env.DEV,
+      }),
+    [decisionSummaries, docs, projectSummaries],
+  );
+
+  function selectPaletteEntry(entry: CommandPaletteEntry) {
+    rememberDestination(entry.id);
+    openOperatorDestination(entry.destination);
+  }
+
+  const palette: CommandPaletteBinding = {
+    entries: paletteEntries,
+    recentIds,
+    isOpen: isCommandBarOpen,
+    onOpenChange: setIsCommandBarOpen,
+    onSelect: selectPaletteEntry,
+  };
+
   const decisionCounts = useMemo(() => countDecisionStates(decisionSummaries), [decisionSummaries]);
   const filteredDecisionSummaries = useMemo(
     () => filterDecisionSummaries(decisionSummaries, decisionLedgerFilter, decisionQuery),
@@ -593,6 +702,10 @@ export default function App() {
   const activeDecisionSummary = useMemo(
     () => getDecisionSummary(decisionSummaries, selectedDecisionId),
     [decisionSummaries, selectedDecisionId],
+  );
+  const activeDecisionDoc = useMemo(
+    () => docs.find((doc) => doc.path === activeDecisionSummary?.path) || null,
+    [activeDecisionSummary, docs],
   );
   const activeDecisionBody = useMarkdownBody(
     markdownContentLoader,
@@ -605,7 +718,12 @@ export default function App() {
     }
     try {
       return {
-        decision: parseDecisionDetail(activeDecisionBody.body, activeDecisionSummary.path),
+        decision: parseDecisionDetail(
+          activeDecisionBody.body,
+          activeDecisionSummary.path,
+          undefined,
+          activeDecisionDoc?.frontmatter,
+        ),
         error: "",
       };
     } catch (error) {
@@ -614,21 +732,47 @@ export default function App() {
         error: error instanceof Error ? error.message : "The decision record is invalid.",
       };
     }
-  }, [activeDecisionBody.body, activeDecisionBody.status, activeDecisionSummary]);
+  }, [
+    activeDecisionBody.body,
+    activeDecisionBody.status,
+    activeDecisionDoc,
+    activeDecisionSummary,
+  ]);
+
+  if (viewMode === "attention") {
+    return (
+      <Suspense fallback={<ViewLoading label="attention inbox" />}>
+        <AttentionView
+          palette={palette}
+          operatorRequest={operatorRequest}
+          onCommand={() => setIsCommandBarOpen(true)}
+          onHub={goToHub}
+          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+          onProjects={goToProjects}
+          onGraph={goToGraph}
+          projects={projectSummaries}
+          decisions={decisionSummaries}
+          questions={openQuestionItems}
+          filters={{ kind: inboxKind, priority: inboxPriority, projectId: inboxProjectId }}
+          onFiltersChange={goToAttention}
+          onOpenDestination={openOperatorDestination}
+        />
+      </Suspense>
+    );
+  }
 
   if (viewMode === "hub") {
     return (
       <Suspense fallback={<ViewLoading label="operator hub" />}>
         <HubView
           docs={docs}
-          commandBarOpen={isCommandBarOpen}
-          onCommandBarOpenChange={setIsCommandBarOpen}
+          palette={palette}
+          operatorRequest={operatorRequest}
           onCommand={() => setIsCommandBarOpen(true)}
           onHub={goToHub}
           onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
           onProjects={goToProjects}
           onGraph={goToGraph}
-          onCommandSelect={(item) => openDoc(item.path)}
           activeProject={activeProject}
           activeModule={activeModuleForHub}
           openQuestionsCount={openQuestionsCount}
@@ -647,6 +791,7 @@ export default function App() {
           getDocBadge={getDocBadge}
           attentionCounts={attentionCounts}
           attentionProjects={attentionProjects}
+          onOpenAttention={() => goToAttention({ kind: "all", priority: "all", projectId: "" })}
           onAttentionFilter={openAttentionQueue}
           onOpenProject={openProject}
         />
@@ -658,15 +803,13 @@ export default function App() {
     return (
       <Suspense fallback={<ViewLoading label="project board" />}>
         <ProjectBoardView
-          docs={docs}
-          commandBarOpen={isCommandBarOpen}
-          onCommandBarOpenChange={setIsCommandBarOpen}
+          palette={palette}
+          operatorRequest={operatorRequest}
           onCommand={() => setIsCommandBarOpen(true)}
           onHub={goToHub}
           onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
           onProjects={goToProjects}
           onGraph={goToGraph}
-          onCommandSelect={(item) => openDoc(item.path)}
           projectColumns={projectColumns}
           onOpenProject={openProject}
           onMoveProject={moveProject}
@@ -682,15 +825,13 @@ export default function App() {
     return (
       <Suspense fallback={<ViewLoading label="decision ledger" />}>
         <DecisionLedgerView
-          docs={docs}
-          commandBarOpen={isCommandBarOpen}
-          onCommandBarOpenChange={setIsCommandBarOpen}
+          palette={palette}
+          operatorRequest={operatorRequest}
           onCommand={() => setIsCommandBarOpen(true)}
           onHub={goToHub}
           onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
           onProjects={goToProjects}
           onGraph={goToGraph}
-          onCommandSelect={(item) => openDoc(item.path)}
           decisions={filteredDecisionSummaries}
           counts={decisionCounts}
           filter={decisionLedgerFilter}
@@ -714,15 +855,13 @@ export default function App() {
     return (
       <Suspense fallback={<ViewLoading label="decision replay" />}>
         <DecisionReplayView
-          docs={docs}
-          commandBarOpen={isCommandBarOpen}
-          onCommandBarOpenChange={setIsCommandBarOpen}
+          palette={palette}
+          operatorRequest={operatorRequest}
           onCommand={() => setIsCommandBarOpen(true)}
           onHub={goToHub}
           onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
           onProjects={goToProjects}
           onGraph={goToGraph}
-          onCommandSelect={(item) => openDoc(item.path)}
           summary={activeDecisionSummary}
           decision={activeDecisionResult.decision}
           bodyStatus={bodyStatus}
@@ -742,15 +881,13 @@ export default function App() {
     return (
       <Suspense fallback={<ViewLoading label="project details" />}>
         <ProjectDetailView
-          docs={docs}
-          commandBarOpen={isCommandBarOpen}
-          onCommandBarOpenChange={setIsCommandBarOpen}
+          palette={palette}
+          operatorRequest={operatorRequest}
           onCommand={() => setIsCommandBarOpen(true)}
           onHub={goToHub}
           onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
           onProjects={goToProjects}
           onGraph={goToGraph}
-          onCommandSelect={(item) => openDoc(item.path)}
           activeProject={activeProject}
           linkedDocs={activeProjectLinkedDocs}
           onOpenDoc={openDoc}
@@ -772,15 +909,13 @@ export default function App() {
         }
       >
         <ContextGraphView
-          docs={docs}
-          commandBarOpen={isCommandBarOpen}
-          onCommandBarOpenChange={setIsCommandBarOpen}
+          palette={palette}
+          operatorRequest={operatorRequest}
           onCommand={() => setIsCommandBarOpen(true)}
           onHub={goToHub}
           onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
           onProjects={goToProjects}
           onGraph={goToGraph}
-          onCommandSelect={(item) => openDoc(item.path)}
           contextGraph={contextGraph}
           graphFocusOption={graphFocusOption}
           graphFocusOptions={graphFocusOptions}
@@ -797,14 +932,13 @@ export default function App() {
     <Suspense fallback={<ViewLoading label="knowledge library" />}>
       <LibraryView
         docs={docs}
-        commandBarOpen={isCommandBarOpen}
-        onCommandBarOpenChange={setIsCommandBarOpen}
+        palette={palette}
+        operatorRequest={operatorRequest}
         onCommand={() => setIsCommandBarOpen(true)}
         onHub={goToHub}
         onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
         onProjects={goToProjects}
         onGraph={goToGraph}
-        onCommandSelect={(item) => openDoc(item.path)}
         isReadingMode={isReadingMode}
         onToggleReadingMode={() => setIsReadingMode((current) => !current)}
         displayTrackLabel={displayTrackLabel}

@@ -4,22 +4,14 @@ import type { DecisionRecord } from "../../../../tools/decisions/types";
 import { CommandBar } from "../components/CommandBar";
 import { DecisionReviewPanel } from "../components/DecisionReviewPanel";
 import { OperatorFrame } from "../components/OperatorFrame";
+import type { CommandPaletteBinding } from "../domain/command-palette";
 import { buildDecisionEvidenceChanges, type DecisionSummary } from "../domain/decisions";
-
-interface CommandDoc {
-  path: string;
-  title: string;
-  searchIndex: string;
-  searchIndexNormalized: string;
-  searchIndexCompact: string;
-}
+import type { OperatorActionRequest } from "../domain/operator-inbox";
 
 interface DecisionReplayViewProps {
-  docs: CommandDoc[];
-  commandBarOpen: boolean;
-  onCommandBarOpenChange: (open: boolean) => void;
+  palette: CommandPaletteBinding;
+  operatorRequest?: OperatorActionRequest;
   onCommand: () => void;
-  onCommandSelect: (item: CommandDoc) => void;
   onHub: () => void;
   onLibrary: () => void;
   onProjects: () => void;
@@ -35,11 +27,9 @@ interface DecisionReplayViewProps {
 }
 
 export function DecisionReplayView({
-  docs,
-  commandBarOpen,
-  onCommandBarOpenChange,
+  palette,
+  operatorRequest,
   onCommand,
-  onCommandSelect,
   onHub,
   onLibrary,
   onProjects,
@@ -60,19 +50,13 @@ export function DecisionReplayView({
     <OperatorFrame
       activeView="decisions"
       title="Decision Replay"
-      commandBar={
-        <CommandBar
-          items={docs}
-          isOpen={commandBarOpen}
-          onOpenChange={onCommandBarOpenChange}
-          onSelect={onCommandSelect}
-        />
-      }
+      commandBar={<CommandBar {...palette} />}
       onCommand={onCommand}
       onHub={onHub}
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
+      operatorRequest={operatorRequest}
     >
       <div className="mx-auto flex max-w-cockpit flex-col gap-6 px-4 py-8 md:px-8">
         <button
