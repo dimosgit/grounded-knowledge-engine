@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRight, BookOpenCheck, Check, LoaderCircle, Search, X } from "lucide-react";
 import { useModalSurface } from "../hooks/useModalSurface";
@@ -12,6 +12,8 @@ import {
 interface AskDrawerProps {
   projectId?: string;
   projectTitle?: string;
+  /** Monotonic id of an external request to open the drawer (command palette). */
+  openRequest?: number;
   onCapture?: (capture: GroundedCaptureResult) => void;
   onReviewProposal?: (proposalId: string) => void;
 }
@@ -24,6 +26,7 @@ const DEMO_QUESTIONS = [
 export function AskDrawer({
   projectId,
   projectTitle,
+  openRequest,
   onCapture,
   onReviewProposal,
 }: AskDrawerProps) {
@@ -43,6 +46,12 @@ export function AskDrawer({
     closeDisabled: capturing,
     initialFocusRef: questionRef,
   });
+
+  useEffect(() => {
+    // Opening is navigation, not a write: the drawer still asks before capturing.
+    if (openRequest === undefined) return;
+    setIsOpen(true);
+  }, [openRequest]);
 
   async function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

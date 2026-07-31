@@ -117,8 +117,18 @@ export function getDecisionSummary(
   return decisions.find((decision) => decision.decisionId === decisionId) || null;
 }
 
-export function parseDecisionDetail(raw: string, path: string, asOf = todayIso()): DecisionRecord {
-  return parseDecision(raw, path, asOf);
+export function parseDecisionDetail(
+  raw: string,
+  path: string,
+  asOf = todayIso(),
+  frontmatter?: Record<string, unknown>,
+): DecisionRecord {
+  const decisionRaw = raw.startsWith("---\n")
+    ? raw
+    : `---\n${Object.entries(frontmatter || {})
+        .map(([key, value]) => `${key}: ${scalar(value).replace(/[\r\n]+/g, " ")}`)
+        .join("\n")}\n---\n${raw}`;
+  return parseDecision(decisionRaw, path, asOf);
 }
 
 export function buildDecisionEvidenceChanges(decision: DecisionRecord) {

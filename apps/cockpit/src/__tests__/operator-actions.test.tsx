@@ -94,6 +94,32 @@ describe("local operator actions", () => {
     expect(screen.getByText("Scope: Workspace")).toBeInTheDocument();
     expect(screen.getByLabelText("Question")).toHaveValue("");
   });
+
+  test("opens the exact capture requested from the Attention inbox", async () => {
+    const proposalId = "capture-20260730123000-attention";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/proposals")) {
+        return jsonResponse({ proposals: [proposalSummary(proposalId)] });
+      }
+      if (url.endsWith(`/proposals/${proposalId}`)) {
+        return jsonResponse(proposalPreview(proposalId));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    render(
+      <OperatorActions
+        captureReviewRequest={{
+          proposalId,
+          requestId: 1,
+        }}
+      />,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Exact proposed note" })).toBeInTheDocument();
+    expect(screen.getByText("Proposed body for the selected proposal")).toBeInTheDocument();
+  });
 });
 
 function proposalSummary(proposalId: string) {

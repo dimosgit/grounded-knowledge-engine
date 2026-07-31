@@ -90,11 +90,14 @@ const docs = [
 ];
 
 const commonViewProps = {
-  docs: [],
-  commandBarOpen: false,
-  onCommandBarOpenChange: vi.fn(),
+  palette: {
+    entries: [],
+    recentIds: [],
+    isOpen: false,
+    onOpenChange: vi.fn(),
+    onSelect: vi.fn(),
+  },
   onCommand: vi.fn(),
-  onCommandSelect: vi.fn(),
   onHub: vi.fn(),
   onLibrary: vi.fn(),
   onProjects: vi.fn(),
@@ -139,6 +142,33 @@ describe("Decision Replay", () => {
         evidence: "demo-kb/sources/pilot-location-evidence.md:21 — Launch window narrowed.",
       },
     ]);
+  });
+
+  test("rejoins catalog frontmatter with a lazily loaded Markdown body", () => {
+    const body = rawDecision.slice(rawDecision.indexOf("\n---\n", 4) + 5);
+    const decision = parseDecisionDetail(
+      body,
+      "demo-kb/decisions/pilot-location.md",
+      "2026-07-29",
+      {
+        schema_version: "1",
+        record_type: "decision",
+        workspace_id: "demo",
+        decision_id: "pilot-location",
+        title: "Select the First Pilot Location",
+        status: "active",
+        owner: "demo-workspace",
+        decided_at: "2026-05-15",
+        evidence_checked_at: "2026-06-01",
+        review_after: "2026-07-15",
+        confidence: "medium",
+        updated: "2026-06-01",
+        tags: "demo, decision-replay",
+      },
+    );
+
+    expect(decision.decisionId).toBe("pilot-location");
+    expect(decision.recommendation).toBe("Use Valencia with a scheduling buffer.");
   });
 
   test("opens a decision from the ledger", async () => {

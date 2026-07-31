@@ -6,6 +6,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { AskDrawer } from "../components/AskDrawer";
 import { CommandBar } from "../components/CommandBar";
 import { OperatorFrame } from "../components/OperatorFrame";
+import { composeCommandPaletteEntries, type CommandPaletteEntry } from "../domain/command-palette";
 import { useModalSurface } from "../hooks/useModalSurface";
 
 afterEach(() => {
@@ -60,12 +61,12 @@ describe("shared modal accessibility", () => {
 
     await user.click(opener);
 
-    const dialog = screen.getByRole("dialog", { name: "Search local knowledge" });
+    const dialog = screen.getByRole("dialog", { name: "Command palette" });
     const combobox = screen.getByRole("combobox");
     expect(dialog).toHaveAccessibleDescription(/arrow keys/);
     expect(combobox).toHaveFocus();
     expect(combobox).toHaveAttribute("aria-controls");
-    expect(screen.getByRole("listbox", { name: "Knowledge search results" })).toBeInTheDocument();
+    expect(screen.getByRole("listbox", { name: "Command palette results" })).toBeInTheDocument();
 
     await user.type(combobox, "missing");
     expect(screen.getByRole("status")).toHaveTextContent("No results for missing.");
@@ -80,9 +81,7 @@ describe("shared modal accessibility", () => {
     expect(combobox).toHaveAttribute("aria-activedescendant", option.id);
 
     await user.keyboard("{Escape}");
-    expect(
-      screen.queryByRole("dialog", { name: "Search local knowledge" }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
     expect(opener).toHaveFocus();
     expect(onSelect).not.toHaveBeenCalled();
   });
@@ -155,21 +154,19 @@ describe("shared modal accessibility", () => {
   });
 });
 
-const commandItems = [
-  {
-    path: "kb/topics/sampling.md",
-    title: "MCP Source Notes: Sampling",
-    searchIndex: "mcp source notes sampling",
-    searchIndexNormalized: "mcp source notes sampling",
-    searchIndexCompact: "mcpsourcenotessampling",
-  },
-];
+const commandEntries = composeCommandPaletteEntries({
+  documents: [
+    {
+      path: "kb/topics/sampling.md",
+      title: "MCP Source Notes: Sampling",
+      searchIndex: "mcp source notes sampling",
+      searchIndexNormalized: "mcp source notes sampling",
+      searchIndexCompact: "mcpsourcenotessampling",
+    },
+  ],
+});
 
-function CommandBarHarness({
-  onSelect,
-}: {
-  onSelect: (item: (typeof commandItems)[number]) => void;
-}) {
+function CommandBarHarness({ onSelect }: { onSelect: (entry: CommandPaletteEntry) => void }) {
   const [isOpen, setIsOpen] = useState(false);
   return (
     <div>
@@ -177,7 +174,7 @@ function CommandBarHarness({
         Open knowledge search
       </button>
       <CommandBar
-        items={commandItems}
+        entries={commandEntries}
         isOpen={isOpen}
         onOpenChange={setIsOpen}
         onSelect={onSelect}
