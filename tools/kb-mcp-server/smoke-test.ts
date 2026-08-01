@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 const isTypeScriptRuntime = __filename.endsWith(".ts");
 const serverPath = path.join(__dirname, isTypeScriptRuntime ? "server.ts" : "server.js");
 const serverArgs = isTypeScriptRuntime ? ["--import", "tsx", serverPath] : [serverPath];
-const sourceRepoRoot = path.resolve(__dirname, "..", "..");
+const sourceRepoRoot = path.resolve(__dirname, isTypeScriptRuntime ? "../.." : "../../..");
 const smokeRepoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-mcp-smoke-"));
 await fs.cp(path.join(sourceRepoRoot, "demo-kb"), path.join(smokeRepoRoot, "demo-kb"), {
   recursive: true,
