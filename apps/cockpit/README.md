@@ -27,6 +27,15 @@ not expose a remote MCP server, private workspaces, or write access.
 - In local development only, provides evidence-gated Ask with explicit project
   or workspace scope, a live shared capture-review queue, and explicitly scoped
   changed-document deltas with Git/frontmatter/mtime provenance.
+- Names the active workspace and its write policy in every navigation layout.
+  In local development the shell reads `GET /__gke/workspace/context` once per
+  session; that loopback, GET-only adapter projects exactly `id`, `label`,
+  `readOnly`, and `sensitivity` from the single workspace chosen at Vite
+  startup, and never returns repository, scan, or write roots, or any absolute
+  path. Failures degrade to `Workspace unavailable · Verify local
+  configuration` while the rest of the Cockpit stays usable. The public build
+  renders `Demo workspace · Read-only preview` from compile-time constants and
+  omits the endpoint client entirely (`npm run test:production-boundary`).
 
 ## Routes
 

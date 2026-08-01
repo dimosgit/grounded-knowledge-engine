@@ -6,12 +6,22 @@ import App from "../App";
 import { CommandBar } from "../components/CommandBar";
 import { composeCommandPaletteEntries, type CommandPaletteEntry } from "../domain/command-palette";
 
+const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   window.localStorage.clear();
   window.location.hash = "";
+  if (originalScrollIntoView) {
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: originalScrollIntoView,
+    });
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+  }
 });
 
 const entries = composeCommandPaletteEntries({
@@ -117,6 +127,36 @@ describe("command palette surface", () => {
     });
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument(),
+    );
+  });
+
+  test("scrolls an active keyboard option into the visible result area", async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const manyEntries = composeCommandPaletteEntries({
+      documents: Array.from({ length: 12 }, (_unused, index) => ({
+        path: `kb/topics/sampling-${index}.md`,
+        title: `Sampling ${index}`,
+      })),
+    });
+    const user = userEvent.setup();
+    render(<PaletteHarness onSelect={vi.fn()} paletteEntries={manyEntries} />);
+    await user.click(screen.getByRole("button", { name: "Open command palette" }));
+    const combobox = screen.getByRole("combobox");
+    await user.type(combobox, "sampling");
+    const options = screen.getAllByRole("option");
+    scrollIntoView.mockClear();
+
+    await user.keyboard("{ArrowDown}".repeat(8));
+
+    expect(combobox).toHaveAttribute("aria-activedescendant", options[8].id);
+    await waitFor(() =>
+      expect(scrollIntoView).toHaveBeenLastCalledWith({
+        block: "nearest",
+      }),
     );
   });
 

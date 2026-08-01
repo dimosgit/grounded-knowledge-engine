@@ -90,6 +90,11 @@ export function CommandBar({
     : "";
   const resultStatus = buildResultStatus(query, options.length, activeGroupLabel, result.mode);
 
+  useEffect(() => {
+    if (!isOpen || !activeOptionId) return;
+    document.getElementById(activeOptionId)?.scrollIntoView?.({ block: "nearest" });
+  }, [activeOptionId, isOpen]);
+
   function handleInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
       event.preventDefault();

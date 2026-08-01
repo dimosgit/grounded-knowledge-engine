@@ -68,7 +68,6 @@ function QuickRecallCard({ quickRecall, digestQuickView }) {
 export function LibraryView({
   docs,
   palette,
-  operatorRequest,
   onCommand,
   onHub,
   onLibrary,
@@ -128,7 +127,6 @@ export function LibraryView({
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
-      operatorRequest={operatorRequest}
     >
       <div className={`app-shell cockpit-library${isReadingMode ? " reading-mode" : ""}`}>
         <aside className="sidebar">

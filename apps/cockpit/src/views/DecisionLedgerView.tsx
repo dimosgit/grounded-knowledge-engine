@@ -2,7 +2,6 @@ import { AlertTriangle, ChevronRight, Search } from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
 import { OperatorFrame } from "../components/OperatorFrame";
 import type { CommandPaletteBinding } from "../domain/command-palette";
-import type { OperatorActionRequest } from "../domain/operator-inbox";
 import {
   DECISION_LEDGER_FILTERS,
   type DecisionLedgerFilter,
@@ -11,7 +10,6 @@ import {
 
 interface DecisionLedgerViewProps {
   palette: CommandPaletteBinding;
-  operatorRequest?: OperatorActionRequest;
   onCommand: () => void;
   onHub: () => void;
   onLibrary: () => void;
@@ -28,7 +26,6 @@ interface DecisionLedgerViewProps {
 
 export function DecisionLedgerView({
   palette,
-  operatorRequest,
   onCommand,
   onHub,
   onLibrary,
@@ -52,7 +49,6 @@ export function DecisionLedgerView({
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
-      operatorRequest={operatorRequest}
     >
       <div className="mx-auto flex max-w-cockpit flex-col gap-6 px-4 py-8 md:px-8">
         <header className="flex flex-col justify-between gap-4 border-b border-border-subtle pb-6 md:flex-row md:items-end">

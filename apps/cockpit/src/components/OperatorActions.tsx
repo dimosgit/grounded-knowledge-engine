@@ -1,61 +1,35 @@
-import { useCallback, useEffect, useState } from "react";
-import { listCaptureProposals, type CaptureProposalSummary } from "../lib/capture-review-api";
+import { useEffect, useState } from "react";
 import type { GroundedCaptureResult } from "../lib/grounded-ask-api";
+import { useOperatorAttentionValue } from "../hooks/useOperatorAttention";
 import { AskDrawer } from "./AskDrawer";
 import { CaptureReviewDrawer } from "./CaptureReviewDrawer";
 
 interface OperatorActionsProps {
   projectId?: string;
   projectTitle?: string;
-  /** Open the review queue, optionally preselecting one pending proposal. */
-  captureReviewRequest?: { proposalId?: string; requestId: number };
-  /** Open the Ask drawer. Opening reads; it never captures on its own. */
-  askRequest?: { requestId: number };
 }
 
-export function OperatorActions({
-  projectId,
-  projectTitle,
-  captureReviewRequest,
-  askRequest,
-}: OperatorActionsProps) {
-  const [proposals, setProposals] = useState<CaptureProposalSummary[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+/**
+ * Presentation and drawer choreography only. The proposal list, its selection,
+ * and its refresh lifecycle belong to the shared Attention state, so the queue
+ * badge here and the Attention Inbox can never show different numbers.
+ */
+export function OperatorActions({ projectId, projectTitle }: OperatorActionsProps) {
+  const {
+    proposals,
+    selectedProposalId,
+    proposalStatus,
+    proposalError,
+    request,
+    refreshProposals,
+    selectProposal,
+  } = useOperatorAttentionValue();
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [queueLoading, setQueueLoading] = useState(false);
-  const [queueError, setQueueError] = useState("");
 
-  const refreshProposals = useCallback(async (preferredId?: string | null) => {
-    setQueueLoading(true);
-    setQueueError("");
-    try {
-      const next = await listCaptureProposals();
-      setProposals(next);
-      setSelectedId((currentId) => {
-        const requestedId = preferredId === null ? null : preferredId || currentId;
-        return (
-          (requestedId && next.some((item) => item.proposalId === requestedId)
-            ? requestedId
-            : null) ||
-          next[0]?.proposalId ||
-          null
-        );
-      });
-    } catch (requestError) {
-      setQueueError(toMessage(requestError));
-    } finally {
-      setQueueLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshProposals();
-    const refreshOnFocus = () => {
-      if (document.visibilityState !== "hidden") void refreshProposals();
-    };
-    window.addEventListener("focus", refreshOnFocus);
-    return () => window.removeEventListener("focus", refreshOnFocus);
-  }, [refreshProposals]);
+  // Identity follows the shared request object, so a re-render never re-fires
+  // the drawers' open effects; only a new request (with a fresh requestId) does.
+  const captureReviewRequest = request?.action === "capture-review" ? request : undefined;
+  const askRequestId = request?.action === "ask" ? request.requestId : undefined;
 
   useEffect(() => {
     if (!captureReviewRequest) return;
@@ -69,7 +43,7 @@ export function OperatorActions({
   }
 
   function openReview(proposalId?: string | null) {
-    if (proposalId) setSelectedId(proposalId);
+    if (proposalId) selectProposal(proposalId);
     setReviewOpen(true);
   }
 
@@ -79,25 +53,21 @@ export function OperatorActions({
         key={projectId || "workspace"}
         projectId={projectId}
         projectTitle={projectTitle}
-        openRequest={askRequest?.requestId}
+        openRequest={askRequestId}
         onCapture={handleCapture}
         onReviewProposal={openReview}
       />
       <CaptureReviewDrawer
         isOpen={reviewOpen}
         proposals={proposals}
-        selectedId={selectedId}
-        queueLoading={queueLoading}
-        queueError={queueError}
+        selectedId={selectedProposalId}
+        queueLoading={proposalStatus === "loading"}
+        queueError={proposalError}
         onOpen={openReview}
         onClose={() => setReviewOpen(false)}
-        onSelect={setSelectedId}
+        onSelect={selectProposal}
         onRefresh={refreshProposals}
       />
     </>
   );
-}
-
-function toMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Capture review request failed.";
 }

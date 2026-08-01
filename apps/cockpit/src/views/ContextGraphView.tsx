@@ -17,7 +17,6 @@ import { useGraphInteractions } from "../hooks/useGraphInteractions";
 
 export function ContextGraphView({
   palette,
-  operatorRequest,
   onCommand,
   onHub,
   onLibrary,
@@ -65,7 +64,6 @@ export function ContextGraphView({
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
-      operatorRequest={operatorRequest}
     >
       <div className="flex min-h-[calc(100vh-4rem)] flex-col bg-surface-main">
         <section className="border-b border-border-subtle px-4 py-6 md:px-8">

@@ -17,18 +17,15 @@ import type { CommandPaletteBinding } from "../domain/command-palette";
 import {
   OPERATOR_INBOX_KINDS,
   OPERATOR_INBOX_PRIORITIES,
-  composeOperatorInbox,
-  countOperatorInbox,
   filterOperatorInbox,
   type ComposeOperatorInboxInput,
-  type OperatorActionRequest,
   type OperatorDestination,
   type OperatorInboxFilters,
   type OperatorInboxItem,
   type OperatorInboxKind,
   type OperatorInboxPriority,
 } from "../domain/operator-inbox";
-import { useOperatorAttentionSupplement } from "../hooks/useOperatorAttentionSupplement";
+import { useOperatorAttentionValue } from "../hooks/useOperatorAttention";
 
 const KIND_LABELS: Record<(typeof OPERATOR_INBOX_KINDS)[number], string> = {
   all: "All signals",
@@ -60,15 +57,14 @@ const ITEM_PRESENTATION: Record<
 
 interface AttentionViewProps {
   palette: CommandPaletteBinding;
-  operatorRequest?: OperatorActionRequest;
   onCommand: () => void;
   onHub: () => void;
   onLibrary: () => void;
   onProjects: () => void;
   onGraph: () => void;
+  /** Used for project filter labels; the signals themselves come from the
+   * shared Attention state so the shell badge counts the same items. */
   projects: ComposeOperatorInboxInput["projects"];
-  decisions: ComposeOperatorInboxInput["decisions"];
-  questions: ComposeOperatorInboxInput["questions"];
   filters: OperatorInboxFilters;
   onFiltersChange: (filters: OperatorInboxFilters) => void;
   onOpenDestination: (destination: OperatorDestination) => void;
@@ -76,33 +72,29 @@ interface AttentionViewProps {
 
 export function AttentionView({
   palette,
-  operatorRequest,
   onCommand,
   onHub,
   onLibrary,
   onProjects,
   onGraph,
   projects,
-  decisions,
-  questions,
   filters,
   onFiltersChange,
   onOpenDestination,
 }: AttentionViewProps) {
-  const supplement = useOperatorAttentionSupplement(true);
-  const items = useMemo(
-    () =>
-      composeOperatorInbox({
-        projects,
-        decisions,
-        questions,
-        captures: supplement.captures,
-        changes: supplement.changes,
-      }),
-    [decisions, projects, questions, supplement.captures, supplement.changes],
-  );
+  const {
+    items,
+    counts,
+    proposalStatus,
+    proposalError,
+    changeStatus,
+    changeError,
+    refreshChanges,
+    retryFailed,
+  } = useOperatorAttentionValue();
+  const localLoading = proposalStatus === "loading" || changeStatus === "loading";
+  const localFailed = proposalStatus === "error" || changeStatus === "error";
   const visibleItems = useMemo(() => filterOperatorInbox(items, filters), [filters, items]);
-  const counts = useMemo(() => countOperatorInbox(items), [items]);
   const projectOptions = useMemo(
     () =>
       Array.from(
@@ -129,7 +121,6 @@ export function AttentionView({
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
-      operatorRequest={operatorRequest}
     >
       <div className="mx-auto flex max-w-cockpit flex-col gap-6 px-4 py-8 md:px-8">
         <header className="relative overflow-hidden rounded-xl border border-primary/25 bg-surface-container-low p-6 md:p-8">
@@ -208,12 +199,12 @@ export function AttentionView({
           </div>
         </section>
 
-        {(supplement.loading || supplement.captureError || supplement.changeError) && (
+        {(localLoading || localFailed) && (
           <SupplementStatus
-            loading={supplement.loading}
-            captureError={supplement.captureError}
-            changeError={supplement.changeError}
-            onRetry={supplement.refresh}
+            loading={localLoading}
+            captureError={proposalStatus === "error" ? proposalError : ""}
+            changeError={changeStatus === "error" ? changeError : ""}
+            onRetry={retryFailed}
           />
         )}
 
@@ -227,15 +218,31 @@ export function AttentionView({
                 {visibleItems.length} of {items.length} signals shown
               </p>
             </div>
-            {(filters.kind !== "all" || filters.priority !== "all" || filters.projectId) && (
-              <button
-                type="button"
-                onClick={() => onFiltersChange({ kind: "all", priority: "all", projectId: "" })}
-                className="text-label-caps uppercase text-primary"
-              >
-                Clear filters
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {import.meta.env.DEV ? (
+                <button
+                  type="button"
+                  onClick={() => void refreshChanges()}
+                  disabled={changeStatus === "loading"}
+                  className="inline-flex items-center gap-1.5 text-label-caps uppercase text-primary disabled:opacity-50"
+                >
+                  <RefreshCw
+                    size={14}
+                    className={changeStatus === "loading" ? "animate-spin" : undefined}
+                  />
+                  Refresh changes
+                </button>
+              ) : null}
+              {(filters.kind !== "all" || filters.priority !== "all" || filters.projectId) && (
+                <button
+                  type="button"
+                  onClick={() => onFiltersChange({ kind: "all", priority: "all", projectId: "" })}
+                  className="text-label-caps uppercase text-primary"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-border-subtle bg-surface">
