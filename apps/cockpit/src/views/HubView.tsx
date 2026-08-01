@@ -19,7 +19,6 @@ import { OperatorFrame } from "../components/OperatorFrame";
 export function HubView({
   docs,
   palette,
-  operatorRequest,
   onCommand,
   onHub,
   onLibrary,
@@ -57,7 +56,6 @@ export function HubView({
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
-      operatorRequest={operatorRequest}
     >
       <div className="mx-auto flex max-w-cockpit flex-col gap-8 px-4 py-8 md:px-8">
         <section className="relative overflow-hidden rounded-xl border border-primary/25 bg-surface-container-low p-6 shadow-2xl shadow-black/10 md:p-8">

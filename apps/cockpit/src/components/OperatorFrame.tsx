@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import {
   BookOpen,
   Database,
+  Eye,
   Grid2X2,
   Inbox,
   LayoutDashboard,
+  Lock,
   Menu,
   Network,
   PanelLeftClose,
@@ -14,11 +16,19 @@ import {
   Rocket,
   Scale,
   Search,
+  ShieldAlert,
   ShieldCheck,
+  ShieldX,
+  TriangleAlert,
   X,
 } from "lucide-react";
+import type { OperatorAttentionBadge } from "../domain/operator-inbox";
+import type { WorkspaceDisplay, WorkspaceTone } from "../domain/workspace-display";
+import { useOperatorAttentionValue } from "../hooks/useOperatorAttention";
+import { useWorkspaceDisplayValue } from "../hooks/useWorkspaceDisplay";
 import { useModalSurface } from "../hooks/useModalSurface";
 import { OperatorActions } from "./OperatorActions";
+import { PublicOperatorActions } from "./PublicOperatorActions";
 
 export function OperatorFrame({
   activeView,
@@ -32,11 +42,12 @@ export function OperatorFrame({
   onGraph,
   askProjectId = undefined,
   askProjectTitle = undefined,
-  operatorRequest = undefined,
 }) {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const mobileNavCloseRef = useRef<HTMLButtonElement>(null);
   const shouldReduceMotion = useReducedMotion();
+  const workspace = useWorkspaceDisplayValue();
+  const attention = useOperatorAttentionValue();
   const mobileNavModalRef = useModalSurface<HTMLDivElement>({
     isOpen: isMobileNavOpen,
     onClose: () => setIsMobileNavOpen(false),
@@ -59,27 +70,21 @@ export function OperatorFrame({
     }
   }, [isNavCollapsed]);
 
-  // Memoized so a re-render never re-fires the drawers' open effects; only a new
-  // operator request (with a fresh requestId) changes identity.
-  const captureReviewRequest = useMemo(
-    () =>
-      operatorRequest?.action === "capture-review"
-        ? { proposalId: operatorRequest.proposalId, requestId: operatorRequest.requestId }
-        : undefined,
-    [operatorRequest],
-  );
-  const askRequest = useMemo(
-    () =>
-      operatorRequest?.action === "ask" ? { requestId: operatorRequest.requestId } : undefined,
-    [operatorRequest],
-  );
-
-  const navItems = [
+  const navItems: Array<{
+    key: string;
+    label: string;
+    icon: typeof Inbox;
+    badge?: OperatorAttentionBadge;
+    onClick?: () => void;
+  }> = [
     { key: "hub", label: "Mission Control", icon: LayoutDashboard, onClick: onHub },
     {
       key: "attention",
       label: "Attention Inbox",
       icon: Inbox,
+      // The badge counts the full unfiltered Attention queue from the same
+      // composer the inbox renders, so the two can never disagree.
+      badge: attention.badge,
       onClick: () => {
         window.location.hash = "/attention";
       },
@@ -169,7 +174,7 @@ export function OperatorFrame({
                 <X size={18} />
               </button>
 
-              <WorkspaceStatus />
+              <WorkspaceStatus workspace={workspace} />
 
               <nav className="flex flex-1 flex-col gap-1" aria-label="Mobile operator views">
                 {navItems.map((item) => {
@@ -187,9 +192,11 @@ export function OperatorFrame({
                       }`}
                       onClick={() => runNavAction(item.onClick)}
                       aria-current={isActive ? "page" : undefined}
+                      aria-label={item.badge?.label}
                     >
                       <Icon className="shrink-0" size={20} />
                       {item.label}
+                      {item.badge?.text ? <NavBadge text={item.badge.text} /> : null}
                     </button>
                   );
                 })}
@@ -244,7 +251,7 @@ export function OperatorFrame({
           </button>
         </div>
 
-        <WorkspaceStatus collapsed={isNavCollapsed} />
+        <WorkspaceStatus workspace={workspace} collapsed={isNavCollapsed} />
 
         <nav className="flex flex-1 flex-col gap-1" aria-label="Operator views">
           {navItems.map((item) => {
@@ -262,11 +269,22 @@ export function OperatorFrame({
                 } ${isNavCollapsed ? "h-11 justify-center px-0" : "gap-3 px-3 py-2"}`}
                 onClick={() => runNavAction(item.onClick)}
                 aria-current={isActive ? "page" : undefined}
-                aria-label={item.label}
-                title={item.label}
+                aria-label={item.badge?.label || item.label}
+                title={item.badge?.label || item.label}
               >
-                <Icon className="shrink-0" size={20} />
+                <span className="relative flex shrink-0 items-center">
+                  <Icon size={20} />
+                  {isNavCollapsed && item.badge?.text ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-2.5 -top-2 flex h-[17px] min-w-[17px] items-center justify-center rounded-full border border-surface-sidebar bg-primary px-1 text-[10px] font-semibold leading-none text-on-primary"
+                    >
+                      {item.badge.text}
+                    </span>
+                  ) : null}
+                </span>
                 <span className={isNavCollapsed ? "sr-only" : ""}>{item.label}</span>
+                {!isNavCollapsed && item.badge?.text ? <NavBadge text={item.badge.text} /> : null}
               </button>
             );
           })}
@@ -301,13 +319,10 @@ export function OperatorFrame({
               <ShieldCheck size={14} />
               Local engine
             </div>
-            {import.meta.env.DEV && (
-              <OperatorActions
-                projectId={askProjectId}
-                projectTitle={askProjectTitle}
-                captureReviewRequest={captureReviewRequest}
-                askRequest={askRequest}
-              />
+            {import.meta.env.DEV ? (
+              <OperatorActions projectId={askProjectId} projectTitle={askProjectTitle} />
+            ) : (
+              <PublicOperatorActions request={attention.request} />
             )}
             <button
               type="button"
@@ -329,32 +344,119 @@ export function OperatorFrame({
   );
 }
 
-function WorkspaceStatus({ collapsed = false }: { collapsed?: boolean }) {
-  const isDemo = import.meta.env.PROD;
-  const label = isDemo ? "Demo workspace" : "Local workspace";
-  const policy = isDemo ? "Read-only preview" : "Workspace policy active";
+/**
+ * The visual count is capped and hidden from assistive technology; the exact
+ * number lives in the navigation control's accessible name. `min-w` reserves
+ * the two-digit width so growing from 9 to 10 never shifts the row.
+ */
+function NavBadge({ text }: { text: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="ml-auto flex h-5 min-w-[26px] shrink-0 items-center justify-center rounded-full bg-primary/15 px-1.5 text-[11px] font-semibold leading-none text-primary"
+    >
+      {text}
+    </span>
+  );
+}
+
+/**
+ * Tone styling is paired with an icon and explicit text everywhere it appears,
+ * so color never carries the read-only, sensitive, restricted, or demo meaning
+ * on its own.
+ */
+const WORKSPACE_TONES: Record<
+  WorkspaceTone,
+  { icon: typeof Database; container: string; accent: string }
+> = {
+  writable: {
+    icon: Database,
+    container: "border-status-done/30 bg-status-done/5",
+    accent: "text-status-done",
+  },
+  "read-only": {
+    icon: Lock,
+    container: "border-primary/20 bg-primary-container/10",
+    accent: "text-primary",
+  },
+  sensitive: {
+    icon: ShieldAlert,
+    container: "border-status-blocked/30 bg-status-blocked/5",
+    accent: "text-status-blocked",
+  },
+  restricted: {
+    icon: ShieldX,
+    container: "border-status-blocked/40 bg-status-blocked/10",
+    accent: "text-status-blocked",
+  },
+  demo: {
+    icon: Eye,
+    container: "border-primary/20 bg-primary-container/10",
+    accent: "text-primary",
+  },
+  error: {
+    icon: TriangleAlert,
+    container: "border-status-blocked/30 bg-status-blocked/5",
+    accent: "text-status-blocked",
+  },
+  neutral: {
+    icon: Database,
+    container: "border-border-subtle bg-surface-container",
+    accent: "text-on-surface-variant",
+  },
+};
+
+function WorkspaceStatus({
+  workspace,
+  collapsed = false,
+}: {
+  workspace: WorkspaceDisplay;
+  collapsed?: boolean;
+}) {
+  const tone = WORKSPACE_TONES[workspace.tone];
+  const Icon = tone.icon;
 
   return (
     <div
-      className={`mb-6 rounded-lg border border-primary/20 bg-primary-container/10 ${
-        collapsed ? "flex h-12 items-center justify-center px-0" : "p-3"
+      // The wrapper reserves its tallest layout in both modes, so navigation
+      // never shifts as the workspace moves from loading to resolved or failed.
+      className={`mb-6 rounded-lg border ${tone.container} ${
+        collapsed ? "flex h-12 items-center justify-center px-0" : "min-h-[104px] p-3"
       }`}
-      title={`${label} · ${policy}`}
-      aria-label={`${label}: ${policy}`}
+      title={collapsed ? workspace.accessibleLabel : workspace.summary}
+      role="status"
+      aria-label={workspace.accessibleLabel}
     >
       {collapsed ? (
-        <Database size={19} className="text-primary" />
+        <>
+          <Icon size={19} className={tone.accent} aria-hidden="true" />
+          <span className="sr-only">{workspace.accessibleLabel}</span>
+        </>
       ) : (
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-primary-container/20 text-primary">
-            <Database size={17} />
+          <div
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface-container ${tone.accent}`}
+          >
+            <Icon size={17} aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <div className="truncate text-body-md font-semibold text-on-surface">{label}</div>
-            <div className="mt-0.5 flex items-center gap-1.5 text-metadata text-status-done">
-              <span className="h-1.5 w-1.5 rounded-full bg-status-done" />
-              {policy}
+            <div className="truncate text-body-md font-semibold text-on-surface">
+              {workspace.label}
             </div>
+            <div className={`mt-0.5 flex items-start gap-1.5 text-metadata ${tone.accent}`}>
+              <span
+                className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-current"
+                aria-hidden="true"
+              />
+              {/* Policy and sensitivity wrap rather than truncate: the write
+                  boundary must never be cut off mid-word in the rail. */}
+              <span>{workspace.detailText}</span>
+            </div>
+            {workspace.workspaceId && (
+              <div className="mt-0.5 truncate font-mono text-[11px] text-on-surface-variant">
+                {workspace.workspaceId}
+              </div>
+            )}
           </div>
         </div>
       )}

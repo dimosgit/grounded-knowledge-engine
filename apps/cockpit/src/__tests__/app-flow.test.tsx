@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../App";
 
@@ -146,6 +146,110 @@ describe("cockpit major flows", () => {
     expect(screen.queryByRole("button", { name: /Router Project Board/i })).not.toBeInTheDocument();
   });
 
+  test("shares one live attention state across the shell badge, inbox, and capture review", async () => {
+    const proposalId = "capture-20260731090000-shared00001";
+    const calls = { proposals: 0, review: 0 };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/proposals")) {
+        calls.proposals += 1;
+        return jsonResponse({
+          proposals: [
+            {
+              proposalId,
+              createdAt: "2026-07-31T09:00:00.000Z",
+              sourceOperation: "answer",
+              proposedAction: "append",
+              kind: "topic",
+              title: "Shared attention capture",
+              path: "kb/topics/shared-attention-capture.md",
+              requiresReview: true,
+              reviewReasons: ["existing-target"],
+              duplicateCandidateCount: 0,
+            },
+          ],
+        });
+      }
+      if (url.startsWith("/__gke/review")) {
+        calls.review += 1;
+        return jsonResponse({ review: { asOf: "2026-07-31", since: "2026-07-24", projects: [] } });
+      }
+      if (url.startsWith("/__gke/workspace/context")) {
+        return jsonResponse({
+          workspace: {
+            id: "local-operator",
+            label: "Local Operator",
+            readOnly: false,
+            sensitivity: "personal",
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    window.location.hash = "#/attention";
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "What needs your attention now?" }),
+    ).toBeInTheDocument();
+    const pendingCapture = await screen.findByText("Shared attention capture");
+    expect(pendingCapture).toBeInTheDocument();
+
+    // The inbox total and the navigation badge come from the same composed list.
+    const shown = await screen.findByText(/of \d+ signals shown/);
+    const total = Number(/of (\d+) signals shown/.exec(shown.textContent || "")?.[1]);
+    expect(total).toBeGreaterThan(1);
+    const desktopNav = screen.getByRole("navigation", { name: "Operator views" });
+    expect(
+      within(desktopNav).getByRole("button", { name: `Attention Inbox, ${total} signals` }),
+    ).toBeInTheDocument();
+    // The header queue badge is the same proposal array, fetched exactly once.
+    expect(
+      screen.getByRole("button", { name: "Open capture review queue", hidden: true }),
+    ).toHaveTextContent("1");
+    expect(calls.proposals).toBe(1);
+    expect(calls.review).toBe(1);
+  });
+
+  test("refreshes changed evidence on demand without duplicating the proposal list", async () => {
+    const calls = { proposals: 0, review: 0 };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/proposals")) {
+        calls.proposals += 1;
+        return jsonResponse({ proposals: [] });
+      }
+      if (url.startsWith("/__gke/review")) {
+        calls.review += 1;
+        return jsonResponse({ review: { asOf: "2026-07-31", since: "2026-07-24", projects: [] } });
+      }
+      if (url.startsWith("/__gke/workspace/context")) {
+        return jsonResponse({
+          workspace: {
+            id: "local-operator",
+            label: "Local Operator",
+            readOnly: false,
+            sensitivity: "personal",
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+
+    window.location.hash = "#/attention";
+    const user = userEvent.setup();
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "What needs your attention now?" });
+    await waitFor(() => expect(calls.review).toBe(1));
+    expect(calls.proposals).toBe(1);
+
+    await user.click(screen.getByRole("button", { name: "Refresh changes" }));
+    await waitFor(() => expect(calls.review).toBe(2));
+    expect(calls.proposals).toBe(1);
+  });
+
   test("falls back safely when attention route filters are malformed", async () => {
     window.location.hash = "#/attention?kind=write&priority=critical&project=../../private";
     render(<App />);
@@ -268,3 +372,10 @@ describe("cockpit major flows", () => {
     });
   });
 });
+
+function jsonResponse(value: unknown, status = 200): Response {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}

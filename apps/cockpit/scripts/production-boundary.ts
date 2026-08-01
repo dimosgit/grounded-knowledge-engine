@@ -7,6 +7,7 @@ export const forbiddenLocalEndpointMarkers = [
   "/__gke/capture",
   "/__gke/review",
   "/__gke/decisions/review",
+  "/__gke/workspace/context",
   "/__board/lifecycle",
 ] as const;
 

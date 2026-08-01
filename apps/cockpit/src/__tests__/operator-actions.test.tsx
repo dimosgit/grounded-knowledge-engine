@@ -1,7 +1,10 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { OperatorActions } from "../components/OperatorActions";
+import { PublicOperatorActions } from "../components/PublicOperatorActions";
+import type { OperatorAttention } from "../hooks/useOperatorAttention";
+import { AttentionBadgeProbe, AttentionHarness } from "./support/attention-harness";
 
 afterEach(() => {
   cleanup();
@@ -48,7 +51,12 @@ describe("local operator actions", () => {
     });
 
     const user = userEvent.setup();
-    render(<OperatorActions projectId="project-a" projectTitle="Project A" />);
+    render(
+      <AttentionHarness>
+        <OperatorActions projectId="project-a" projectTitle="Project A" />
+        <AttentionBadgeProbe />
+      </AttentionHarness>,
+    );
     await waitFor(() => expect(listCount).toBe(1));
     expect(screen.queryByText("Capture review queue")).not.toBeInTheDocument();
 
@@ -68,6 +76,10 @@ describe("local operator actions", () => {
         screen.getByRole("button", { name: "Open capture review queue", hidden: true }),
       ).toHaveTextContent("1"),
     );
+    // Queue badge and Attention badge are the same state, refreshed exactly once.
+    expect(screen.getByTestId("probe-badge-text")).toHaveTextContent("1");
+    expect(screen.getByTestId("probe-selected")).toHaveTextContent(proposalId);
+    expect(listCount).toBe(2);
     expect(screen.queryByText("Capture review queue")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Review now" }));
@@ -78,18 +90,30 @@ describe("local operator actions", () => {
   test("resets Ask state when scope changes from one project to another and then workspace", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ proposals: [] }));
     const user = userEvent.setup();
-    const { rerender } = render(<OperatorActions projectId="project-a" projectTitle="Project A" />);
+    const { rerender } = render(
+      <AttentionHarness>
+        <OperatorActions projectId="project-a" projectTitle="Project A" />
+      </AttentionHarness>,
+    );
 
     await user.click(screen.getByRole("button", { name: "Ask grounded knowledge" }));
     await user.type(screen.getByLabelText("Question"), "Project A draft question");
     expect(screen.getByText("Scope: Project A (project-a)")).toBeInTheDocument();
 
-    rerender(<OperatorActions projectId="project-b" projectTitle="Project B" />);
+    rerender(
+      <AttentionHarness>
+        <OperatorActions projectId="project-b" projectTitle="Project B" />
+      </AttentionHarness>,
+    );
     await user.click(screen.getByRole("button", { name: "Ask grounded knowledge" }));
     expect(screen.getByText("Scope: Project B (project-b)")).toBeInTheDocument();
     expect(screen.getByLabelText("Question")).toHaveValue("");
 
-    rerender(<OperatorActions />);
+    rerender(
+      <AttentionHarness>
+        <OperatorActions />
+      </AttentionHarness>,
+    );
     await user.click(screen.getByRole("button", { name: "Ask grounded knowledge" }));
     expect(screen.getByText("Scope: Workspace")).toBeInTheDocument();
     expect(screen.getByLabelText("Question")).toHaveValue("");
@@ -97,28 +121,60 @@ describe("local operator actions", () => {
 
   test("opens the exact capture requested from the Attention inbox", async () => {
     const proposalId = "capture-20260730123000-attention";
+    const otherId = "capture-20260730123000-other";
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/proposals")) {
-        return jsonResponse({ proposals: [proposalSummary(proposalId)] });
+        return jsonResponse({
+          proposals: [proposalSummary(otherId), proposalSummary(proposalId)],
+        });
       }
       if (url.endsWith(`/proposals/${proposalId}`)) {
         return jsonResponse(proposalPreview(proposalId));
       }
       throw new Error(`Unexpected request: ${url}`);
     });
+    let attention: OperatorAttention | undefined;
 
     render(
-      <OperatorActions
-        captureReviewRequest={{
-          proposalId,
-          requestId: 1,
-        }}
-      />,
+      <AttentionHarness onAttention={(value) => (attention = value)}>
+        <OperatorActions />
+      </AttentionHarness>,
     );
+    await waitFor(() => expect(attention?.proposalStatus).toBe("ready"));
+
+    // The inbox row and the command palette both go through this one entry point.
+    await act(async () => {
+      attention?.requestCaptureReview(proposalId);
+    });
 
     expect(await screen.findByRole("heading", { name: "Exact proposed note" })).toBeInTheDocument();
     expect(screen.getByText("Proposed body for the selected proposal")).toBeInTheDocument();
+  });
+});
+
+describe("hosted preview operator actions", () => {
+  test("opens both read-only review destinations without making a request", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <PublicOperatorActions request={{ action: "ask", requestId: 1 }} />,
+    );
+
+    expect(
+      await screen.findByRole("dialog", { name: "Ask grounded knowledge" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Hosted preview · read-only")).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Close Ask grounded knowledge" }));
+    expect(
+      screen.queryByRole("dialog", { name: "Ask grounded knowledge" }),
+    ).not.toBeInTheDocument();
+
+    rerender(<PublicOperatorActions request={{ action: "capture-review", requestId: 2 }} />);
+    expect(await screen.findByRole("dialog", { name: "Capture review queue" })).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 

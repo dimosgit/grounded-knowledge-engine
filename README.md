@@ -457,6 +457,12 @@ unbounded full-body substring search so startup size does not scale with the
 complete corpus. The Cockpit provides:
 
 - Mission Control and a filterable Attention Inbox;
+- a workspace identity panel that names the active workspace, its stable ID,
+  whether local writes are enabled, and any non-default sensitivity — served in
+  local development by a read-only loopback adapter that projects exactly four
+  safe fields and never returns repository, scan, or write roots; the public
+  build states `Demo workspace · Read-only preview` from compile-time constants
+  and never ships the endpoint;
 - a typed `Cmd/Ctrl+K` command palette that reaches documents, projects,
   decisions, and primary views, and opens review surfaces without writing —
   it ranks bounded, grouped results from catalog metadata only, never loads

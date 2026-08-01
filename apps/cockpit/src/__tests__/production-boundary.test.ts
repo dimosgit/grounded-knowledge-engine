@@ -24,6 +24,24 @@ afterEach(async () => {
 });
 
 describe("production bundle boundary", () => {
+  it("guards every local-only development endpoint", () => {
+    expect(forbiddenLocalEndpointMarkers).toContain("/__gke/workspace/context");
+    expect(new Set(forbiddenLocalEndpointMarkers).size).toBe(forbiddenLocalEndpointMarkers.length);
+  });
+
+  it("rejects a bundle that shipped the workspace context endpoint", async () => {
+    const directory = await temporaryDirectory();
+    await fs.mkdir(path.join(directory, "assets"), { recursive: true });
+    await fs.writeFile(
+      path.join(directory, "assets", "app.js"),
+      'fetch("/__gke/workspace/context");',
+    );
+
+    await expect(assertProductionBoundary(directory)).rejects.toThrow(
+      "/__gke/workspace/context assets/app.js",
+    );
+  });
+
   it("fails when the production build directory is missing", async () => {
     const directory = await temporaryDirectory();
 

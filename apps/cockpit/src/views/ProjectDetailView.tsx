@@ -82,7 +82,6 @@ function TaskRow({ task, dotClassName, muted = false }) {
 
 export function ProjectDetailView({
   palette,
-  operatorRequest,
   onCommand,
   onHub,
   onLibrary,
@@ -155,7 +154,6 @@ export function ProjectDetailView({
       onGraph={onGraph}
       askProjectId={activeProject?.id}
       askProjectTitle={activeProject?.title}
-      operatorRequest={operatorRequest}
     >
       <div className="mx-auto flex max-w-[1200px] flex-col gap-10 px-4 py-8 md:px-8">
         {bodyStatus === "loading" && (

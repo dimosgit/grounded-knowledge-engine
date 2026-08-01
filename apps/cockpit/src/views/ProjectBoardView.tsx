@@ -13,7 +13,6 @@ const columns = [
 
 export function ProjectBoardView({
   palette,
-  operatorRequest,
   onCommand,
   onHub,
   onLibrary,
@@ -38,7 +37,6 @@ export function ProjectBoardView({
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
-      operatorRequest={operatorRequest}
     >
       <div className="px-4 pt-8 md:px-8">
         <h1 className="font-display text-display-lg text-on-surface">Project Board</h1>

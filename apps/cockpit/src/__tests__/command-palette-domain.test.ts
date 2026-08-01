@@ -156,6 +156,23 @@ describe("command palette ranking", () => {
     ]);
   });
 
+  test("preserves relevance order when results are grouped for rendering", () => {
+    const entries = composeCommandPaletteEntries({
+      documents: [{ path: "kb/topics/router.md", title: "Router" }],
+      projects: [{ id: "router-rollout", title: "Router Rollout" }],
+    });
+
+    const ranked = rankCommandPaletteEntries(entries, "router");
+    const result = buildCommandPaletteResult({ entries, query: "router" });
+
+    expect(ranked.map((entry) => entry.id)).toEqual([
+      "document:kb/topics/router.md",
+      "project:router-rollout",
+    ]);
+    expect(result.options.map((entry) => entry.id)).toEqual(ranked.map((entry) => entry.id));
+    expect(result.groups.map((group) => group.label)).toEqual(["Documents", "Projects"]);
+  });
+
   test("breaks score ties by kind and then by id, deterministically", () => {
     const shared = "Pilot Location";
     const entries = composeCommandPaletteEntries({
@@ -202,6 +219,11 @@ describe("command palette ranking", () => {
 
     const result = buildCommandPaletteResult({ entries, query: "sampling" });
     expect(result.options).toHaveLength(MAX_COMMAND_PALETTE_RESULTS);
+    expect(result.groups).toHaveLength(1);
+    expect(result.groups[0]).toMatchObject({
+      label: "Documents",
+      entries: result.options,
+    });
   });
 
   test("returns nothing for a blank query", () => {
@@ -242,13 +264,13 @@ describe("command palette result composition", () => {
     expect(new Set(result.options.map((entry) => entry.id)).size).toBe(result.options.length);
   });
 
-  test("groups typed results by kind in a stable order", () => {
+  test("groups typed results by kind without changing relevance order", () => {
     const result = buildCommandPaletteResult({ entries: composeAll(), query: "router" });
     expect(result.mode).toBe("search");
     expect(result.groups.map((group) => group.label)).toEqual([
       "Projects",
-      "Decisions",
       "Documents",
+      "Decisions",
     ]);
     expect(result.options).toEqual(result.groups.flatMap((group) => group.entries));
   });

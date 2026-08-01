@@ -6,11 +6,9 @@ import { DecisionReviewPanel } from "../components/DecisionReviewPanel";
 import { OperatorFrame } from "../components/OperatorFrame";
 import type { CommandPaletteBinding } from "../domain/command-palette";
 import { buildDecisionEvidenceChanges, type DecisionSummary } from "../domain/decisions";
-import type { OperatorActionRequest } from "../domain/operator-inbox";
 
 interface DecisionReplayViewProps {
   palette: CommandPaletteBinding;
-  operatorRequest?: OperatorActionRequest;
   onCommand: () => void;
   onHub: () => void;
   onLibrary: () => void;
@@ -28,7 +26,6 @@ interface DecisionReplayViewProps {
 
 export function DecisionReplayView({
   palette,
-  operatorRequest,
   onCommand,
   onHub,
   onLibrary,
@@ -56,7 +53,6 @@ export function DecisionReplayView({
       onLibrary={onLibrary}
       onProjects={onProjects}
       onGraph={onGraph}
-      operatorRequest={operatorRequest}
     >
       <div className="mx-auto flex max-w-cockpit flex-col gap-6 px-4 py-8 md:px-8">
         <button

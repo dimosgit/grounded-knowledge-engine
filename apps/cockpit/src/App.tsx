@@ -60,7 +60,6 @@ import {
   type DecisionLedgerFilter,
 } from "./domain/decisions";
 import {
-  type OperatorActionRequest,
   type OperatorDestination,
   type OperatorInboxKindFilter,
   type OperatorInboxPriorityFilter,
@@ -84,6 +83,7 @@ import {
   setHashProject,
   setHashProjects,
 } from "./lib/routes";
+import { OperatorAttentionProvider, useOperatorAttention } from "./hooks/useOperatorAttention";
 import { useRecentDestinations } from "./hooks/useRecentDestinations";
 import { useRecentPaths } from "./hooks/useRecentPaths";
 import { useRouteSync } from "./hooks/useRouteSync";
@@ -182,7 +182,6 @@ export default function App() {
   });
   const [isReadingMode, setIsReadingMode] = useState(false);
   const [isCommandBarOpen, setIsCommandBarOpen] = useState(false);
-  const [operatorRequest, setOperatorRequest] = useState<OperatorActionRequest | undefined>();
   const [moduleContextByPath, setModuleContextByPath] = useState({});
   const [selectedProjectId, setSelectedProjectId] = useState(initialRoute.projectId || "");
   const [selectedDecisionId, setSelectedDecisionId] = useState(initialRoute.decisionId || "");
@@ -526,17 +525,10 @@ export default function App() {
     return goToGraph();
   }
 
-  /**
-   * Opening a review surface is navigation, not a mutation: the drawer still owns
-   * every write and still asks before it makes one. A monotonic requestId keeps
-   * repeat requests for the same action observable without colliding.
-   */
   function requestOperatorAction(action: OperatorReviewAction, proposalId?: string) {
-    setOperatorRequest((current) => ({
-      action,
-      proposalId,
-      requestId: (current?.requestId ?? 0) + 1,
-    }));
+    // The shared Attention state owns the request so the drawers, the inbox,
+    // and the shell badge react to exactly one source.
+    attention.requestOperatorAction(action, proposalId);
   }
 
   function openOperatorDestination(destination: OperatorDestination) {
@@ -674,9 +666,10 @@ export default function App() {
         documents: docs,
         projects: projectSummaries,
         decisions: decisionSummaries,
-        // Review drawers exist only in the local dev shell; the static public
-        // build must never advertise a control it cannot honor.
-        includeReviewActions: import.meta.env.DEV,
+        // Local development opens the authoritative review tools. The static
+        // preview keeps the same destinations reachable through read-only
+        // explanatory drawers without bundling local endpoint adapters.
+        includeReviewActions: true,
       }),
     [decisionSummaries, docs, projectSummaries],
   );
@@ -739,250 +732,255 @@ export default function App() {
     activeDecisionSummary,
   ]);
 
-  if (viewMode === "attention") {
-    return (
-      <Suspense fallback={<ViewLoading label="attention inbox" />}>
-        <AttentionView
-          palette={palette}
-          operatorRequest={operatorRequest}
-          onCommand={() => setIsCommandBarOpen(true)}
-          onHub={goToHub}
-          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-          onProjects={goToProjects}
-          onGraph={goToGraph}
-          projects={projectSummaries}
-          decisions={decisionSummaries}
-          questions={openQuestionItems}
-          filters={{ kind: inboxKind, priority: inboxPriority, projectId: inboxProjectId }}
-          onFiltersChange={goToAttention}
-          onOpenDestination={openOperatorDestination}
-        />
-      </Suspense>
-    );
-  }
+  const attention = useOperatorAttention({
+    projects: projectSummaries,
+    decisions: decisionSummaries,
+    questions: openQuestionItems,
+    // Changed evidence is only rendered by the Attention Inbox, so it loads
+    // when that route is active rather than on every screen.
+    changesActive: viewMode === "attention",
+  });
 
-  if (viewMode === "hub") {
+  function renderActiveView() {
+    if (viewMode === "attention") {
+      return (
+        <Suspense fallback={<ViewLoading label="attention inbox" />}>
+          <AttentionView
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onHub={goToHub}
+            onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+            onProjects={goToProjects}
+            onGraph={goToGraph}
+            projects={projectSummaries}
+            filters={{ kind: inboxKind, priority: inboxPriority, projectId: inboxProjectId }}
+            onFiltersChange={goToAttention}
+            onOpenDestination={openOperatorDestination}
+          />
+        </Suspense>
+      );
+    }
+
+    if (viewMode === "hub") {
+      return (
+        <Suspense fallback={<ViewLoading label="operator hub" />}>
+          <HubView
+            docs={docs}
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onHub={goToHub}
+            onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+            onProjects={goToProjects}
+            onGraph={goToGraph}
+            activeProject={activeProject}
+            activeModule={activeModuleForHub}
+            openQuestionsCount={openQuestionsCount}
+            projectCount={projectSummaries.length}
+            openQuestionItems={openQuestionItems}
+            tracks={tracks}
+            selectedTrack={selectedTrack}
+            selectedTrackKey={selectedTrackKey}
+            onTrackChange={setActiveTrack}
+            learningItemOrder={learningItemOrder}
+            learningItemLabels={learningItemLabels}
+            learningItemDescriptions={learningItemDescriptions}
+            onEnterLibrary={enterLibrary}
+            recentDocs={recentDocs}
+            onOpenDoc={openDoc}
+            getDocBadge={getDocBadge}
+            attentionCounts={attentionCounts}
+            attentionProjects={attentionProjects}
+            onOpenAttention={() => goToAttention({ kind: "all", priority: "all", projectId: "" })}
+            onAttentionFilter={openAttentionQueue}
+            onOpenProject={openProject}
+          />
+        </Suspense>
+      );
+    }
+
+    if (viewMode === "projects") {
+      return (
+        <Suspense fallback={<ViewLoading label="project board" />}>
+          <ProjectBoardView
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onHub={goToHub}
+            onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+            onProjects={goToProjects}
+            onGraph={goToGraph}
+            projectColumns={projectColumns}
+            onOpenProject={openProject}
+            onMoveProject={moveProject}
+            attentionFilter={projectAttentionFilter}
+            onAttentionFilterChange={setProjectAttentionFilter}
+            attentionCounts={attentionCounts}
+          />
+        </Suspense>
+      );
+    }
+
+    if (viewMode === "decisions") {
+      return (
+        <Suspense fallback={<ViewLoading label="decision ledger" />}>
+          <DecisionLedgerView
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onHub={goToHub}
+            onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+            onProjects={goToProjects}
+            onGraph={goToGraph}
+            decisions={filteredDecisionSummaries}
+            counts={decisionCounts}
+            filter={decisionLedgerFilter}
+            onFilterChange={(filter) => {
+              setDecisionLedgerFilter(filter);
+              setHashDecisions(filter);
+            }}
+            query={decisionQuery}
+            onQueryChange={setDecisionQuery}
+            onOpenDecision={openDecision}
+          />
+        </Suspense>
+      );
+    }
+
+    if (viewMode === "decision") {
+      const bodyStatus =
+        activeDecisionResult.error && activeDecisionBody.status === "ready"
+          ? "error"
+          : activeDecisionBody.status;
+      return (
+        <Suspense fallback={<ViewLoading label="decision replay" />}>
+          <DecisionReplayView
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onHub={goToHub}
+            onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+            onProjects={goToProjects}
+            onGraph={goToGraph}
+            summary={activeDecisionSummary}
+            decision={activeDecisionResult.decision}
+            bodyStatus={bodyStatus}
+            bodyError={activeDecisionResult.error || activeDecisionBody.error}
+            onRetryBody={activeDecisionBody.retry}
+            onReviewApplied={() => {
+              window.setTimeout(activeDecisionBody.retry, 500);
+            }}
+            onBack={() => goToDecisions(decisionLedgerFilter)}
+            onOpenDoc={openDoc}
+          />
+        </Suspense>
+      );
+    }
+
+    if (viewMode === "project") {
+      return (
+        <Suspense fallback={<ViewLoading label="project details" />}>
+          <ProjectDetailView
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onHub={goToHub}
+            onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+            onProjects={goToProjects}
+            onGraph={goToGraph}
+            activeProject={activeProject}
+            linkedDocs={activeProjectLinkedDocs}
+            onOpenDoc={openDoc}
+            bodyStatus={activeProjectBody.status}
+            bodyError={activeProjectBody.error}
+            onRetryBody={activeProjectBody.retry}
+          />
+        </Suspense>
+      );
+    }
+
+    if (viewMode === "graph") {
+      return (
+        <Suspense
+          fallback={
+            <div className="min-h-screen bg-surface-main p-8 text-body-md text-on-surface-variant">
+              Loading context graph…
+            </div>
+          }
+        >
+          <ContextGraphView
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onHub={goToHub}
+            onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
+            onProjects={goToProjects}
+            onGraph={goToGraph}
+            contextGraph={contextGraph}
+            graphFocusOption={graphFocusOption}
+            graphFocusOptions={graphFocusOptions}
+            graphQuery={graphQuery}
+            onGraphQueryChange={setGraphQuery}
+            onFocusGraphPath={focusGraphPath}
+            onOpenGraphNode={openGraphNode}
+          />
+        </Suspense>
+      );
+    }
+
     return (
-      <Suspense fallback={<ViewLoading label="operator hub" />}>
-        <HubView
+      <Suspense fallback={<ViewLoading label="knowledge library" />}>
+        <LibraryView
           docs={docs}
           palette={palette}
-          operatorRequest={operatorRequest}
           onCommand={() => setIsCommandBarOpen(true)}
           onHub={goToHub}
           onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
           onProjects={goToProjects}
           onGraph={goToGraph}
-          activeProject={activeProject}
-          activeModule={activeModuleForHub}
-          openQuestionsCount={openQuestionsCount}
-          projectCount={projectSummaries.length}
-          openQuestionItems={openQuestionItems}
-          tracks={tracks}
-          selectedTrack={selectedTrack}
-          selectedTrackKey={selectedTrackKey}
-          onTrackChange={setActiveTrack}
+          isReadingMode={isReadingMode}
+          onToggleReadingMode={() => setIsReadingMode((current) => !current)}
+          displayTrackLabel={displayTrackLabel}
+          scopedDocs={scopedDocs}
+          curationStats={curationStats}
+          query={query}
+          onQueryChange={setQuery}
+          activeTrack={activeTrack}
+          onActiveTrackChange={setActiveTrack}
+          trackFilterOptions={trackFilterOptions}
+          activeItemType={activeItemType}
+          onActiveItemTypeChange={setActiveItemType}
           learningItemOrder={learningItemOrder}
           learningItemLabels={learningItemLabels}
-          learningItemDescriptions={learningItemDescriptions}
-          onEnterLibrary={enterLibrary}
-          recentDocs={recentDocs}
+          libraryItemCounts={libraryItemCounts}
+          visibleTags={visibleTags}
+          activeTag={activeTag}
+          onActiveTagChange={setActiveTag}
+          tagLabels={tagLabels}
+          tagCounts={tagCounts}
+          hideMerged={hideMerged}
+          onHideMergedChange={setHideMerged}
+          groupedDocs={groupedDocs}
+          filteredDocs={filteredDocs}
+          activeDoc={activeDoc}
+          activeDocInFilter={activeDocInFilter}
+          activeDocMetrics={activeDocMetrics}
+          activeBreadcrumbs={activeBreadcrumbs}
+          activeModuleDoc={activeModuleDoc}
+          digestQuickView={digestQuickView}
+          quickRecall={quickRecall}
+          readableDocContent={readableDocContent}
+          activeDocBodyStatus={activeDocBody.status}
+          activeDocBodyError={activeDocBody.error}
+          onRetryActiveDocBody={activeDocBody.retry}
           onOpenDoc={openDoc}
+          onRevealActiveDoc={revealActiveDoc}
+          renderHighlighted={renderHighlighted}
           getDocBadge={getDocBadge}
-          attentionCounts={attentionCounts}
-          attentionProjects={attentionProjects}
-          onOpenAttention={() => goToAttention({ kind: "all", priority: "all", projectId: "" })}
-          onAttentionFilter={openAttentionQueue}
-          onOpenProject={openProject}
-        />
-      </Suspense>
-    );
-  }
-
-  if (viewMode === "projects") {
-    return (
-      <Suspense fallback={<ViewLoading label="project board" />}>
-        <ProjectBoardView
-          palette={palette}
-          operatorRequest={operatorRequest}
-          onCommand={() => setIsCommandBarOpen(true)}
-          onHub={goToHub}
-          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-          onProjects={goToProjects}
-          onGraph={goToGraph}
-          projectColumns={projectColumns}
-          onOpenProject={openProject}
-          onMoveProject={moveProject}
-          attentionFilter={projectAttentionFilter}
-          onAttentionFilterChange={setProjectAttentionFilter}
-          attentionCounts={attentionCounts}
-        />
-      </Suspense>
-    );
-  }
-
-  if (viewMode === "decisions") {
-    return (
-      <Suspense fallback={<ViewLoading label="decision ledger" />}>
-        <DecisionLedgerView
-          palette={palette}
-          operatorRequest={operatorRequest}
-          onCommand={() => setIsCommandBarOpen(true)}
-          onHub={goToHub}
-          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-          onProjects={goToProjects}
-          onGraph={goToGraph}
-          decisions={filteredDecisionSummaries}
-          counts={decisionCounts}
-          filter={decisionLedgerFilter}
-          onFilterChange={(filter) => {
-            setDecisionLedgerFilter(filter);
-            setHashDecisions(filter);
-          }}
-          query={decisionQuery}
-          onQueryChange={setDecisionQuery}
-          onOpenDecision={openDecision}
-        />
-      </Suspense>
-    );
-  }
-
-  if (viewMode === "decision") {
-    const bodyStatus =
-      activeDecisionResult.error && activeDecisionBody.status === "ready"
-        ? "error"
-        : activeDecisionBody.status;
-    return (
-      <Suspense fallback={<ViewLoading label="decision replay" />}>
-        <DecisionReplayView
-          palette={palette}
-          operatorRequest={operatorRequest}
-          onCommand={() => setIsCommandBarOpen(true)}
-          onHub={goToHub}
-          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-          onProjects={goToProjects}
-          onGraph={goToGraph}
-          summary={activeDecisionSummary}
-          decision={activeDecisionResult.decision}
-          bodyStatus={bodyStatus}
-          bodyError={activeDecisionResult.error || activeDecisionBody.error}
-          onRetryBody={activeDecisionBody.retry}
-          onReviewApplied={() => {
-            window.setTimeout(activeDecisionBody.retry, 500);
-          }}
-          onBack={() => goToDecisions(decisionLedgerFilter)}
-          onOpenDoc={openDoc}
-        />
-      </Suspense>
-    );
-  }
-
-  if (viewMode === "project") {
-    return (
-      <Suspense fallback={<ViewLoading label="project details" />}>
-        <ProjectDetailView
-          palette={palette}
-          operatorRequest={operatorRequest}
-          onCommand={() => setIsCommandBarOpen(true)}
-          onHub={goToHub}
-          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-          onProjects={goToProjects}
-          onGraph={goToGraph}
-          activeProject={activeProject}
-          linkedDocs={activeProjectLinkedDocs}
-          onOpenDoc={openDoc}
-          bodyStatus={activeProjectBody.status}
-          bodyError={activeProjectBody.error}
-          onRetryBody={activeProjectBody.retry}
-        />
-      </Suspense>
-    );
-  }
-
-  if (viewMode === "graph") {
-    return (
-      <Suspense
-        fallback={
-          <div className="min-h-screen bg-surface-main p-8 text-body-md text-on-surface-variant">
-            Loading context graph…
-          </div>
-        }
-      >
-        <ContextGraphView
-          palette={palette}
-          operatorRequest={operatorRequest}
-          onCommand={() => setIsCommandBarOpen(true)}
-          onHub={goToHub}
-          onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-          onProjects={goToProjects}
-          onGraph={goToGraph}
-          contextGraph={contextGraph}
-          graphFocusOption={graphFocusOption}
-          graphFocusOptions={graphFocusOptions}
-          graphQuery={graphQuery}
-          onGraphQueryChange={setGraphQuery}
-          onFocusGraphPath={focusGraphPath}
-          onOpenGraphNode={openGraphNode}
+          getDocGuidance={getDocGuidance}
+          resolveMarkdownDocPath={resolveMarkdownDocPath}
+          resolveMarkdownAssetPath={resolveMarkdownAssetPath}
+          currentYear={currentYear}
         />
       </Suspense>
     );
   }
 
   return (
-    <Suspense fallback={<ViewLoading label="knowledge library" />}>
-      <LibraryView
-        docs={docs}
-        palette={palette}
-        operatorRequest={operatorRequest}
-        onCommand={() => setIsCommandBarOpen(true)}
-        onHub={goToHub}
-        onLibrary={() => enterLibrary({ trackKey: selectedTrackKey, itemType: activeItemType })}
-        onProjects={goToProjects}
-        onGraph={goToGraph}
-        isReadingMode={isReadingMode}
-        onToggleReadingMode={() => setIsReadingMode((current) => !current)}
-        displayTrackLabel={displayTrackLabel}
-        scopedDocs={scopedDocs}
-        curationStats={curationStats}
-        query={query}
-        onQueryChange={setQuery}
-        activeTrack={activeTrack}
-        onActiveTrackChange={setActiveTrack}
-        trackFilterOptions={trackFilterOptions}
-        activeItemType={activeItemType}
-        onActiveItemTypeChange={setActiveItemType}
-        learningItemOrder={learningItemOrder}
-        learningItemLabels={learningItemLabels}
-        libraryItemCounts={libraryItemCounts}
-        visibleTags={visibleTags}
-        activeTag={activeTag}
-        onActiveTagChange={setActiveTag}
-        tagLabels={tagLabels}
-        tagCounts={tagCounts}
-        hideMerged={hideMerged}
-        onHideMergedChange={setHideMerged}
-        groupedDocs={groupedDocs}
-        filteredDocs={filteredDocs}
-        activeDoc={activeDoc}
-        activeDocInFilter={activeDocInFilter}
-        activeDocMetrics={activeDocMetrics}
-        activeBreadcrumbs={activeBreadcrumbs}
-        activeModuleDoc={activeModuleDoc}
-        digestQuickView={digestQuickView}
-        quickRecall={quickRecall}
-        readableDocContent={readableDocContent}
-        activeDocBodyStatus={activeDocBody.status}
-        activeDocBodyError={activeDocBody.error}
-        onRetryActiveDocBody={activeDocBody.retry}
-        onOpenDoc={openDoc}
-        onRevealActiveDoc={revealActiveDoc}
-        renderHighlighted={renderHighlighted}
-        getDocBadge={getDocBadge}
-        getDocGuidance={getDocGuidance}
-        resolveMarkdownDocPath={resolveMarkdownDocPath}
-        resolveMarkdownAssetPath={resolveMarkdownAssetPath}
-        currentYear={currentYear}
-      />
-    </Suspense>
+    <OperatorAttentionProvider value={attention}>{renderActiveView()}</OperatorAttentionProvider>
   );
 }

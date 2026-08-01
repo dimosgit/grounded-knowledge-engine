@@ -194,6 +194,38 @@ export function countOperatorInbox(items: OperatorInboxItem[]) {
   );
 }
 
+export type OperatorInboxCounts = ReturnType<typeof countOperatorInbox>;
+
+/**
+ * Largest number the navigation badge draws. Higher counts collapse to `99+`
+ * so the badge geometry stays fixed; the exact number stays in the accessible
+ * name, which is never capped.
+ */
+export const ATTENTION_BADGE_CAP = 99;
+
+export interface OperatorAttentionBadge {
+  /** Exact, uncapped signal count. */
+  count: number;
+  /** Capped visual text; empty when nothing needs attention. */
+  text: string;
+  /** Accessible name carrying the exact count for the navigation control. */
+  label: string;
+}
+
+export function describeAttentionBadge(
+  count: number,
+  label = "Attention Inbox",
+): OperatorAttentionBadge {
+  const total = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+  return {
+    count: total,
+    text:
+      total === 0 ? "" : total > ATTENTION_BADGE_CAP ? `${ATTENTION_BADGE_CAP}+` : String(total),
+    label:
+      total === 0 ? `${label}, no signals` : `${label}, ${total} signal${total === 1 ? "" : "s"}`,
+  };
+}
+
 export function isOperatorInboxKind(value: string): value is OperatorInboxKindFilter {
   return OPERATOR_INBOX_KINDS.includes(value as OperatorInboxKindFilter);
 }

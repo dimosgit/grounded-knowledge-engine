@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { OperatorActions } from "../components/OperatorActions";
+import { AttentionHarness } from "./support/attention-harness";
 
 afterEach(() => {
   cleanup();
@@ -12,7 +13,11 @@ describe("capture review drawer", () => {
   test("uses the document modal layer so a sticky header cannot cover it", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ proposals: [] }));
     const user = userEvent.setup();
-    render(<OperatorActions />);
+    render(
+      <AttentionHarness>
+        <OperatorActions />
+      </AttentionHarness>,
+    );
 
     await user.click(screen.getByRole("button", { name: "Open capture review queue" }));
 
@@ -95,7 +100,11 @@ describe("capture review drawer", () => {
     });
 
     const user = userEvent.setup();
-    render(<OperatorActions />);
+    render(
+      <AttentionHarness>
+        <OperatorActions />
+      </AttentionHarness>,
+    );
     await user.click(screen.getByRole("button", { name: "Open capture review queue" }));
 
     expect(await screen.findByText("Old body")).toBeInTheDocument();
@@ -185,7 +194,11 @@ describe("capture review drawer", () => {
     });
 
     const user = userEvent.setup();
-    render(<OperatorActions />);
+    render(
+      <AttentionHarness>
+        <OperatorActions />
+      </AttentionHarness>,
+    );
     await user.click(screen.getByRole("button", { name: "Open capture review queue" }));
     await screen.findByText("Current stale chunk");
 
