@@ -13,7 +13,7 @@
 //   node scripts/configure-mcp.mjs --skip-smoke
 //
 // The clients use different project-local config files, but every adapter launches
-// the same tools/kb-mcp-server/server.ts process with the same environment.
+// the same compiled server in a release package or TypeScript server in a source checkout.
 
 import { execFileSync } from "node:child_process";
 import {
@@ -31,6 +31,8 @@ import { fileURLToPath } from "node:url";
 const DEFAULT_SERVER_NAME = "kb";
 const SERVER_ENTRY_REL = "tools/kb-mcp-server/server.ts";
 const SMOKE_TEST_REL = "tools/kb-mcp-server/smoke-test.ts";
+const COMPILED_SERVER_ENTRY_REL = "dist/tools/kb-mcp-server/server.js";
+const COMPILED_SMOKE_TEST_REL = "dist/tools/kb-mcp-server/smoke-test.js";
 const WORKSPACE_REGISTRY_REL = ".gke/workspaces.json";
 const SUPPORTED_CLIENTS = new Set(["claude", "codex", "gemini", "github-copilot", "all"]);
 const LEGACY_MANAGED_TOML_START = "# >>> Grounded Knowledge Engine MCP (managed by setup:mcp)";
@@ -84,12 +86,17 @@ const clients =
 const isWindows = process.platform === "win32";
 const nodeBin = process.execPath;
 const tsxEntry = join(repoRoot, "node_modules", "tsx", "dist", "cli.mjs");
-const serverEntry = join(repoRoot, SERVER_ENTRY_REL);
+const compiledServerEntry = join(repoRoot, COMPILED_SERVER_ENTRY_REL);
+const compiledSmokeTest = join(repoRoot, COMPILED_SMOKE_TEST_REL);
+const useCompiledRuntime = existsSync(compiledServerEntry) && existsSync(compiledSmokeTest);
+const serverEntry = useCompiledRuntime ? compiledServerEntry : join(repoRoot, SERVER_ENTRY_REL);
+const smokeTestEntry = useCompiledRuntime ? compiledSmokeTest : join(repoRoot, SMOKE_TEST_REL);
+const serverArgs = useCompiledRuntime ? [serverEntry] : [tsxEntry, serverEntry];
 const serverEnv = {
   KB_MCP_PROFILE: requestedProfile,
+  KB_MCP_REPO_ROOT: workspace?.repoRoot || configRoot,
   ...(workspace
     ? {
-        KB_MCP_REPO_ROOT: workspace.repoRoot,
         KB_MCP_WORKSPACE_ID: workspace.id,
         KB_MCP_WORKSPACE_READ_ONLY: String(workspace.readOnly),
       }
@@ -334,7 +341,7 @@ function configureSharedMcpJson() {
     [serverName]: {
       type: "stdio",
       command: nodeBin,
-      args: [tsxEntry, serverEntry],
+      args: serverArgs,
       env: serverEnv,
     },
   };
@@ -358,9 +365,9 @@ function configureCodex() {
   const envLines = [
     `[mcp_servers.${serverName}.env]`,
     `KB_MCP_PROFILE = ${quoteToml(requestedProfile)}`,
+    `KB_MCP_REPO_ROOT = ${quoteToml(workspace?.repoRoot || configRoot)}`,
   ];
   if (workspace) {
-    envLines.push(`KB_MCP_REPO_ROOT = ${quoteToml(workspace.repoRoot)}`);
     envLines.push(`KB_MCP_WORKSPACE_ID = ${quoteToml(workspace.id)}`);
     envLines.push(`KB_MCP_WORKSPACE_READ_ONLY = ${quoteToml(String(workspace.readOnly))}`);
   }
@@ -370,7 +377,7 @@ function configureCodex() {
     managedTomlStart(serverName),
     `[mcp_servers.${serverName}]`,
     `command = ${quoteToml(nodeBin)}`,
-    `args = [${quoteToml(tsxEntry)}, ${quoteToml(serverEntry)}]`,
+    `args = [${serverArgs.map(quoteToml).join(", ")}]`,
     envBlock.trimEnd(),
     managedTomlEnd(serverName),
   ]
@@ -388,8 +395,8 @@ function configureGemini() {
     ...(settings.mcpServers ?? {}),
     [serverName]: {
       command: nodeBin,
-      args: [tsxEntry, serverEntry],
-      cwd: repoRoot,
+      args: serverArgs,
+      cwd: configRoot,
       env: serverEnv,
     },
   };
@@ -405,7 +412,7 @@ function configureGithubCopilot() {
     [serverName]: {
       type: "stdio",
       command: nodeBin,
-      args: [tsxEntry, serverEntry],
+      args: serverArgs,
       env: serverEnv,
     },
   };
@@ -413,14 +420,14 @@ function configureGithubCopilot() {
 }
 
 // 1. Dependencies -------------------------------------------------------------
-if (!existsSync(tsxEntry)) {
+if (!useCompiledRuntime && !existsSync(tsxEntry)) {
   step("Installing dependencies (npm install)…");
   execFileSync(isWindows ? "npm.cmd" : "npm", ["install"], {
     cwd: repoRoot,
     stdio: "inherit",
   });
 }
-if (!existsSync(tsxEntry)) {
+if (!useCompiledRuntime && !existsSync(tsxEntry)) {
   console.error(`\n✗ tsx not found at ${tsxEntry} even after npm install. Aborting.`);
   process.exit(1);
 }
@@ -457,7 +464,7 @@ if (skipSmoke) {
 } else {
   step("Verifying the shared MCP server handshake…");
   try {
-    execFileSync(nodeBin, [tsxEntry, join(repoRoot, SMOKE_TEST_REL)], {
+    execFileSync(nodeBin, useCompiledRuntime ? [smokeTestEntry] : [tsxEntry, smokeTestEntry], {
       cwd: repoRoot,
       stdio: "inherit",
       env: { ...process.env, KB_MCP_ENABLE_WRITES: enableWrites ? "true" : "" },
@@ -477,5 +484,5 @@ console.log(`
    Writes: ${enableWrites ? "enabled" : "disabled (dryRun remains available)"}
    Profile: ${requestedProfile}
    Workspace: ${workspace ? `${workspace.label} (${workspace.id})` : "default"}
-   Restart the configured client(s) from this repository to load the tools.
+   Restart the configured client(s) from this workspace to load the tools.
 `);

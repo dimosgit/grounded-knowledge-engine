@@ -21,6 +21,17 @@ workspace only.
 > GKE is not a hosted SaaS; the hosted Cockpit is a static public preview over
 > demo content, not a hosted knowledge engine.
 
+## Who GKE is for
+
+GKE is for technical users who work with Codex, Claude, Gemini, or another MCP
+client across long-running projects and want durable, inspectable project
+memory. It is especially useful when decisions, constraints, and evidence must
+survive fresh agent sessions while remaining locally controlled.
+
+GKE is not a hosted chat-memory service, a general note-taking application, a
+team wiki, or a replacement for Jira. The optional Cockpit supports review and
+visibility; the primary workflow remains inside the CLI or IDE you already use.
+
 ## What is implemented
 
 | Capability                   | Current behavior                                                                                                                                                                                                                                                                                                    |
@@ -72,6 +83,31 @@ The repository proves both loops end to end:
 
 Requires **Node ≥ 22.5** for the built-in `node:sqlite`; Node 24 is recommended.
 
+Install the packaged `v0.2.0` release:
+
+```bash
+npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.0/grounded-knowledge-engine-0.2.0.tgz
+```
+
+Create the verified demo workspace and automatically configure Codex, Claude,
+Gemini CLI, and GitHub Copilot:
+
+```bash
+gke demo
+cd gke-demo
+gke setup
+```
+
+Restart Codex or Claude from `gke-demo`, then ask: `Use GKE to resume the
+router-rollout project.` Continue with the
+[five-minute golden-path tutorial](docs/tutorials/five-minute-golden-path.md)
+to answer with evidence, retain one learning, and retrieve it from a fresh
+session.
+
+### Source checkout
+
+Contributors can still run the complete source workflow:
+
 ```bash
 npm install
 
@@ -96,13 +132,21 @@ with explicitly linked evidence under
 
 ## Connect Claude Code, Codex, Gemini CLI, or GitHub Copilot
 
-Register the same local `kb` MCP server with all four clients:
+From an installed release, register the same local `kb` MCP server with all
+four clients:
+
+```bash
+gke setup
+```
+
+From a source checkout, use the equivalent repository command:
 
 ```bash
 npm run setup:mcp
 ```
 
-The generated adapters use absolute executable and server paths and point to
+The generated adapters use absolute executable and server paths. A packaged
+release launches compiled JavaScript; a source checkout launches
 [`tools/kb-mcp-server/server.ts`](tools/kb-mcp-server/server.ts):
 
 - Claude Code: `.mcp.json` plus local approval.
@@ -114,15 +158,16 @@ The generated adapters use absolute executable and server paths and point to
 Configure one client or change the catalog policy:
 
 ```bash
-npm run setup:mcp -- --client codex
-npm run setup:mcp -- --client github-copilot
-npm run setup:mcp -- --profile full
-npm run setup:mcp -- --no-writes
-npm run setup:mcp -- --skip-smoke
+gke setup --client codex
+gke setup --client claude
+gke setup --profile full
+gke setup --no-writes
+gke setup --skip-smoke
 ```
 
 The command is idempotent. Generated machine-specific configuration is ignored
-by Git. Restart the configured client from this repository after setup.
+by Git. Restart the configured client from the configured workspace after
+setup.
 See the [GitHub Copilot setup guide](docs/integrations/github-copilot.md) for
 host-specific verification and organization-policy notes.
 
