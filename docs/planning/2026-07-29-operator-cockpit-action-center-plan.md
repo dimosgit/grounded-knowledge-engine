@@ -22,10 +22,54 @@ group labels; an empty query offers quick actions plus recent destinations
 persisted as versioned, bounded canonical ids in `localStorage`. Selection flows
 through one App-owned destination callback shared with the Operator Inbox: it
 navigates, or opens the Ask/Capture Review drawer, and never writes. Review-
-action entries are compiled out of the static public build. Shared capture state
-ownership moved from `AttentionView` up to `App.tsx` in the same change. The
-safe workspace-context adapter and the Phase 4 responsive/accessibility evidence
-sweep remain planned.
+action entries open an explicit read-only explanation in the static public
+build. Shared capture state ownership moved from `AttentionView` up to `App.tsx`
+in the same change.
+
+**Progress note (2026-07-31):** The safe workspace-context adapter is
+implemented. `GET /__gke/workspace/context` is a serve-only Vite plugin
+(`scripts/workspace-context-plugin.ts`) that reuses the shared loopback request
+guard, accepts same-origin `GET` with no query parameters, and returns a
+name-by-name allowlist of `id`, `label`, `readOnly`, and `sensitivity` from the
+one workspace resolved at Vite startup — it never loads the registry, accepts a
+workspace ID, or serializes the context object, so roots and absolute paths
+cannot leak. `src/lib/workspace-context-api.ts` fetches it once per session
+behind a 5-second abort timeout and one fixed generic error; pure rules in
+`src/domain/workspace-display.ts` validate the payload (rejecting path-shaped,
+control-character, and oversized fields) and derive label, policy, sensitivity,
+tone, tooltip, and accessible-label text. The shell renders that model in
+desktop, mobile-drawer, and collapsed-rail navigation with a tone-specific icon
+and explicit text, so color never carries the meaning alone; the panel reserves
+its tallest layout so navigation does not shift between loading, resolved, and
+failed states. The public build stays on compile-time demo constants and drops
+the endpoint client through the `import.meta.env.DEV` guard, enforced by the
+extended `forbiddenLocalEndpointMarkers` production-boundary check. The Phase 4
+responsive/accessibility evidence sweep remains planned.
+
+**Progress note (2026-07-31):** Shared Attention state is implemented. One
+`useOperatorAttention` hook (`src/hooks/useOperatorAttention.tsx`) owned by
+`App.tsx` and published through a narrow context now owns the proposal list,
+selection, changed evidence, both refresh lifecycles, explicit
+`idle|loading|ready|error` statuses, independent error strings, the pending
+review request, and the composed Attention items, counts, and badge. Changed
+evidence remains lazy until the Inbox is opened, then has its own explicit
+`Refresh changes` control; its errors use fixed safe copy rather than reflecting
+adapter or host details into the shared shell. The
+duplicate `useOperatorAttentionSupplement` state and its second
+`/__gke/capture/proposals` request are removed: opening the Cockpit issues
+exactly one proposal-list request that the Capture Review drawer, the Attention
+Inbox, and the shell badge all read. Refresh happens only on a real return to
+the tab (blur/visibility deduplicated), Ask creating a proposal, apply/reject,
+an inbox or palette request for a specific proposal, or explicit retry — there
+is no polling. A monotonic request token makes last-request-wins, so a slower
+earlier response cannot overwrite newer state; proposal and change failures stay
+independent and catalog-backed signals survive either one. The navigation badge
+shows the full unfiltered count from the same composer as the inbox, capped
+visually at `99+` with the exact count in the accessible name, in expanded,
+collapsed, and mobile navigation. Both refresh paths return before their dynamic
+adapter import outside `import.meta.env.DEV`, so the public build issues no local
+request and the production-boundary and bundle-budget checks pass unchanged
+(248.7 KB raw / 74.3 KB gzip initial JS against the 350 KB / 120 KB budget).
 
 ## Product decision
 

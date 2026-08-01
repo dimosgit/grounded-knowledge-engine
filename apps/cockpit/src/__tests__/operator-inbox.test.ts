@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   composeOperatorInbox,
+  describeAttentionBadge,
   countOperatorInbox,
   filterOperatorInbox,
   isOperatorInboxKind,
@@ -116,5 +117,32 @@ describe("operator inbox domain", () => {
     expect(sanitizeOperatorProjectFilter("router-rollout")).toBe("router-rollout");
     expect(sanitizeOperatorProjectFilter("../../private")).toBe("");
     expect(sanitizeOperatorProjectFilter("project id")).toBe("");
+  });
+});
+
+describe("attention badge description", () => {
+  test("caps the visible text while keeping the accessible count exact", () => {
+    expect(describeAttentionBadge(0)).toEqual({
+      count: 0,
+      text: "",
+      label: "Attention Inbox, no signals",
+    });
+    expect(describeAttentionBadge(1)).toEqual({
+      count: 1,
+      text: "1",
+      label: "Attention Inbox, 1 signal",
+    });
+    expect(describeAttentionBadge(99).text).toBe("99");
+    expect(describeAttentionBadge(100)).toEqual({
+      count: 100,
+      text: "99+",
+      label: "Attention Inbox, 100 signals",
+    });
+    expect(describeAttentionBadge(128).label).toBe("Attention Inbox, 128 signals");
+  });
+
+  test("treats negative and non-finite counts as empty", () => {
+    expect(describeAttentionBadge(-4).text).toBe("");
+    expect(describeAttentionBadge(Number.NaN).count).toBe(0);
   });
 });

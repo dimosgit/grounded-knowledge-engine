@@ -385,21 +385,29 @@ export function rankCommandPaletteEntries(
     .map((scored) => scored.entry);
 }
 
-/** Groups entries by kind, preserving rank order inside each group. */
+/**
+ * Groups adjacent entries by kind without changing their ranked order.
+ *
+ * A kind can appear in more than one group when stronger matches from other
+ * kinds fall between its entries. That repetition is intentional: relevance
+ * remains the source of truth for keyboard order and the group labels still
+ * give assistive technology the type context for every option.
+ */
 export function groupCommandPaletteEntries(entries: CommandPaletteEntry[]): CommandPaletteGroup[] {
-  const byKind = new Map<CommandPaletteKind, CommandPaletteEntry[]>();
+  const groups: CommandPaletteGroup[] = [];
   for (const entry of entries) {
-    const bucket = byKind.get(entry.kind);
-    if (bucket) bucket.push(entry);
-    else byKind.set(entry.kind, [entry]);
+    const current = groups.at(-1);
+    if (current?.entries[0]?.kind === entry.kind) {
+      current.entries.push(entry);
+      continue;
+    }
+    groups.push({
+      key: `${entry.kind}-${groups.length}`,
+      label: KIND_GROUP_LABELS[entry.kind],
+      entries: [entry],
+    });
   }
-  return [...byKind.entries()]
-    .sort(([a], [b]) => KIND_ORDER[a] - KIND_ORDER[b])
-    .map(([kind, kindEntries]) => ({
-      key: kind,
-      label: KIND_GROUP_LABELS[kind],
-      entries: kindEntries,
-    }));
+  return groups;
 }
 
 export function buildQuickActionEntries(entries: CommandPaletteEntry[]): CommandPaletteEntry[] {
