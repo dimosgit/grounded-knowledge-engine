@@ -38,8 +38,6 @@ All notable changes to Grounded Knowledge Engine are documented here.
 
 - Added the five-minute golden-path tutorial.
 - Added explicit “who GKE is for” and “who GKE is not for” positioning.
-- Added the founder-led go-to-market plan for the post-release validation
-  period.
 
 ## 0.1.0 — 2026-07-14
 
