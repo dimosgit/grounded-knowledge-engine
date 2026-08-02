@@ -2,7 +2,11 @@ node_modules/
 dist/
 content/
 .cache/
+
+# Generated workspace config, and the machine-local blocked-term overlay read by
+# scripts/scrub-gate.sh (template: scripts/scrub-patterns.local.example.txt).
 .gke/
+.gke/scrub-patterns.txt
 .DS_Store
 .env
 .env.*
