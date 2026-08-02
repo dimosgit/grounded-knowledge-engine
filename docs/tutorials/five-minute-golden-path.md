@@ -21,7 +21,7 @@ your real project files.
 ## 1. Install GKE
 
 ```bash
-npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.0/grounded-knowledge-engine-0.2.0.tgz
+npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.1/grounded-knowledge-engine-0.2.1.tgz
 ```
 
 Verify the installed release:
@@ -30,7 +30,7 @@ Verify the installed release:
 gke --version
 ```
 
-Expected result: `0.2.0`.
+Expected result: `0.2.1`.
 
 ## 2. Create and connect the demo workspace
 
