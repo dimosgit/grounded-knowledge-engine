@@ -55,6 +55,11 @@ jobs:
         run: npm run test:gke
 
       - name: Sanitization gate (strings + filenames + gitleaks)
+        # CI has no access to the maintainer's machine-local blocked-term
+        # overlay, so it runs the published pattern tier only. The full gate is
+        # a local pre-release step; see scripts/scrub-gate.sh.
+        env:
+          GKE_SCRUB_PUBLIC_ONLY: "1"
         run: npm run scrub
 
   cockpit:

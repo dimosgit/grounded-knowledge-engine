@@ -1,0 +1,30 @@
+# Template for the machine-local scrub overlay.
+#
+# Copy it to the path the gate reads and fill in your own values:
+#
+#   cp scripts/scrub-patterns.local.example.txt .gke/scrub-patterns.txt
+#
+# `.gke/` is gitignored, so the real list never ships. Override the location
+# with GKE_SCRUB_PATTERNS=<path> if you keep it elsewhere.
+#
+# One extended regular expression per line; `#` starts a comment line. Terms are
+# matched case-insensitively against tracked files.
+#
+# Put here every term whose presence in a public diff would itself be the
+# disclosure:
+#
+#   - private client, employer, or project names
+#   - machine-local absolute paths, such as your home directory
+#   - private repository, workspace, or vault slugs
+#   - figures, endpoints, or distinctive phrases copied from private material
+#
+# Deliberately published maintainer metadata — the demo domain, the public
+# repository name — does not belong here: blocking it only trains you to bypass
+# the gate.
+#
+# Replace the placeholders below; do not commit real values anywhere tracked.
+
+/Users/your-username
+/home/your-username
+acme-corporation
+internal-project-slug

@@ -1,0 +1,12 @@
+# Published blocked terms for scripts/scrub-gate.sh.
+#
+# Everything in this file ships, so it may contain only generic terms: nothing
+# here names a person, client, employer, workspace, or machine. Identifiers
+# whose appearance in a public diff would itself be the disclosure belong in the
+# machine-local overlay instead — see scripts/scrub-patterns.local.example.txt.
+#
+# One extended regular expression per line; `#` starts a comment line.
+
+confidential
+client name
+private-source-repo
