@@ -2,6 +2,20 @@
 
 All notable changes to Grounded Knowledge Engine are documented here.
 
+## 0.2.1 — 2026-08-02
+
+### Sanitization
+
+- Split the scrub gate's blocked terms into a published, non-identifying list
+  (`scripts/scrub-patterns.public.txt`) and a machine-local overlay
+  (`.gke/scrub-patterns.txt`, untracked). The tracked gate no longer has to
+  name the workspace-specific identifiers it exists to keep out of the
+  repository.
+- Added `scripts/scrub-patterns.local.example.txt` as the overlay template, and
+  `GKE_SCRUB_PUBLIC_ONLY=1` for CI and outside contributors, who cannot hold a
+  maintainer's local list. The gate announces the reduced scan on every such
+  run and still fails closed when the overlay is missing locally.
+
 ## 0.2.0 — 2026-08-01
 
 ### Productized installation

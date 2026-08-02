@@ -83,10 +83,10 @@ The repository proves both loops end to end:
 
 Requires **Node ≥ 22.5** for the built-in `node:sqlite`; Node 24 is recommended.
 
-Install the packaged `v0.2.0` release:
+Install the packaged `v0.2.1` release:
 
 ```bash
-npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.0/grounded-knowledge-engine-0.2.0.tgz
+npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.1/grounded-knowledge-engine-0.2.1.tgz
 ```
 
 Create the verified demo workspace and automatically configure Codex, Claude,
