@@ -55,7 +55,7 @@ const repoRoot = workspace.realRepoRoot;
 
 const SERVER_INFO = {
   name: "kb-mcp-server",
-  version: "0.2.0",
+  version: "0.2.1",
 };
 
 type JsonObject = Record<string, any>;

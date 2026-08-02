@@ -42,7 +42,7 @@ try {
       ? path.join(installPrefix, "gke.cmd")
       : path.join(installPrefix, "bin", "gke");
   assert.ok(existsSync(gkeBin), "the installed package must expose the gke executable");
-  assert.equal(run(gkeBin, ["--version"]).trim(), "0.2.0");
+  assert.equal(run(gkeBin, ["--version"]).trim(), "0.2.1");
 
   run(gkeBin, ["demo", "golden-path"], { cwd: demoParent });
   const demoRoot = path.join(demoParent, "golden-path");
