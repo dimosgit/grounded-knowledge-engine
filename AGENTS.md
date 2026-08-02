@@ -73,9 +73,15 @@ Do not run `test` and `build` in parallel — both sync Markdown into
   (root) or `npm run format` (cockpit) after editing.
 - **The scrub gate scans tracked files only** (`git grep`). A new file passes
   locally until it is `git add`ed — stage first, then run `npm run scrub`.
-  The blocked-term regex lives in `scripts/scrub-gate.sh` (do not quote those
-  terms in committed prose — the gate will match them); gitleaks then scans
-  the full history, and the gate fails closed if a scanner is missing.
+  Blocked terms come from two lists: `scripts/scrub-patterns.public.txt`
+  (generic, ships) and a machine-local overlay at `.gke/scrub-patterns.txt`
+  (untracked — copy `scripts/scrub-patterns.local.example.txt` to create it).
+  Do not quote terms from either list in committed prose, and never move a
+  workspace-specific identifier into the published list. Locally the gate fails
+  closed when the overlay is missing; CI sets `GKE_SCRUB_PUBLIC_ONLY=1` and
+  therefore runs the published tier only, so the full gate is a local
+  pre-release step. gitleaks then scans the full history, and the gate fails
+  closed if a scanner is missing.
 - **MCP catalog budgets**: every advertised tool needs an output schema and
   safety annotations, and the catalog has enforced tool-count and character
   budgets (`npm run test:mcp:catalog`). Adding a tool means fitting the budget

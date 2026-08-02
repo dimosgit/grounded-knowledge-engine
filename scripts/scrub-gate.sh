@@ -8,19 +8,76 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Intentional public maintainer metadata, such as gke.dimouzunov.com, is allowed.
-# This gate focuses on client/private-workspace leakage, personal career plans,
-# machine-local paths, and release-blocking terms.
-PATTERN='vorwerk|mews|art ?nation|1\.5m|€1|confidential|client name|private-source-repo|learning-sap-tutor|/Users/dimouzunov|/home/dimouzunov|hiring strategy|hiring manager|job[- ]search|referral[- ]first|evidence for applications|cv[- ][a-d]'
+# Blocked terms live in two tiers, so this tracked file never has to name the
+# things it exists to keep out of the repository:
+#
+#   1. scripts/scrub-patterns.public.txt — generic, non-identifying terms that
+#      ship with the repo and run everywhere, including CI.
+#   2. A machine-local overlay ($GKE_SCRUB_PATTERNS, default
+#      .gke/scrub-patterns.txt) — untracked and gitignored. Workspace-specific
+#      identifiers belong there: private client and project names, machine-local
+#      home-directory paths, and any other term whose appearance in a public
+#      diff would itself be the disclosure.
+#
+# The overlay is required by default. GKE_SCRUB_PUBLIC_ONLY=1 runs the published
+# tier alone, for CI and outside contributors who cannot hold a maintainer's
+# private list. That is a visible, announced downgrade rather than a silent
+# skip, and it still runs the filename, KB-allowlist, and secret scans below.
+#
+# Intentional public maintainer metadata, such as the published demo domain, is
+# allowed and belongs in neither list.
+PUBLIC_PATTERNS="scripts/scrub-patterns.public.txt"
+LOCAL_PATTERNS="${GKE_SCRUB_PATTERNS:-.gke/scrub-patterns.txt}"
+
+# One term per line; comment and blank lines dropped, the rest joined into a
+# single alternation. Never echo the result — printing it would defeat tier 2.
+read_patterns() {
+  sed -e '/^[[:space:]]*#/d' -e '/^[[:space:]]*$/d' -e 's/[[:space:]]*$//' "$1" | paste -sd '|' -
+}
+
+if [ ! -f "$PUBLIC_PATTERNS" ]; then
+  echo "SCRUB ERROR: missing published pattern list ($PUBLIC_PATTERNS)"
+  exit 2
+fi
+PATTERN="$(read_patterns "$PUBLIC_PATTERNS")"
+
+if [ "${GKE_SCRUB_PUBLIC_ONLY:-0}" = "1" ]; then
+  echo "SCRUB NOTICE: published patterns only (GKE_SCRUB_PUBLIC_ONLY=1); the"
+  echo "  machine-local overlay was NOT applied. A maintainer must run the full"
+  echo "  gate locally before publishing a release."
+elif [ -f "$LOCAL_PATTERNS" ]; then
+  LOCAL_PATTERN="$(read_patterns "$LOCAL_PATTERNS")"
+  if [ -n "$LOCAL_PATTERN" ]; then
+    PATTERN="$PATTERN|$LOCAL_PATTERN"
+  fi
+  echo "local pattern overlay loaded ($(grep -cvE '^[[:space:]]*(#|$)' "$LOCAL_PATTERNS") terms)"
+else
+  echo "SCRUB FAIL: machine-local pattern overlay not found at $LOCAL_PATTERNS"
+  echo "  cp scripts/scrub-patterns.local.example.txt $LOCAL_PATTERNS"
+  echo "  then fill in the identifiers this workspace must never publish."
+  echo "  Set GKE_SCRUB_PUBLIC_ONLY=1 to accept the reduced published-only scan."
+  exit 1
+fi
+
+if [ -z "$PATTERN" ]; then
+  echo "SCRUB ERROR: no blocked terms resolved; an empty pattern matches everything."
+  exit 2
+fi
 
 # 1) Content scan over SHIPPABLE files only. Drive the file list from git
 #    (`git grep` searches tracked files), so gitignored, machine-local artifacts
-#    — `.mcp.json`, `.claude/`, `dist/`, `content/`, the private KB — are never
-#    scanned: they don't ship, and scanning them produced false failures (e.g. the
-#    absolute `/Users/<name>/...` path inside a locally generated `.mcp.json`).
+#    — `.mcp.json`, `.claude/`, `dist/`, `content/`, the private KB, and the
+#    pattern overlay itself — are never scanned: they don't ship, and scanning
+#    them produced false failures (e.g. the absolute `/Users/<name>/...` path
+#    inside a locally generated `.mcp.json`). The pattern files that do ship are
+#    excluded too, since a term list necessarily contains its own terms.
 #    git grep keeps grep's exit codes: 0 = matches (FAIL), 1 = clean, >1 = error.
 set +e
-HITS="$(git grep --no-color -EinI "$PATTERN" -- . ':!package-lock.json' ':!scripts/scrub-gate.sh')"
+HITS="$(git grep --no-color -EinI "$PATTERN" -- . \
+  ':!package-lock.json' \
+  ':!scripts/scrub-gate.sh' \
+  ':!scripts/scrub-patterns.public.txt' \
+  ':!scripts/scrub-patterns.local.example.txt')"
 STATUS=$?
 set -e
 if [ "$STATUS" -gt 1 ]; then
