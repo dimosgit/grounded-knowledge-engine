@@ -44,6 +44,8 @@ export interface WorkspaceDisplay {
   readonly detailText: string;
   /** Stable workspace ID; empty when unknown or not applicable. */
   readonly workspaceId: string;
+  /** True only after a local workspace explicitly reports that writes are enabled. */
+  readonly canWrite: boolean;
   /** `label · detailText`, used as the tooltip and compact summary. */
   readonly summary: string;
   /** Full sentence form for `aria-label` and collapsed navigation. */
@@ -118,6 +120,7 @@ export function describeWorkspaceDisplay(state: WorkspaceContextState): Workspac
       policyText: workspace.readOnly ? READ_ONLY_POLICY : WRITABLE_POLICY,
       sensitivityText: SENSITIVITY_TEXT[workspace.sensitivity],
       workspaceId: workspace.id,
+      canWrite: !workspace.readOnly,
     });
   }
   if (state.status === "demo") {
@@ -152,6 +155,7 @@ function compose(parts: {
   policyText: string;
   sensitivityText?: string;
   workspaceId?: string;
+  canWrite?: boolean;
 }): WorkspaceDisplay {
   const sensitivityText = parts.sensitivityText || "";
   const workspaceId = parts.workspaceId || "";
@@ -168,6 +172,7 @@ function compose(parts: {
     sensitivityText,
     detailText,
     workspaceId,
+    canWrite: Boolean(parts.canWrite),
     summary: `${parts.label} · ${detailText}`,
     accessibleLabel: `${sentences.join(". ")}.`,
   };

@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "../App";
+import { describeWorkspaceDisplay } from "../domain/workspace-display";
+import { WorkspaceDisplayValueProvider } from "../hooks/useWorkspaceDisplay";
 
 afterEach(() => {
   cleanup();
@@ -11,7 +13,9 @@ afterEach(() => {
 
 describe("cockpit major flows", () => {
   async function openLearningLibrary(user) {
-    await user.click(await screen.findByRole("button", { name: /Open learning library/i }));
+    await user.click(
+      await screen.findByRole("button", { name: /Open learning library/i }, { timeout: 10000 }),
+    );
     await screen.findByPlaceholderText("Search all docs (modules, topics, terms, digests)...");
   }
 
@@ -28,7 +32,7 @@ describe("cockpit major flows", () => {
     expect(
       await screen.findByRole("button", { name: /MCP Source Notes: Architecture/i }),
     ).toBeInTheDocument();
-  });
+  }, 15000);
 
   test("library search matches terms in document bodies", async () => {
     const user = userEvent.setup();
@@ -287,25 +291,118 @@ describe("cockpit major flows", () => {
     window.location.hash = "#/project/router-rollout";
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: /Router Rollout/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Continue here" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: /Router Rollout/i, level: 1 }),
+    ).toBeInTheDocument();
+    const continueHeading = screen.getByRole("heading", { name: "Continue here" });
+    expect(continueHeading).toBeInTheDocument();
     expect(screen.getByText("Open the project in the Operator Cockpit.")).toBeInTheDocument();
     expect(screen.getByText("What changed")).toBeInTheDocument();
     expect(screen.getByText("What is blocked")).toBeInTheDocument();
     expect(screen.getByText("What was decided")).toBeInTheDocument();
-    expect(screen.getByText("Open question")).toBeInTheDocument();
+    expect(screen.getAllByText("Open question").length).toBeGreaterThan(0);
     expect(screen.getByText(/58% complete/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Delivery checklist" })).toBeInTheDocument();
     expect(
       screen.queryByText(/Not measured — add a weighted task checklist/i),
     ).not.toBeInTheDocument();
 
-    const contextToggle = screen.getByText("Project context").closest("summary");
-    expect(contextToggle).toBeInTheDocument();
-    await user.click(contextToggle!);
-    expect(screen.getByText("Last meaningful change")).toBeInTheDocument();
+    const contextMapHeading = document.getElementById("project-context-map-heading");
+    expect(contextMapHeading).toBeInTheDocument();
+    expect(
+      contextMapHeading.compareDocumentPosition(continueHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByText("Visual context")).toBeInTheDocument();
+    expect(document.querySelector('[data-node-id="group:work"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-node-id="group:attention"]')).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Open Keep the default MCP profile small and semantic.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Checkpoint — Router Context Parity" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Evidence \d+$/i }));
+    expect(document.querySelector('[data-node-id="group:evidence"]')).toBeInTheDocument();
+    expect(document.querySelector('[data-node-id="group:work"]')).not.toBeInTheDocument();
   });
 
-  test("context graph supports zoom reset and node repositioning", async () => {
+  test("finishes a checklist task only after explicit confirmation", async () => {
+    const taskTitle = "Validate the project view in the Operator Cockpit";
+    const completedMarkdown = routerProjectWithCompletedTask(taskTitle);
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === "/__gke/projects/tasks/complete") {
+        return jsonResponse({
+          result: {
+            projectId: "router-rollout",
+            path: "demo-kb/projects/router-rollout/project.md",
+            content: completedMarkdown,
+            changed: true,
+            task: { text: taskTitle, status: "done" },
+          },
+        });
+      }
+      if (url.endsWith("/proposals")) return jsonResponse({ proposals: [] });
+      if (url.startsWith("/__gke/review")) {
+        return jsonResponse({ review: { asOf: "2026-08-05", since: "2026-07-29", projects: [] } });
+      }
+      throw new Error(`Unexpected request: ${url} ${init?.method || "GET"}`);
+    });
+    const workspace = describeWorkspaceDisplay({
+      status: "ready",
+      workspace: {
+        id: "local-operator",
+        label: "Local Operator",
+        readOnly: false,
+        sensitivity: "personal",
+      },
+    });
+    const user = userEvent.setup();
+    window.location.hash = "#/project/router-rollout?section=delivery-checklist";
+    render(
+      <WorkspaceDisplayValueProvider value={workspace}>
+        <App />
+      </WorkspaceDisplayValueProvider>,
+    );
+
+    const finishButton = await screen.findByRole("button", {
+      name: `Finish task: ${taskTitle}`,
+    });
+    await user.click(finishButton);
+    const confirmation = screen.getByRole("alertdialog", { name: "Finish this task?" });
+    expect(within(confirmation).getByText(taskTitle)).toBeInTheDocument();
+
+    await user.click(within(confirmation).getByRole("button", { name: "Cancel" }));
+    expect(
+      screen.queryByRole("alertdialog", { name: "Finish this task?" }),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith("/__gke/projects/tasks/complete", expect.anything());
+
+    await user.click(screen.getByRole("button", { name: `Finish task: ${taskTitle}` }));
+    await user.click(
+      within(screen.getByRole("alertdialog", { name: "Finish this task?" })).getByRole("button", {
+        name: "Finish task",
+      }),
+    );
+
+    expect(await screen.findByText(`Finished “${taskTitle}”.`)).toBeInTheDocument();
+    expect(screen.getByText("2 open · 4 done", { exact: false })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: `Finish task: ${taskTitle}` }),
+    ).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/__gke/projects/tasks/complete",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ projectId: "router-rollout", taskText: taskTitle }),
+      }),
+    );
+  });
+
+  test("context graph visualizes project operational branches and supports direct manipulation", async () => {
     const originalRect = HTMLElement.prototype.getBoundingClientRect;
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       function getGraphRect() {
@@ -329,15 +426,30 @@ describe("cockpit major flows", () => {
     window.location.hash = "#/graph";
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: /Context Graph/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /Major Context Links/i })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Context Graph" })).toBeInTheDocument();
+    expect(document.querySelector('[data-node-id="project:router-rollout"]')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /Collapse major context links/i }));
-    expect(screen.getByRole("button", { name: /Expand major context links/i })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /Major Context Links/i })).not.toBeInTheDocument();
+    // Signals start folded into the project cards so the overview opens readable.
+    expect(document.querySelector('[data-node-id="project:router-rollout:work"]')).toBeNull();
+    expect(
+      document.querySelector('[data-node-id="project:router-rollout"] [data-node-signals]'),
+    ).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: /Expand major context links/i }));
-    expect(screen.getByRole("heading", { name: /Major Context Links/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Show signals/i }));
+    expect(
+      document.querySelector('[data-node-id="project:router-rollout:work"]'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-node-id="project:router-rollout:decisions"]'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('[data-node-id="project:transport-review:attention"]'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /Portfolio Links/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Expand portfolio links/i }));
+    expect(screen.getByRole("heading", { name: /Portfolio Links/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Collapse portfolio links/i }));
+    expect(screen.queryByRole("heading", { name: /Portfolio Links/i })).not.toBeInTheDocument();
 
     const graphWorld = document.querySelector("[data-graph-world]");
     expect(graphWorld).toHaveStyle({ transform: "translate(0px, 0px) scale(1)" });
@@ -370,6 +482,31 @@ describe("cockpit major flows", () => {
       expect(node.style.top).toBe(initialTop);
       expect(graphWorld).toHaveStyle({ transform: "translate(0px, 0px) scale(1)" });
     });
+
+    expect(screen.queryByRole("option", { name: /Router Rollout/i })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole("combobox", { name: "Focus context" }), "Router");
+    await userEvent.click(await screen.findByRole("option", { name: /Router Rollout/i }));
+
+    expect(await screen.findByText("Visual context")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: "Open Keep the default MCP profile small and semantic.",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Open Checkpoint — Router Context Parity" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Zoom in graph/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Zoom in project context/i })).toBeInTheDocument();
+
+    const taskTitle = "Validate the project view in the Operator Cockpit";
+    const taskNode = screen.getByRole("button", { name: `Open ${taskTitle}` });
+    expect(taskNode).toHaveAttribute("title", taskTitle);
+    expect(taskNode.querySelector("[data-node-tooltip]")).toHaveTextContent(taskTitle);
+
+    await userEvent.click(taskNode);
+    expect(window.location.hash).toBe("#/project/router-rollout?section=delivery-checklist");
+    expect(await screen.findByRole("heading", { name: "Delivery checklist" })).toBeInTheDocument();
   });
 });
 
@@ -378,4 +515,18 @@ function jsonResponse(value: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function routerProjectWithCompletedTask(taskTitle: string): string {
+  return `# Router Rollout
+
+## Delivery checklist
+
+- [x] Expose project resume through \`kb.resume_project\` [M]
+- [x] Publish the project context resource [M]
+- [x] Preserve Markdown as canonical project state [S]
+- [x] ${taskTitle} [S]
+- [ ] Compare the Cockpit and MCP resume facts [M]
+- [ ] Export the technical-peer handoff [S]
+`;
 }

@@ -28,6 +28,8 @@
     "setup:claude": "node scripts/configure-claude.mjs",
     "dev:mcp": "tsx tools/kb-mcp-server/server.ts",
     "dev:mcp:http": "tsx tools/kb-mcp-server/server-http.ts",
+    "dev:cockpit": "npm --prefix apps/cockpit run dev",
+    "dev:cockpit:demo": "npm --prefix apps/cockpit run dev:demo",
     "search": "tsx tools/grounding/local-grounding-search.ts",
     "eval": "tsx tools/grounding/evaluate-retrieval.ts",
     "eval:workspace": "tsx tools/grounding/evaluate-retrieval.ts --file tools/grounding/eval/workspace-shapes.json --repo-root tools/grounding/eval/workspace-fixtures --scan-root kb --refresh --deterministic",

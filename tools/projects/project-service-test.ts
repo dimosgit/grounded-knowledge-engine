@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   addProjectTask,
+  completeProjectTask,
   createProject,
   getProject,
   linkProjectSource,
@@ -159,6 +160,33 @@ try {
   const withTaskStatuses = await fs.readFile(path.join(root, created.path), "utf8");
   assert.match(withTaskStatuses, /- \[x\] Ship the capture route \[XL\]/);
   assert.match(withTaskStatuses, /- \[ \] Document the capture route \[XS\]/);
+
+  const completedTask = await completeProjectTask({
+    repoRoot: root,
+    scanRoots: ["kb"],
+    projectId: "alpha-pilot",
+    text: "Review the capture route",
+  });
+  assert.equal(completedTask.changed, true);
+  assert.match(completedTask.content, /- \[x\] Review the capture route \[S\]/);
+  assert.doesNotMatch(completedTask.content, /🟡 Review the capture route/);
+  const alreadyCompleted = await completeProjectTask({
+    repoRoot: root,
+    scanRoots: ["kb"],
+    projectId: "alpha-pilot",
+    text: "Review the capture route",
+  });
+  assert.equal(alreadyCompleted.changed, false);
+  await assert.rejects(
+    () =>
+      completeProjectTask({
+        repoRoot: root,
+        scanRoots: ["kb"],
+        projectId: "alpha-pilot",
+        text: "Missing project task",
+      }),
+    /task was not found/i,
+  );
   await Promise.all([
     addProjectTask({
       repoRoot: root,

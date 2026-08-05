@@ -239,14 +239,16 @@ export function getMajorGraphFocusOptions(docs, projectSummaries, tracks) {
       path: doc.path,
       searchText: `${doc.title} ${doc.path} ${doc.trackLabel}`,
     }));
-  const projectOptions = projectSummaries.map((project) => ({
-    id: `project:${project.id}`,
-    label: project.title,
-    kind: "Project",
-    projectId: project.id,
-    path: project.sourceDocPath,
-    searchText: `${project.title} ${project.sourceDocPath} ${project.trackLabel} ${project.module}`,
-  }));
+  const projectOptions = projectSummaries
+    .filter((project) => !project.legacy)
+    .map((project) => ({
+      id: `project:${project.id}`,
+      label: project.title,
+      kind: "Project",
+      projectId: project.id,
+      path: project.sourceDocPath,
+      searchText: `${project.title} ${project.sourceDocPath} ${project.trackLabel} ${project.module}`,
+    }));
 
   return [
     {
@@ -279,7 +281,192 @@ export function getMajorGraphFocusOption(docs, projectSummaries, tracks, focusId
   );
 }
 
-export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId = "overview") {
+/** Node kinds the operator can switch on and off from the graph toolbar. */
+export const GRAPH_LAYERS = [
+  { id: "track", label: "Tracks" },
+  { id: "module", label: "Modules" },
+  { id: "client", label: "Clients" },
+  { id: "project", label: "Projects" },
+  { id: "context", label: "Signals" },
+];
+
+export const DEFAULT_GRAPH_LAYERS = GRAPH_LAYERS.map((layer) => layer.id);
+
+/**
+ * Signals triple the node count, so the canvas opens without them: project cards
+ * carry their signal counts inline until the operator switches the layer on.
+ */
+export const INITIAL_GRAPH_LAYERS = DEFAULT_GRAPH_LAYERS.filter((id) => id !== "context");
+
+export const GRAPH_STATUS_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "active", label: "Active" },
+  { id: "blocked", label: "Blocked" },
+  { id: "next", label: "Next" },
+];
+
+function getNodeLayer(node) {
+  return node.kind === "client" ? "client" : node.kind;
+}
+
+/** World geometry in canvas pixels; node coordinates stay percentage-based. */
+const OVERVIEW_LAYOUT = {
+  trackX: 110,
+  moduleX: 350,
+  projectStartX: 640,
+  projectCellWidth: 330,
+  projectCellHeight: 168,
+  projectNodeInset: 130,
+  paddingY: 90,
+  minHeight: 720,
+  /** Card height plus breathing room: below this, rail labels overlap. */
+  railMinStep: 84,
+  /** Horizontal offset for a wrapped rail column; wider than a rail card. */
+  railColumnGap: 210,
+};
+
+const FOCUS_LAYOUT = {
+  width: 1400,
+  height: 900,
+  radiusX: 36,
+  radiusY: 34,
+  innerRingFactor: 0.62,
+  contextRadiusX: 11,
+  contextRadiusY: 13,
+};
+
+function layoutOverview(visibleNodes, showContext) {
+  const grouped = {
+    track: visibleNodes.filter((node) => node.kind === "track"),
+    module: visibleNodes.filter((node) => node.kind === "module" || node.kind === "client"),
+    project: visibleNodes.filter((node) => node.kind === "project"),
+    context: visibleNodes.filter((node) => node.kind === "context"),
+  };
+
+  const projectCount = grouped.project.length;
+  const columns = Math.max(1, Math.min(3, Math.ceil(projectCount / 6)));
+  const rows = Math.max(1, Math.ceil(projectCount / columns));
+  const cellWidth = OVERVIEW_LAYOUT.projectCellWidth + (showContext ? 220 : 0);
+  const cellHeight = OVERVIEW_LAYOUT.projectCellHeight + (showContext ? 90 : 0);
+  const canvasHeight = Math.max(
+    OVERVIEW_LAYOUT.minHeight,
+    OVERVIEW_LAYOUT.paddingY * 2 + rows * cellHeight,
+  );
+
+  const railSpan = canvasHeight - OVERVIEW_LAYOUT.paddingY * 2;
+  // A rail taller than the canvas would stack cards on top of each other, so a
+  // dense rail wraps into extra columns instead. The canvas has horizontal room;
+  // overlapping labels are unreadable at any zoom level.
+  const railRowCapacity = Math.max(1, Math.floor(railSpan / OVERVIEW_LAYOUT.railMinStep) + 1);
+  const rails = [
+    { items: grouped.track, railX: OVERVIEW_LAYOUT.trackX },
+    { items: grouped.module, railX: OVERVIEW_LAYOUT.moduleX },
+  ].map((rail) => {
+    const railColumns = Math.max(1, Math.ceil(rail.items.length / railRowCapacity));
+    return { ...rail, railColumns, perColumn: Math.ceil(rail.items.length / railColumns) };
+  });
+
+  // Push the project grid clear of any rail that had to wrap.
+  const railOverflow = Math.max(...rails.map((rail) => rail.railColumns - 1), 0);
+  const projectStartX =
+    OVERVIEW_LAYOUT.projectStartX + railOverflow * OVERVIEW_LAYOUT.railColumnGap;
+  const canvasWidth = projectStartX + columns * cellWidth + 80;
+  const toPercentX = (value) => (value / canvasWidth) * 100;
+  const toPercentY = (value) => (value / canvasHeight) * 100;
+
+  for (const { items, railX, perColumn } of rails) {
+    const step = perColumn > 1 ? railSpan / (perColumn - 1) : 0;
+    items.forEach((node, index) => {
+      const column = Math.floor(index / perColumn);
+      const row = index % perColumn;
+      node.x = toPercentX(railX + column * OVERVIEW_LAYOUT.railColumnGap);
+      node.y = toPercentY(perColumn > 1 ? OVERVIEW_LAYOUT.paddingY + row * step : canvasHeight / 2);
+    });
+  }
+
+  // Signal chips fan out to the right of their project, two columns deep.
+  const contextOffsets = [
+    { x: 190, y: -66 },
+    { x: 348, y: -66 },
+    { x: 190, y: 0 },
+    { x: 348, y: 0 },
+    { x: 190, y: 66 },
+    { x: 348, y: 66 },
+  ];
+
+  grouped.project.forEach((node, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    const centerX = projectStartX + column * cellWidth + OVERVIEW_LAYOUT.projectNodeInset;
+    const centerY = OVERVIEW_LAYOUT.paddingY + row * cellHeight + cellHeight / 2;
+    node.x = toPercentX(centerX);
+    node.y = toPercentY(centerY);
+
+    grouped.context
+      .filter((item) => item.projectNodeId === node.id)
+      .forEach((contextNode, contextIndex) => {
+        const offset = contextOffsets[contextIndex] || contextOffsets[contextOffsets.length - 1];
+        contextNode.x = toPercentX(centerX + offset.x);
+        contextNode.y = toPercentY(centerY + offset.y);
+      });
+  });
+
+  return { canvasWidth, canvasHeight };
+}
+
+function layoutFocus(visibleNodes, focusNode) {
+  if (focusNode) {
+    focusNode.x = 50;
+    focusNode.y = 50;
+  }
+
+  const nodesById = new Map<string, any>(visibleNodes.map((node) => [node.id, node]));
+  const neighbors = visibleNodes.filter((node) => node.id !== focusNode?.id);
+  const anchored = neighbors.filter(
+    (node) => node.kind === "context" && nodesById.has(node.projectNodeId),
+  );
+  const anchoredIds = new Set(anchored.map((node) => node.id));
+  const ringNodes = neighbors.filter((node) => !anchoredIds.has(node.id));
+
+  // Two rings once a single one would stack the labels on top of each other.
+  const useTwoRings = ringNodes.length > 10;
+  ringNodes.forEach((node, index) => {
+    const angle = -Math.PI / 2 + (index * 2 * Math.PI) / Math.max(ringNodes.length, 1);
+    const ringFactor = useTwoRings && index % 2 === 1 ? FOCUS_LAYOUT.innerRingFactor : 1;
+    node.x = 50 + Math.cos(angle) * FOCUS_LAYOUT.radiusX * ringFactor;
+    node.y = 50 + Math.sin(angle) * FOCUS_LAYOUT.radiusY * ringFactor;
+  });
+
+  const anchorsByProject = new Map<string, any[]>();
+  for (const node of anchored) {
+    const siblings = anchorsByProject.get(node.projectNodeId) || [];
+    siblings.push(node);
+    anchorsByProject.set(node.projectNodeId, siblings);
+  }
+  for (const [projectNodeId, siblings] of anchorsByProject) {
+    const parent = nodesById.get(projectNodeId);
+    if (!parent) continue;
+    // Fan the signals away from the centre so they never sit under their parent.
+    const outward = Math.atan2(parent.y - 50, parent.x - 50);
+    siblings.forEach((node, index) => {
+      const angle = outward + ((index - (siblings.length - 1) / 2) * Math.PI) / 3.4;
+      node.x = Math.max(3, Math.min(97, parent.x + Math.cos(angle) * FOCUS_LAYOUT.contextRadiusX));
+      node.y = Math.max(4, Math.min(96, parent.y + Math.sin(angle) * FOCUS_LAYOUT.contextRadiusY));
+    });
+  }
+
+  return { canvasWidth: FOCUS_LAYOUT.width, canvasHeight: FOCUS_LAYOUT.height };
+}
+
+export function buildMajorContextGraph(
+  docs,
+  projectSummaries,
+  tracks,
+  focusId = "overview",
+  options: { layers?: string[]; projectStatus?: string } = {},
+) {
+  const activeLayers = new Set(options.layers?.length ? options.layers : DEFAULT_GRAPH_LAYERS);
+  const projectStatusFilter = options.projectStatus || "all";
   const docsByPath = new Map<string, any>(docs.map((doc) => [doc.path, doc]));
   const nodesById = new Map<string, any>();
   const edgesById = new Map<string, any>();
@@ -301,6 +488,17 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
     }
     edgesById.set(key, { id: key, from, to, score, reasons: [reason], kind: reason });
   }
+
+  const canonicalProjects = projectSummaries.filter((project) => !project.legacy);
+  const graphProjects = canonicalProjects.filter((project) => {
+    if (projectStatusFilter === "all") return true;
+    // The focused project always stays on the canvas, filter or not.
+    if (`project:${project.id}` === focusId) return true;
+    if (projectStatusFilter === "blocked") {
+      return project.statusBucket === "blocked" || (project.blockers || []).length > 0;
+    }
+    return project.statusBucket === projectStatusFilter;
+  });
 
   for (const track of tracks) {
     addNode({
@@ -346,9 +544,45 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
     addEdge(`track:${doc.track}`, `client:${doc.path}`, "track owns client", 2);
   }
 
-  for (const project of projectSummaries) {
+  for (const project of graphProjects) {
+    const projectNodeId = `project:${project.id}`;
+    const openTaskCount = (project.tasks || []).filter((task) => task.status !== "done").length;
+    const attentionCount = (project.blockers || []).length + (project.openQuestions || []).length;
+    const contextSignals = [
+      {
+        key: "work",
+        label: "Current work",
+        count: openTaskCount || (project.nextActions || []).length,
+        summary: `${openTaskCount || (project.nextActions || []).length} open items`,
+      },
+      {
+        key: "attention",
+        label: "Attention",
+        count: attentionCount,
+        summary: `${attentionCount} blockers or questions`,
+      },
+      {
+        key: "decisions",
+        label: "Decisions",
+        count: (project.activeDecisions || []).length,
+        summary: `${(project.activeDecisions || []).length} active decisions`,
+      },
+      {
+        key: "history",
+        label: "History",
+        count: project.recentChanges ? 1 : 0,
+        summary: project.recentChanges ? "latest change connected" : "no history connected",
+      },
+      {
+        key: "evidence",
+        label: "Evidence",
+        count: (project.keyDocuments || []).length + 1,
+        summary: `${(project.keyDocuments || []).length + 1} scoped records`,
+      },
+    ].filter((signal) => signal.count > 0);
+
     addNode({
-      id: `project:${project.id}`,
+      id: projectNodeId,
       label: project.title,
       kind: "project",
       path: project.sourceDocPath,
@@ -360,10 +594,29 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
         : `${project.nextActions.length} next actions`,
       count: project.blockers.length || project.nextActions.length,
       statusBucket: project.statusBucket,
+      // Rendered inline on the node so the overview stays legible with the
+      // signal layer switched off.
+      signals: contextSignals.map((signal) => ({ key: signal.key, count: signal.count })),
     });
-    addEdge(`track:${project.track}`, `project:${project.id}`, "track owns project", 1);
+    addEdge(`track:${project.track}`, projectNodeId, "track owns project", 1);
     if (project.module && nodesById.has(`module:${project.module}`)) {
-      addEdge(`module:${project.module}`, `project:${project.id}`, "module drives project", 5);
+      addEdge(`module:${project.module}`, projectNodeId, "module drives project", 5);
+    }
+
+    for (const signal of contextSignals) {
+      const signalNodeId = `${projectNodeId}:${signal.key}`;
+      addNode({
+        id: signalNodeId,
+        label: signal.label,
+        kind: "context",
+        contextGroup: signal.key,
+        projectId: project.id,
+        projectNodeId,
+        path: project.sourceDocPath,
+        summary: signal.summary,
+        count: signal.count,
+      });
+      addEdge(projectNodeId, signalNodeId, `project connects ${signal.key}`, 4);
     }
   }
 
@@ -380,7 +633,7 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
 
   const allEdges = Array.from(edgesById.values());
   const resolvedFocusId = nodesById.has(focusId) ? focusId : "overview";
-  const visibleIds = new Set();
+  const visibleIds = new Set<string>();
 
   if (resolvedFocusId === "overview") {
     for (const node of nodesById.values()) visibleIds.add(node.id);
@@ -390,6 +643,27 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
       if (edge.from === resolvedFocusId) visibleIds.add(edge.to);
       if (edge.to === resolvedFocusId) visibleIds.add(edge.from);
     }
+    const focusKind = nodesById.get(resolvedFocusId)?.kind;
+    if (focusKind === "track" || focusKind === "module" || focusKind === "client") {
+      const firstHopIds = new Set(visibleIds);
+      for (const edge of allEdges) {
+        const fromNode = nodesById.get(edge.from);
+        const toNode = nodesById.get(edge.to);
+        if (firstHopIds.has(edge.from) && toNode?.kind === "context") visibleIds.add(edge.to);
+        if (firstHopIds.has(edge.to) && fromNode?.kind === "context") visibleIds.add(edge.from);
+      }
+    }
+  }
+
+  // Layer switches hide whole node kinds; the focus itself always survives.
+  const layerCounts = { track: 0, module: 0, client: 0, project: 0, context: 0 };
+  for (const id of visibleIds) {
+    const layer = getNodeLayer(nodesById.get(id));
+    if (layer in layerCounts) layerCounts[layer] += 1;
+  }
+  for (const id of Array.from(visibleIds)) {
+    if (id === resolvedFocusId) continue;
+    if (!activeLayers.has(getNodeLayer(nodesById.get(id)))) visibleIds.delete(id);
   }
 
   const visibleEdges = allEdges
@@ -397,42 +671,10 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
     .sort((a, b) => b.score - a.score);
   const visibleNodes = Array.from(nodesById.values()).filter((node) => visibleIds.has(node.id));
 
-  if (resolvedFocusId === "overview") {
-    const grouped = {
-      track: visibleNodes.filter((node) => node.kind === "track"),
-      module: visibleNodes.filter((node) => node.kind === "module" || node.kind === "client"),
-      project: visibleNodes.filter((node) => node.kind === "project"),
-    };
-    const columns = [
-      { kind: "track", x: 16 },
-      { kind: "module", x: 48 },
-      { kind: "project", x: 80 },
-    ];
-
-    for (const column of columns) {
-      const items = grouped[column.kind] || [];
-      const step = Math.min(11, Math.max(6, 70 / Math.max(items.length, 1)));
-      const start = 18;
-      items.forEach((node, index) => {
-        node.x = column.x;
-        node.y = Math.min(88, start + index * step);
-      });
-    }
-  } else {
-    const focusNode = nodesById.get(resolvedFocusId);
-    if (focusNode) {
-      focusNode.x = 50;
-      focusNode.y = 50;
-    }
-    const neighbors = visibleNodes.filter((node) => node.id !== resolvedFocusId);
-    const radiusX = 33;
-    const radiusY = 34;
-    neighbors.forEach((node, index) => {
-      const angle = -Math.PI / 2 + (index * 2 * Math.PI) / Math.max(neighbors.length, 1);
-      node.x = 50 + Math.cos(angle) * radiusX;
-      node.y = 50 + Math.sin(angle) * radiusY;
-    });
-  }
+  const { canvasWidth, canvasHeight } =
+    resolvedFocusId === "overview"
+      ? layoutOverview(visibleNodes, activeLayers.has("context"))
+      : layoutFocus(visibleNodes, nodesById.get(resolvedFocusId));
 
   const relationships = visibleEdges.map((edge) => {
     const fromNode = nodesById.get(edge.from);
@@ -451,5 +693,10 @@ export function buildMajorContextGraph(docs, projectSummaries, tracks, focusId =
     nodes: visibleNodes,
     edges: visibleEdges,
     relationships,
+    canvasWidth,
+    canvasHeight,
+    layerCounts,
+    projectCount: canonicalProjects.length,
+    filteredProjectCount: graphProjects.length,
   };
 }

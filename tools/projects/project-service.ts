@@ -125,6 +125,19 @@ export interface AddedProjectTask extends UpdatedProject {
   };
 }
 
+export interface CompleteProjectTaskOptions extends ProjectServiceOptions {
+  projectId: string;
+  text: string;
+  dryRun?: boolean;
+}
+
+export interface CompletedProjectTask extends UpdatedProject {
+  task: {
+    text: string;
+    status: "done";
+  };
+}
+
 export type ProjectSectionKey =
   | "outcome"
   | "current-focus"
@@ -424,6 +437,85 @@ export async function addProjectTask(options: AddProjectTaskOptions): Promise<Ad
       changed: true,
       dryRun: Boolean(options.dryRun),
       task: { text, size, status, markdown },
+    };
+  } finally {
+    if (lockPath) await fs.rm(lockPath, { force: true });
+  }
+}
+
+/**
+ * Completes exactly one existing checklist item while keeping Markdown as the
+ * canonical project state. The visible task text is treated as an optimistic
+ * concurrency token: missing or duplicated matches fail instead of changing a
+ * different checkbox.
+ */
+export async function completeProjectTask(
+  options: CompleteProjectTaskOptions,
+): Promise<CompletedProjectTask> {
+  const repoRoot = path.resolve(options.repoRoot || process.cwd());
+  const lockPath = options.dryRun
+    ? null
+    : await acquireProjectTaskLock(repoRoot, options.projectId, options.workspace);
+  try {
+    const loaded = await getProject(options.projectId, {
+      repoRoot,
+      scanRoots: options.scanRoots,
+      workspace: options.workspace,
+    });
+    const text = requireNonEmpty(options.text, "task text");
+    const comparisonKey = normalizeTaskTextForComparison(text);
+    const newline = loaded.raw.includes("\r\n") ? "\r\n" : "\n";
+    const lines = loaded.raw.split(/\r?\n/);
+    const matches: Array<{
+      index: number;
+      checked: boolean;
+      prefix: string;
+      spacing: string;
+      body: string;
+    }> = [];
+
+    for (const [index, line] of lines.entries()) {
+      const match = line.match(/^(\s*-\s+)\[([ xX])\](\s+)(.*)$/);
+      if (!match) continue;
+      if (normalizeProjectTaskDisplayText(match[4]) !== comparisonKey) continue;
+      matches.push({
+        index,
+        checked: match[2].trim().toLowerCase() === "x",
+        prefix: match[1],
+        spacing: match[3],
+        body: match[4],
+      });
+    }
+
+    if (matches.length === 0) throw new Error(`Project task was not found: ${text}`);
+    if (matches.length > 1) throw new Error(`Project task is ambiguous: ${text}`);
+
+    const match = matches[0];
+    let content = loaded.raw;
+    if (!match.checked) {
+      const canonicalBody = match.body.replace(/^(?:🟢|🟡|🔴|⚪)\s*/u, "");
+      lines[match.index] = `${match.prefix}[x]${match.spacing}${canonicalBody}`;
+      content = updateFrontmatter(lines.join(newline), { updated: todayIso() });
+    }
+    const changed = content !== loaded.raw;
+
+    if (changed && !options.dryRun) {
+      const target = await resolveSafeWorkspacePath(
+        repoRoot,
+        loaded.path,
+        options.workspace,
+        "write",
+      );
+      await atomicWrite(target, content, options.workspace);
+    }
+
+    return {
+      projectId: loaded.parsed.manifest.projectId,
+      path: loaded.path,
+      content,
+      changed,
+      dryRun: Boolean(options.dryRun),
+      task: { text, status: "done" },
     };
   } finally {
     if (lockPath) await fs.rm(lockPath, { force: true });
@@ -778,6 +870,18 @@ function extractProjectTaskTexts(raw: string): string[] {
 
 function normalizeTaskTextForComparison(value: string): string {
   return cleanScalar(value).toLowerCase().replace(/\s+/g, " ");
+}
+
+function normalizeProjectTaskDisplayText(value: string): string {
+  return normalizeTaskTextForComparison(
+    value
+      .replace(/^(?:🟢|🟡|🔴|⚪)\s*/u, "")
+      .replace(/\s*[[(](?:XS|S|M|L|XL)[\])]\s*$/i, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .replace(/`([^`]+)`/g, "$1"),
+  );
 }
 
 async function discoverProjectRecords(

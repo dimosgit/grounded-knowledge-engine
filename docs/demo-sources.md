@@ -23,12 +23,14 @@ source:
   MCP-grounded router on top of the MCP docs above. Retained as a legacy-format
   compatibility fixture.
 - `demo-kb/projects/router-rollout/project.md` and
-  `demo-kb/sources/router-rollout/evidence.md` — canonical active Project Context
-  fixture used to prove structured resume, citations, Cockpit parity, and
-  technical handoff formatting.
+  `demo-kb/sources/router-rollout/evidence.md`, together with its project-linked
+  decision and checkpoint — canonical active Project Context fixture used to
+  prove structured resume, citations, Cockpit parity, and technical handoff
+  formatting.
 - `demo-kb/projects/transport-review/project.md` and
-  `demo-kb/sources/transport-review/evidence.md` — second canonical project used
-  to prove strict project isolation when projects contain similar language.
+  `demo-kb/sources/transport-review/evidence.md`, together with its project-linked
+  decision and checkpoint — second canonical project used to prove strict
+  project isolation when projects contain similar language.
 - `demo-kb/open_questions.md` — open questions log.
 - `kb/topics/mcp-primitive-decision.md` — a decision note written by the MCP smoke
   test to demonstrate the capture → retain → reuse loop.

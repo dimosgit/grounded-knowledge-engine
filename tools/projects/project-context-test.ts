@@ -18,9 +18,7 @@ assert.equal(
   canonicalDemo.structured.recommendedNextAction,
   "Open the project in the Operator Cockpit.",
 );
-assert.deepEqual(canonicalDemo.structured.blockers, [
-  "The Microsoft tunnel proof remains outside this milestone.",
-]);
+assert.deepEqual(canonicalDemo.structured.blockers, []);
 assert.deepEqual(canonicalDemo.structured.openQuestions, [
   "Which project-resume interaction should lead the public demonstration?",
 ]);

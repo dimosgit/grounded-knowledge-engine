@@ -20,11 +20,13 @@ import {
 } from "./domain/docs";
 import { buildDocs, getInitialDocPath, matchesTrackAndLearningItem } from "./domain/catalog";
 import {
-  buildContextGraph,
+  DEFAULT_GRAPH_LAYERS,
+  INITIAL_GRAPH_LAYERS,
   buildMajorContextGraph,
   filterMajorGraphFocusOptions,
   getMajorGraphFocusOption,
 } from "./domain/graph";
+import { buildProjectContextMap } from "./domain/project-context-map";
 import { buildHubModuleSummary, countOpenQuestions } from "./domain/hub";
 import {
   buildCurationStats,
@@ -45,7 +47,6 @@ import {
   buildOpenQuestionItems,
   buildProjectAttentionCounts,
   buildProjectColumns,
-  buildProjectLinkedDocs,
   buildProjectSummaries,
   filterProjectSummaries,
   getActiveProject,
@@ -190,6 +191,7 @@ export default function App() {
   );
   const [decisionQuery, setDecisionQuery] = useState("");
   const [lifecycleOverrides, setLifecycleOverrides] = useState<Record<string, string>>({});
+  const [projectBodyOverrides, setProjectBodyOverrides] = useState<Record<string, string>>({});
   const [projectAttentionFilter, setProjectAttentionFilter] = useState<ProjectAttentionFilter>(
     (initialRoute.attentionFilter as ProjectAttentionFilter) || "all",
   );
@@ -202,6 +204,8 @@ export default function App() {
   const [inboxProjectId, setInboxProjectId] = useState(initialRoute.inboxProjectId || "");
   const [selectedGraphPath, setSelectedGraphPath] = useState(initialRoute.focusPath || "overview");
   const [graphQuery, setGraphQuery] = useState("");
+  const [graphLayers, setGraphLayers] = useState<string[]>(INITIAL_GRAPH_LAYERS);
+  const [graphStatusFilter, setGraphStatusFilter] = useState("all");
   const [activePath, setActivePath] = useState(() => {
     if (initialDocFromHash) return initialDocFromHash.path;
     return getInitialDocPath(
@@ -478,6 +482,18 @@ export default function App() {
     setHashGraph(path);
   }
 
+  function toggleGraphLayer(layerId) {
+    setGraphLayers((current) => {
+      if (!current.includes(layerId)) {
+        // Keep the canonical order so the chips never reshuffle.
+        return DEFAULT_GRAPH_LAYERS.filter((id) => id === layerId || current.includes(id));
+      }
+      const next = current.filter((id) => id !== layerId);
+      // Never let the operator empty the canvas completely.
+      return next.length ? next : current;
+    });
+  }
+
   function openGraphNode(node) {
     if (!node) return;
     if (node.kind === "track" && node.trackKey) {
@@ -493,11 +509,15 @@ export default function App() {
     }
   }
 
-  function openProject(projectId) {
+  function openProject(projectId, section = "") {
     setIsReadingMode(false);
     setSelectedProjectId(projectId);
     setViewMode("project");
-    setHashProject(projectId);
+    setHashProject(projectId, section);
+  }
+
+  function openProjectDeliveryChecklist(projectId) {
+    openProject(projectId, "delivery-checklist");
   }
 
   function goToDecisions(filter: DecisionLedgerFilter = "all") {
@@ -571,13 +591,20 @@ export default function App() {
     viewMode === "project" && Boolean(catalogActiveProject?.sourceDocPath),
   );
   const projectDocs = useMemo(() => {
-    if (activeProjectBody.status !== "ready" || !catalogActiveProject?.sourceDocPath) return docs;
-    return docs.map((doc) =>
-      doc.path === catalogActiveProject.sourceDocPath
-        ? { ...doc, content: activeProjectBody.body }
-        : doc,
-    );
-  }, [activeProjectBody.body, activeProjectBody.status, catalogActiveProject, docs]);
+    if (!catalogActiveProject?.sourceDocPath) return docs;
+    const sourceDocPath = catalogActiveProject.sourceDocPath;
+    const body =
+      projectBodyOverrides[sourceDocPath] ??
+      (activeProjectBody.status === "ready" ? activeProjectBody.body : null);
+    if (body === null) return docs;
+    return docs.map((doc) => (doc.path === sourceDocPath ? { ...doc, content: body } : doc));
+  }, [
+    activeProjectBody.body,
+    activeProjectBody.status,
+    catalogActiveProject,
+    docs,
+    projectBodyOverrides,
+  ]);
   const projectSummaries = useMemo(
     () => buildProjectSummaries(projectDocs, lifecycleOverrides),
     [lifecycleOverrides, projectDocs],
@@ -585,6 +612,10 @@ export default function App() {
   const activeProject = useMemo(
     () => getActiveProject(projectSummaries, selectedProjectId),
     [projectSummaries, selectedProjectId],
+  );
+  const projectContextMap = useMemo(
+    () => buildProjectContextMap(activeProject, projectDocs),
+    [activeProject, projectDocs],
   );
   const attentionCounts = useMemo(
     () => buildProjectAttentionCounts(projectSummaries),
@@ -633,32 +664,53 @@ export default function App() {
       console.error("Could not move project lane (is the dev server running?)", error);
     }
   };
+
+  const finishProjectTask = async (taskText: string) => {
+    if (!activeProject?.id || !activeProject.sourceDocPath) {
+      throw new Error("Project task is unavailable.");
+    }
+    if (!import.meta.env.DEV) {
+      throw new Error("Task completion is available only in a writable local workspace.");
+    }
+    const { finishProjectTask: submitTaskCompletion } = await import("./lib/project-task-api");
+    const result = await submitTaskCompletion(activeProject.id, taskText);
+    setProjectBodyOverrides((current) => ({
+      ...current,
+      [activeProject.sourceDocPath]: result.content,
+    }));
+  };
   const openQuestionItems = useMemo(() => buildOpenQuestionItems(docs), [docs]);
   const graphFocusOptions = useMemo(
     () => filterMajorGraphFocusOptions(docs, projectSummaries, tracks, graphQuery),
     [docs, graphQuery, projectSummaries, tracks],
   );
   const contextGraph = useMemo(
-    () => buildMajorContextGraph(docs, projectSummaries, tracks, selectedGraphPath),
-    [docs, projectSummaries, tracks, selectedGraphPath],
+    () =>
+      buildMajorContextGraph(docs, projectSummaries, tracks, selectedGraphPath, {
+        layers: graphLayers,
+        projectStatus: graphStatusFilter,
+      }),
+    [docs, graphLayers, graphStatusFilter, projectSummaries, tracks, selectedGraphPath],
   );
   const graphFocusOption = useMemo(() => {
     return getMajorGraphFocusOption(docs, projectSummaries, tracks, contextGraph.focusId);
   }, [docs, projectSummaries, tracks, contextGraph.focusId]);
+  const graphProject = useMemo(() => {
+    if (contextGraph.focusNode?.kind !== "project") return null;
+    return (
+      projectSummaries.find((project) => project.id === contextGraph.focusNode.projectId) || null
+    );
+  }, [contextGraph.focusNode, projectSummaries]);
+  const graphProjectContextMap = useMemo(
+    () => (graphProject ? buildProjectContextMap(graphProject, docs) : null),
+    [docs, graphProject],
+  );
   useEffect(() => {
     if (viewMode !== "graph") return;
     if (selectedGraphPath === contextGraph.focusId) return;
     setSelectedGraphPath(contextGraph.focusId);
     setHashGraph(contextGraph.focusId);
   }, [viewMode, contextGraph.focusId, selectedGraphPath]);
-  const projectContextGraph = useMemo(
-    () => buildContextGraph(activeProject?.sourceDoc || null, docs),
-    [activeProject, docs],
-  );
-  const activeProjectLinkedDocs = useMemo(
-    () => buildProjectLinkedDocs(activeProject, projectContextGraph, docs),
-    [activeProject, docs, projectContextGraph],
-  );
   const decisionSummaries = useMemo(() => buildDecisionSummaries(docs), [docs]);
   const paletteEntries = useMemo(
     () =>
@@ -884,11 +936,14 @@ export default function App() {
             onProjects={goToProjects}
             onGraph={goToGraph}
             activeProject={activeProject}
-            linkedDocs={activeProjectLinkedDocs}
+            contextMap={projectContextMap}
+            focusSection={initialRoute.mode === "project" ? initialRoute.projectSection : ""}
             onOpenDoc={openDoc}
+            onOpenDecision={openDecision}
             bodyStatus={activeProjectBody.status}
             bodyError={activeProjectBody.error}
             onRetryBody={activeProjectBody.retry}
+            onCompleteTask={finishProjectTask}
           />
         </Suspense>
       );
@@ -899,7 +954,7 @@ export default function App() {
         <Suspense
           fallback={
             <div className="min-h-screen bg-surface-main p-8 text-body-md text-on-surface-variant">
-              Loading context graph…
+              Loading portfolio map…
             </div>
           }
         >
@@ -917,6 +972,15 @@ export default function App() {
             onGraphQueryChange={setGraphQuery}
             onFocusGraphPath={focusGraphPath}
             onOpenGraphNode={openGraphNode}
+            graphLayers={graphLayers}
+            onToggleGraphLayer={toggleGraphLayer}
+            graphStatusFilter={graphStatusFilter}
+            onGraphStatusFilterChange={setGraphStatusFilter}
+            graphProject={graphProject}
+            projectContextMap={graphProjectContextMap}
+            onOpenDoc={openDoc}
+            onOpenDecision={openDecision}
+            onOpenDeliveryChecklist={openProjectDeliveryChecklist}
           />
         </Suspense>
       );

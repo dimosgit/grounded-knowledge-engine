@@ -128,7 +128,10 @@ npm run test:gke
 The demo corpus lives in [`demo-kb`](demo-kb). The canonical Project Context
 example is [`demo-kb/projects/router-rollout/project.md`](demo-kb/projects/router-rollout/project.md),
 with explicitly linked evidence under
-[`demo-kb/sources/router-rollout`](demo-kb/sources/router-rollout).
+[`demo-kb/sources/router-rollout`](demo-kb/sources/router-rollout), a structured
+decision, and an append-only checkpoint. The Transport Review fixture provides a
+second isolated project with the same relationship types for the Cockpit Context
+Map and project-scope tests.
 
 ## Connect Claude Code, Codex, Gemini CLI, or GitHub Copilot
 
@@ -484,13 +487,17 @@ of `apps/cockpit` over the repository's sanitized demo knowledge base; it does
 not expose the local MCP server, indexes, write tools, or private workspace
 files.
 
-Run the local preview:
+Run the local preview from the repository root:
 
 ```bash
-cd apps/cockpit
 npm install
-npm run dev
+npm --prefix apps/cockpit install
+npm run dev:cockpit
 ```
+
+To launch only the sanitized public demo corpus, use
+`npm run dev:cockpit:demo`. It opens the Router Rollout Context Map directly in
+your browser.
 
 The local Cockpit reads `demo-kb` and `kb` and maps both into one logical
 knowledge namespace. Production builds are restricted to the sanitized
@@ -515,9 +522,11 @@ complete corpus. The Cockpit provides:
 - a Markdown knowledge library;
 - a project board;
 - structured project detail with focus, changes, decisions, questions,
-  blockers, actions, and linked resources;
+  blockers, actions, checkpoints, and explicitly scoped evidence in a portable
+  Project Context Map;
 - **Copy Handoff**, including a fallback for restricted browser shells;
-- a context graph.
+- a visual Context Graph across tracks, modules, clients, projects, current
+  work, attention, decisions, history, and explicitly scoped evidence.
 
 See [`apps/cockpit/README.md`](apps/cockpit/README.md) for routes and development
 details.
