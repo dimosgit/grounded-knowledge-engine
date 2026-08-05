@@ -7,6 +7,7 @@ import {
   compactProjectText,
   filterProjectSummaries,
 } from "../domain/projects";
+import { buildProjectContextMap } from "../domain/project-context-map";
 
 function doc(path, title, frontmatter, content) {
   return {
@@ -132,6 +133,156 @@ Legacy remains readable.
       "kb/projects/router-rollout/project.md",
       "kb/sources/router-rollout/evidence.md",
     ]);
+  });
+
+  it("builds a portable project context map from explicit existing KB relationships", () => {
+    const docs = [
+      doc(
+        "kb/projects/context-demo/project.md",
+        "Context Demo",
+        {
+          record_type: "project",
+          project_id: "context-demo",
+          lifecycle: "active",
+          source_roots: "kb/sources/context-demo",
+          updated: "2026-08-03",
+        },
+        `# Context Demo
+
+## Outcome
+Make project relationships operational.
+
+## Current focus
+Connect the existing records.
+
+## Last meaningful change
+The context adapter became portable.
+
+## Delivery checklist
+- [ ] 🟡 Build the context map [M]
+- [ ] 🔴 Confirm the rollout owner [S]
+
+## Active decisions
+- Preserve Markdown compatibility.
+
+## Blockers
+- Local validation is pending.
+
+## Open questions
+- Which KB should be migrated first?
+
+## Key documents
+- [Evidence](../../sources/context-demo/evidence.md)
+`,
+      ),
+      doc(
+        "kb/sources/context-demo/evidence.md",
+        "Context Evidence",
+        { record_type: "source", project_id: "context-demo" },
+        "# Context Evidence",
+      ),
+      doc(
+        "kb/decisions/context-layout.md",
+        "Use a Structured Context Map",
+        {
+          record_type: "decision",
+          decision_id: "context-layout",
+          project_id: "context-demo",
+          status: "active",
+          review_after: "2026-09-01",
+        },
+        "# Use a Structured Context Map",
+      ),
+      doc(
+        "kb/projects/context-demo/checkpoints/2026-08-03-cp-map.md",
+        "Context Map Started",
+        {
+          record_type: "checkpoint",
+          checkpoint_id: "cp-map",
+          project_id: "context-demo",
+          created_at: "2026-08-03",
+        },
+        "# Context Map Started\n\n## What changed\n\nAdded the portable adapter.\n",
+      ),
+    ];
+
+    const project = buildProjectSummaries(docs)[0];
+    const contextMap = buildProjectContextMap(project, docs);
+    const groups = new Map(contextMap.groups.map((group) => [group.key, group.items]));
+
+    expect(groups.get("work")?.map((item) => item.label)).toEqual(
+      expect.arrayContaining([
+        "Current focus",
+        "Build the context map",
+        "Confirm the rollout owner",
+      ]),
+    );
+    expect(groups.get("work")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Build the context map",
+          destination: "delivery-checklist",
+        }),
+      ]),
+    );
+    expect(groups.get("attention")?.map((item) => item.meta)).toEqual(
+      expect.arrayContaining(["Blocker", "Open question", "Gated task · S"]),
+    );
+    expect(groups.get("attention")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Confirm the rollout owner",
+          destination: "delivery-checklist",
+        }),
+      ]),
+    );
+    expect(groups.get("decisions")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: "Use a Structured Context Map",
+          decisionId: "context-layout",
+        }),
+        expect.objectContaining({ label: "Preserve Markdown compatibility." }),
+      ]),
+    );
+    expect(groups.get("history")?.[0]).toEqual(
+      expect.objectContaining({
+        label: "Context Map Started",
+        detail: "Added the portable adapter.",
+      }),
+    );
+    expect(groups.get("evidence")?.map((item) => item.label)).toEqual([
+      "Context Demo",
+      "Context Evidence",
+    ]);
+  });
+
+  it("adapts legacy project notes without requiring a schema migration", () => {
+    const legacyDoc = doc(
+      "kb/topics/legacy-context.md",
+      "Legacy Context",
+      { type: "project", module: "legacy-context", lifecycle: "next" },
+      `# Legacy Context
+
+## Current focus
+Keep the old note usable.
+
+## Next actions
+1. Open the legacy project.
+`,
+    );
+
+    const project = buildProjectSummaries([legacyDoc])[0];
+    const contextMap = buildProjectContextMap(project, [legacyDoc]);
+
+    expect(project.legacy).toBe(true);
+    expect(contextMap.projectId).toBe("legacy-context");
+    expect(contextMap.groups.find((group) => group.key === "work")?.items).toEqual(
+      expect.arrayContaining([expect.objectContaining({ label: "Open the legacy project." })]),
+    );
+    expect(contextMap.groups.find((group) => group.key === "evidence")?.items[0]).toEqual(
+      expect.objectContaining({ meta: "Legacy project record" }),
+    );
   });
 
   it("creates bounded glance summaries and completed semantics", () => {

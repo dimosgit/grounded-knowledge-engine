@@ -23,7 +23,9 @@ not expose a remote MCP server, private workspaces, or write access.
 - Builds structured project detail pages from the shared engine parser, including
   current focus, recent changes, decisions, blockers/questions, next actions,
   linked context, and a copyable technical handoff.
-- Builds a major-context graph across tracks, modules, and projects.
+- Builds a visual Context Graph from explicit workspace relationships. Projects
+  branch into work, attention, decisions, history, and scoped evidence; project
+  focus expands those branches into their individual connected records.
 - In local development only, provides evidence-gated Ask with explicit project
   or workspace scope, a live shared capture-review queue, and explicitly scoped
   changed-document deltas with Git/frontmatter/mtime provenance.
@@ -33,7 +35,7 @@ not expose a remote MCP server, private workspaces, or write access.
   `readOnly`, and `sensitivity` from the single workspace chosen at Vite
   startup, and never returns repository, scan, or write roots, or any absolute
   path. Failures degrade to `Workspace unavailable · Verify local
-  configuration` while the rest of the Cockpit stays usable. The public build
+configuration` while the rest of the Cockpit stays usable. The public build
   renders `Demo workspace · Read-only preview` from compile-time constants and
   omits the endpoint client entirely (`npm run test:production-boundary`).
 
@@ -44,8 +46,8 @@ not expose a remote MCP server, private workspaces, or write access.
 - `#/doc/:encodedPath`: Knowledge Base reader for a Markdown file.
 - `#/projects`: Project Board.
 - `#/project/:projectId`: Project detail page.
-- `#/graph`: Context Graph overview.
-- `#/graph?focus=:focusId`: Context Graph focused on a major node.
+- `#/graph`: visual Context Graph overview.
+- `#/graph?focus=:focusId`: Context Graph focused on a project or relationship node.
 
 ## Run Locally
 
@@ -134,8 +136,12 @@ Markdown source files (demo-kb/ plus kb/ for local preview)
 - `src/views/ProjectBoardView.tsx`: project board columns composed with
   attention filters.
 - `src/views/ProjectDetailView.tsx`: project status, focus, changes, decisions,
-  blockers/questions, actions, linked docs, and handoff copying.
-- `src/views/ContextGraphView.tsx`: major-context graph with focus selection, zoom, fit/reset, node movement, and collapsible context links.
+  blockers/questions, actions, the portable Context Map, and handoff copying.
+- `src/views/ContextGraphView.tsx`: zoomable, draggable visual graph across
+  tracks, projects, and their explicit operational context branches.
+- `src/components/ProjectContextMap.tsx`: project-centric operational context grouped into work,
+  attention, decisions, history, and evidence as a radial visual graph without
+  requiring a KB migration.
 
 ### Components
 
@@ -156,7 +162,9 @@ The domain layer is pure data transformation where possible.
 - `src/domain/library.ts`: tracks and item counts; tag counts; visible filters; filtered/grouped docs; curation stats; recent docs.
 - `src/domain/projects.ts`: adapts the shared project parser into Cockpit project
   summaries, status buckets, board columns, linked documents, and handoffs.
-- `src/domain/graph.ts`: relationship scoring; major-node focus options; overview/focused graph construction; context graph for project detail pages.
+- `src/domain/graph.ts`: relationship scoring; major-node focus options; overview/focused portfolio graph construction.
+- `src/domain/project-context-map.ts`: portable project-context adapter over existing project,
+  decision, checkpoint, checklist, and evidence conventions.
 - `src/domain/hub.ts`: dashboard summaries.
 - `src/domain/command-palette.ts`: typed command-palette entries for documents,
   projects, decisions, views, and review actions; deterministic ranking,

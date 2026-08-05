@@ -26,6 +26,7 @@ afterEach(async () => {
 describe("production bundle boundary", () => {
   it("guards every local-only development endpoint", () => {
     expect(forbiddenLocalEndpointMarkers).toContain("/__gke/workspace/context");
+    expect(forbiddenLocalEndpointMarkers).toContain("/__gke/projects/tasks");
     expect(new Set(forbiddenLocalEndpointMarkers).size).toBe(forbiddenLocalEndpointMarkers.length);
   });
 

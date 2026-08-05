@@ -171,9 +171,9 @@ const VIEW_DEFINITIONS: Array<{
   {
     view: "graph",
     title: "Context Graph",
-    summary: "Major context links",
+    summary: "Visual project, work, decision, history, and evidence relationships",
     route: "#/graph",
-    keywords: ["graph", "links", "map", "context"],
+    keywords: ["portfolio", "projects", "graph", "links", "map", "context", "evidence"],
   },
 ];
 

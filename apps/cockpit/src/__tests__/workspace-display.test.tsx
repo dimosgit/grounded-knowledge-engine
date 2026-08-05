@@ -36,6 +36,7 @@ describe("workspace display rules", () => {
     expect(display.sensitivityText).toBe("");
     expect(display.detailText).toBe("Local writes enabled");
     expect(display.workspaceId).toBe("local-operator");
+    expect(display.canWrite).toBe(true);
     expect(display.accessibleLabel).toContain("Workspace ID: local-operator");
   });
 
@@ -47,6 +48,7 @@ describe("workspace display rules", () => {
 
     expect(display.tone).toBe("read-only");
     expect(display.policyText).toBe("Read-only");
+    expect(display.canWrite).toBe(false);
   });
 
   test("surfaces sensitivity above the default and keeps the policy text", () => {
@@ -84,6 +86,7 @@ describe("workspace display rules", () => {
     const demo = describeWorkspaceDisplay({ status: "demo" });
     expect(demo.tone).toBe("demo");
     expect(demo.summary).toBe("Demo workspace · Read-only preview");
+    expect(demo.canWrite).toBe(false);
   });
 
   test("rejects malformed, oversized, and path-shaped payloads", () => {

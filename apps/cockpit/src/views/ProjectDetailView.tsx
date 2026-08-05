@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Download,
   AlertTriangle,
@@ -9,11 +9,12 @@ import {
   ClipboardCopy,
   FileText,
   History,
-  Sparkles,
   Target,
 } from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
 import { OperatorFrame } from "../components/OperatorFrame";
+import { ProjectContextMap } from "../components/ProjectContextMap";
+import { useWorkspaceDisplayValue } from "../hooks/useWorkspaceDisplay";
 import { downloadTextFile, writeTextToClipboard } from "../utils/clipboard";
 
 const PROGRESS_PHASE = {
@@ -55,13 +56,34 @@ const TASK_GROUPS = [
   { status: "gated", label: "Gated / waiting", dotClassName: "bg-status-blocked" },
 ];
 
-function TaskRow({ task, dotClassName, muted = false }) {
+function TaskRow({
+  task,
+  dotClassName,
+  muted = false,
+  canComplete = false,
+  onRequestComplete = undefined,
+}) {
   return (
     <li className="flex items-start gap-3 px-5 py-2.5">
-      <span
-        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClassName}`}
-        aria-hidden="true"
-      />
+      {canComplete ? (
+        <button
+          type="button"
+          className="group -m-2 shrink-0 rounded-full p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          aria-label={`Finish task: ${task.text}`}
+          title="Finish task"
+          onClick={() => onRequestComplete?.(task)}
+        >
+          <span
+            className={`block h-2.5 w-2.5 rounded-full transition-transform group-hover:scale-125 ${dotClassName}`}
+            aria-hidden="true"
+          />
+        </button>
+      ) : (
+        <span
+          className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${dotClassName}`}
+          aria-hidden="true"
+        />
+      )}
       <span
         className={`min-w-0 flex-1 text-body-md ${
           muted
@@ -88,14 +110,27 @@ export function ProjectDetailView({
   onProjects,
   onGraph,
   activeProject,
-  linkedDocs,
+  contextMap,
+  focusSection,
   onOpenDoc,
+  onOpenDecision,
   bodyStatus,
   bodyError,
   onRetryBody,
+  onCompleteTask,
 }) {
   const [handoffCopyState, setHandoffCopyState] = useState("idle");
-  const taskBoardRef = useRef(null);
+  const [pendingTask, setPendingTask] = useState<{ text: string } | null>(null);
+  const [taskCompletionState, setTaskCompletionState] = useState<"idle" | "saving" | "error">(
+    "idle",
+  );
+  const [taskCompletionError, setTaskCompletionError] = useState("");
+  const [completedTaskLabel, setCompletedTaskLabel] = useState("");
+  const deliveryChecklistRef = useRef<HTMLElement | null>(null);
+  const cancelCompletionRef = useRef<HTMLButtonElement | null>(null);
+  const finishDialogRef = useRef<HTMLDivElement | null>(null);
+  const completionTriggerRef = useRef<HTMLElement | null>(null);
+  const workspace = useWorkspaceDisplayValue();
   const tasks = activeProject?.tasks || [];
   const taskCounts = activeProject?.taskCounts || {
     done: 0,
@@ -118,14 +153,87 @@ export function ProjectDetailView({
   const progressPhase = PROGRESS_PHASE[activeProject?.statusBucket] || PROGRESS_PHASE.reference;
   const progressPercent =
     activeProject?.statusBucket === "done" ? 100 : activeProject?.progressPercent;
+  const canCompleteTasks = import.meta.env.DEV && workspace.canWrite && Boolean(onCompleteTask);
 
-  function jumpToTaskBoard() {
+  function jumpToDeliveryChecklist() {
     if (!tasks.length) {
       if (activeProject?.sourceDocPath) onOpenDoc(activeProject.sourceDocPath);
       return;
     }
     // Instant jump: reliable under rAF throttling and for reduced-motion users.
-    taskBoardRef.current?.scrollIntoView({ block: "start" });
+    deliveryChecklistRef.current?.scrollIntoView?.({ block: "start" });
+  }
+
+  useEffect(() => {
+    if (focusSection !== "delivery-checklist" || !tasks.length) return;
+    const frame = window.requestAnimationFrame(() => {
+      deliveryChecklistRef.current?.scrollIntoView?.({ block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeProject?.id, focusSection, tasks.length]);
+
+  useEffect(() => {
+    if (!pendingTask) return;
+    cancelCompletionRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && taskCompletionState !== "saving") {
+        setPendingTask(null);
+        setTaskCompletionState("idle");
+        setTaskCompletionError("");
+        window.requestAnimationFrame(() => completionTriggerRef.current?.focus());
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const controls = finishDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!controls?.length) return;
+      const first = controls[0];
+      const last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [pendingTask, taskCompletionState]);
+
+  function requestTaskCompletion(task: { text: string }) {
+    completionTriggerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPendingTask(task);
+    setTaskCompletionState("idle");
+    setTaskCompletionError("");
+  }
+
+  function cancelTaskCompletion() {
+    if (taskCompletionState === "saving") return;
+    setPendingTask(null);
+    setTaskCompletionState("idle");
+    setTaskCompletionError("");
+    window.requestAnimationFrame(() => completionTriggerRef.current?.focus());
+  }
+
+  async function confirmTaskCompletion() {
+    if (!pendingTask || !onCompleteTask) return;
+    setTaskCompletionState("saving");
+    setTaskCompletionError("");
+    try {
+      await onCompleteTask(pendingTask.text);
+      setCompletedTaskLabel(pendingTask.text);
+      setPendingTask(null);
+      setTaskCompletionState("idle");
+      window.requestAnimationFrame(() => deliveryChecklistRef.current?.focus());
+    } catch (error) {
+      setTaskCompletionState("error");
+      setTaskCompletionError(
+        error instanceof Error ? error.message : "Could not finish the task. Try again.",
+      );
+    }
   }
 
   function downloadMarkdown() {
@@ -156,6 +264,14 @@ export function ProjectDetailView({
       askProjectTitle={activeProject?.title}
     >
       <div className="mx-auto flex max-w-[1200px] flex-col gap-10 px-4 py-8 md:px-8">
+        {completedTaskLabel && (
+          <div
+            role="status"
+            className="rounded border border-status-done/30 bg-status-done/10 px-4 py-3 text-body-md text-on-surface"
+          >
+            Finished “{completedTaskLabel}”.
+          </div>
+        )}
         {bodyStatus === "loading" && (
           <div
             role="status"
@@ -238,6 +354,14 @@ export function ProjectDetailView({
           )}
         </section>
 
+        <ProjectContextMap
+          activeProject={activeProject}
+          contextMap={contextMap}
+          onOpenDoc={onOpenDoc}
+          onOpenDecision={onOpenDecision}
+          onOpenDeliveryChecklist={jumpToDeliveryChecklist}
+        />
+
         <section
           aria-labelledby="continue-here-heading"
           className="overflow-hidden rounded-xl border border-primary/30 bg-surface-container-low shadow-sm"
@@ -264,9 +388,11 @@ export function ProjectDetailView({
               <button
                 className="mt-4 inline-flex items-center gap-1.5 text-label-caps font-semibold uppercase text-primary hover:underline"
                 type="button"
-                onClick={jumpToTaskBoard}
+                onClick={jumpToDeliveryChecklist}
               >
-                {tasks.length ? `Open task board (${openTaskCount} open)` : "Open source doc"}
+                {tasks.length
+                  ? `Open Delivery checklist (${openTaskCount} open)`
+                  : "Open source doc"}
                 <ArrowDown size={14} />
               </button>
             </div>
@@ -339,10 +465,17 @@ export function ProjectDetailView({
         </section>
 
         {tasks.length > 0 && (
-          <section ref={taskBoardRef} className="scroll-mt-6">
+          <section
+            id="delivery-checklist"
+            ref={deliveryChecklistRef}
+            className="scroll-mt-6"
+            tabIndex={-1}
+          >
             <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 className="font-display text-headline-sm text-on-surface">Task board</h2>
+                <h2 className="font-display text-headline-sm text-on-surface">
+                  Delivery checklist
+                </h2>
                 <p className="mt-1 text-metadata text-on-surface-variant">
                   {openTaskCount} open · {taskCounts.done} done — parsed live from the checklist in
                   the source doc
@@ -377,6 +510,8 @@ export function ProjectDetailView({
                           key={`${group.status}-${index}`}
                           task={task}
                           dotClassName={group.dotClassName}
+                          canComplete={canCompleteTasks}
+                          onRequestComplete={requestTaskCompletion}
                         />
                       ))}
                     </ul>
@@ -413,91 +548,70 @@ export function ProjectDetailView({
             </div>
           </section>
         )}
-
-        <details className="group rounded-lg border border-border-subtle bg-surface-container-low">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 text-body-md font-semibold text-on-surface">
-            <span className="flex items-center gap-2">
-              <Sparkles size={18} className="text-primary" />
-              Project context
-            </span>
-            <span className="text-metadata font-normal text-on-surface-variant group-open:hidden">
-              Show more
-            </span>
-            <span className="hidden text-metadata font-normal text-on-surface-variant group-open:inline">
-              Show less
-            </span>
-          </summary>
-          <div className="grid gap-4 border-t border-border-subtle p-5 lg:grid-cols-2">
-            <article>
-              <div className="mb-2 text-metadata uppercase text-primary">Start here</div>
-              <p className="text-body-md text-on-surface">
-                {activeProject?.startHereBrief || "No start-here brief recorded."}
-              </p>
-            </article>
-            <article>
-              <div className="mb-2 flex items-center gap-2 text-metadata uppercase text-on-surface-variant">
-                <History size={17} className="text-primary" />
-                Last meaningful change
-              </div>
-              <p className="text-body-md text-on-surface">
-                {activeProject?.recentChanges || "No recent change recorded."}
-              </p>
-            </article>
-            <article>
-              <div className="mb-2 text-metadata uppercase text-on-surface-variant">
-                Active decisions
-              </div>
-              <ul className="space-y-2 text-body-md text-on-surface">
-                {(activeProject?.activeDecisions?.length
-                  ? activeProject.activeDecisions
-                  : ["None recorded."]
-                ).map((item) => (
-                  <li key={item}>• {item}</li>
-                ))}
-              </ul>
-            </article>
-            <article>
-              <div className="mb-2 text-metadata uppercase text-on-surface-variant">
-                Open questions
-              </div>
-              <ul className="space-y-2 text-body-md text-on-surface">
-                {(activeProject?.openQuestions?.length
-                  ? activeProject.openQuestions
-                  : ["None recorded."]
-                ).map((item) => (
-                  <li key={item}>• {item}</li>
-                ))}
-              </ul>
-            </article>
-          </div>
-        </details>
-
-        <section>
-          <h2 className="mb-4 font-display text-headline-sm text-on-surface">Linked Resources</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {linkedDocs.map((doc) => (
-              <button
-                key={doc.path}
-                className="flex items-center gap-4 rounded-lg border border-border-subtle bg-surface-container p-4 text-left hover:border-primary"
-                type="button"
-                onClick={() => onOpenDoc(doc.path)}
-              >
-                <div className="flex h-10 w-10 items-center justify-center rounded bg-primary/10 text-primary">
-                  <FileText size={20} />
-                </div>
-                <div className="min-w-0">
-                  <div className="truncate text-body-md font-semibold text-on-surface">
-                    {doc.title}
-                  </div>
-                  <div className="truncate font-mono text-code-sm text-on-surface-variant">
-                    {doc.path}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
       </div>
+      {pendingTask && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) cancelTaskCompletion();
+          }}
+        >
+          <div
+            ref={finishDialogRef}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="finish-task-title"
+            aria-describedby="finish-task-description"
+            className="w-full max-w-lg rounded-xl border border-border-subtle bg-surface-container-high p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="mt-0.5 shrink-0 text-status-done" size={22} />
+              <div>
+                <h2
+                  id="finish-task-title"
+                  className="font-display text-headline-sm text-on-surface"
+                >
+                  Finish this task?
+                </h2>
+                <p
+                  id="finish-task-description"
+                  className="mt-2 text-body-md text-on-surface-variant"
+                >
+                  This marks the checkbox complete in the project’s Markdown source.
+                </p>
+              </div>
+            </div>
+            <p className="mt-5 rounded border border-border-subtle bg-surface-container px-4 py-3 text-body-md text-on-surface">
+              {pendingTask.text}
+            </p>
+            {taskCompletionState === "error" && (
+              <p role="alert" className="mt-3 text-body-md text-status-blocked">
+                {taskCompletionError}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                ref={cancelCompletionRef}
+                type="button"
+                className="rounded border border-border-subtle px-4 py-2 text-label-caps font-semibold uppercase text-on-surface hover:border-primary disabled:opacity-50"
+                disabled={taskCompletionState === "saving"}
+                onClick={cancelTaskCompletion}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-status-done px-4 py-2 text-label-caps font-semibold uppercase text-surface-main disabled:opacity-60"
+                disabled={taskCompletionState === "saving"}
+                onClick={() => void confirmTaskCompletion()}
+              >
+                {taskCompletionState === "saving" ? "Finishing…" : "Finish task"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </OperatorFrame>
   );
 }

@@ -69,7 +69,14 @@ export function getHashRoute() {
   if (hash.startsWith("#/project/")) {
     try {
       const encodedProjectId = hash.slice("#/project/".length).split("?")[0];
-      return { mode: "project", projectId: decodeURIComponent(encodedProjectId), path: null };
+      const queryString = hash.slice(1).split("?")[1] || "";
+      const requestedSection = new URLSearchParams(queryString).get("section") || "";
+      return {
+        mode: "project",
+        projectId: decodeURIComponent(encodedProjectId),
+        projectSection: requestedSection === "delivery-checklist" ? requestedSection : "",
+        path: null,
+      };
     } catch {
       return { mode: null, path: null };
     }
@@ -135,8 +142,9 @@ export function setHashGraph(focusPath = "") {
   window.location.hash = focusPath ? `/graph?focus=${encodeURIComponent(focusPath)}` : "/graph";
 }
 
-export function setHashProject(projectId) {
-  window.location.hash = `/project/${encodeURIComponent(projectId)}`;
+export function setHashProject(projectId, section = "") {
+  const sectionQuery = section === "delivery-checklist" ? "?section=delivery-checklist" : "";
+  window.location.hash = `/project/${encodeURIComponent(projectId)}${sectionQuery}`;
 }
 
 export function setHashDecisions(decisionFilter = "") {

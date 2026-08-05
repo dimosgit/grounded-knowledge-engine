@@ -7,6 +7,7 @@
     "sync:content": "tsx scripts/sync-markdown.ts",
     "watch:content": "tsx scripts/watch-markdown.ts",
     "dev": "concurrently -k \"npm run watch:content\" \"vite\"",
+    "dev:demo": "npm run sync:content -- --public && vite --open '/#/graph'",
     "prebuild": "npm run sync:content -- --public",
     "build": "vite build",
     "test:production-boundary": "tsx scripts/production-boundary.ts",
