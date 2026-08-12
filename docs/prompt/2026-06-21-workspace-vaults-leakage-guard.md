@@ -149,7 +149,7 @@ writes disabled and never add an in-process switch or cross-workspace search.
 **Roast by Antigravity Reviewer:**
 A physical trust boundary per process is strong security for consultants, but managing multiple MCP processes can create daily friction. The design is technically feasible; the product question is whether setup and workspace identity make that isolation understandable enough to use routinely.
 
-## 14. Claude Reviewer — Roast & Feasibility
+## 14. Internal Review — Roast & Feasibility
 
 **Verdict: BUILD A THIN SLICE. The core insight is right; most of the broader audit and policy scope is unnecessary before real users validate the boundary.**
 
@@ -195,7 +195,7 @@ Valuable slice: ~3–5 engineer-days. The full plan as written: ~10–15 (low co
 
 **Bottom line:** Ship the Leakage Guard and the per-process identity, prove it with one adversarial test, and stop. Everything past the path guard is you cosplaying as a compliance vendor for an audience of yourself.
 
-— _Claude Reviewer_
+— _Internal review_
 
 ## 15. Accepted Decisions — 2026-06-22
 
