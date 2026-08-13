@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -177,6 +178,75 @@ try {
     () => runSetup("--workspace=not-registered", "--client=codex", "--skip-smoke"),
     /not registered/i,
   );
+
+  // User scope: every client registers in its home config, nothing project-local.
+  const userConfigRoot = mkdtempSync(join(tmpdir(), "gke-mcp-userconfig-"));
+  const fakeHome = mkdtempSync(join(tmpdir(), "gke-mcp-home-"));
+  try {
+    writeFileSync(
+      join(fakeHome, ".claude.json"),
+      `${JSON.stringify(
+        { numStartups: 7, mcpServers: { other: { command: "other-server" } } },
+        null,
+        2,
+      )}\n`,
+    );
+
+    execFileSync(process.execPath, [setupScript, "--client=all", "--scope=user", "--skip-smoke"], {
+      cwd: repoRoot,
+      env: { ...process.env, GKE_MCP_CONFIG_ROOT: userConfigRoot, GKE_MCP_HOME: fakeHome },
+      stdio: "pipe",
+      encoding: "utf8",
+    });
+
+    const homeClaude = JSON.parse(readFileSync(join(fakeHome, ".claude.json"), "utf8"));
+    assert.equal(homeClaude.numStartups, 7, "unrelated Claude settings must survive");
+    assert.deepEqual(homeClaude.mcpServers.other, { command: "other-server" });
+    assert.equal(homeClaude.mcpServers.kb.type, "stdio");
+    assert.equal(homeClaude.mcpServers.kb.command, process.execPath);
+    assert.equal(homeClaude.mcpServers.kb.env.KB_MCP_REPO_ROOT, userConfigRoot);
+    assert.ok(
+      existsSync(join(fakeHome, ".claude.json.gke-backup")),
+      "home config must be backed up",
+    );
+
+    const homeGemini = JSON.parse(readFileSync(join(fakeHome, ".gemini", "settings.json"), "utf8"));
+    assert.equal(homeGemini.mcpServers.kb.cwd, userConfigRoot);
+    assert.equal(homeGemini.mcpServers.kb.env.KB_MCP_REPO_ROOT, userConfigRoot);
+
+    const homeCodex = readFileSync(join(fakeHome, ".codex", "config.toml"), "utf8");
+    assert.match(homeCodex, /^\[mcp_servers\.kb\]$/m);
+    assert.ok(homeCodex.includes(`KB_MCP_REPO_ROOT = ${JSON.stringify(userConfigRoot)}`));
+
+    const vscodeUserPath =
+      process.platform === "darwin"
+        ? join(fakeHome, "Library", "Application Support", "Code", "User", "mcp.json")
+        : process.platform === "win32"
+          ? join(fakeHome, "AppData", "Roaming", "Code", "User", "mcp.json")
+          : join(fakeHome, ".config", "Code", "User", "mcp.json");
+    assert.equal(JSON.parse(readFileSync(vscodeUserPath, "utf8")).servers.kb.type, "stdio");
+
+    for (const relative of [
+      ".mcp.json",
+      join(".claude", "settings.local.json"),
+      join(".codex", "config.toml"),
+      join(".gemini", "settings.json"),
+      join(".vscode", "mcp.json"),
+    ]) {
+      assert.ok(
+        !existsSync(join(userConfigRoot, relative)),
+        `user scope must not write project-local ${relative}`,
+      );
+    }
+
+    assert.throws(
+      () => runSetup("--scope=nowhere", "--client=codex", "--skip-smoke"),
+      /Unsupported scope/i,
+    );
+  } finally {
+    rmSync(userConfigRoot, { recursive: true, force: true });
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
 
   const listed = runSetup("--list-workspaces");
   assert.match(listed, /client-alpha: Client Alpha \(read-only\)/);

@@ -23,6 +23,33 @@ Each adapter starts its own immutable workspace process. Named vaults default
 to writes disabled; `--writes` requires `readOnly: false` in that vault's
 `.gke/workspace.json`. The registry never enables cross-workspace retrieval.
 
+## Registration scope (`--scope`)
+
+Scope controls **where the client registration is written**, never which
+knowledge base the server reads:
+
+| Scope               | Writes to                                                                                                     | Visible from       |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `project` (default) | `.mcp.json`, `.claude/settings.local.json`, `.codex/config.toml`, `.gemini/settings.json`, `.vscode/mcp.json` | this checkout only |
+| `user`              | `~/.claude.json`, `~/.codex/config.toml`, `~/.gemini/settings.json`, VS Code's user `mcp.json`                | every folder       |
+
+```bash
+npm run setup:mcp -- --scope user
+npm run setup:mcp -- --scope user --workspace client-alpha --writes
+```
+
+A knowledge base is a location, not a working directory: `KB_MCP_REPO_ROOT` is
+written as an absolute path and the server resolves its root from that (falling
+back to its own install path), never from `process.cwd()`. A user-scope adapter
+therefore grounds against the same vault whatever folder the client is opened
+in. Give each vault a distinct workspace ID before registering it at user
+scope — server names share one namespace across all folders, so two default
+`kb` registrations from different checkouts would collide.
+
+User scope edits configs outside the repo, so the first write of each file is
+copied to `<file>.gke-backup`. Clients cache their tool catalog at startup:
+restart them to pick up the change.
+
 ## Committing the file
 
 `.gke/` holds operational state and is gitignored. To version the

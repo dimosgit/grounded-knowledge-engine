@@ -138,6 +138,17 @@ gke setup --workspace my-project --workspace-root "/path/to/my-project"
 Registered vaults default to writes disabled. Enable writes only when the
 workspace's own `.gke/workspace.json` explicitly sets `readOnly` to `false`.
 
+`gke setup` registers the server for that folder only. To reach the same
+workspace from every folder, add `--scope user`, which writes each client's
+home configuration instead:
+
+```bash
+gke setup --scope user
+```
+
+Either way, restart the client afterwards — clients read their MCP tool
+catalog at startup. `gke setup --help` lists every option.
+
 ## Remove the demo
 
 The demo is self-contained in `gke-demo/`. Delete that directory when you no
