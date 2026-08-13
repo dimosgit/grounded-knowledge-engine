@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronDown, Search, X } from "lucide-react";
 
-const KIND_ORDER = ["Overview", "Track", "Module", "Client", "Project"];
+const KIND_ORDER = ["Overview", "Project", "Client", "Track", "Module"];
 
 const KIND_TONES = {
   Overview: "border-outline-variant text-on-surface-variant",
@@ -116,7 +116,7 @@ export function GraphFocusPicker({ options, activeOption, query, onQueryChange, 
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={
-            !isOpen && activeOption ? "" : "Search tracks, modules, clients, projects..."
+            !isOpen && activeOption ? "" : "Search projects, clients, tracks, modules..."
           }
         />
         {!isOpen && !query && activeOption && (
