@@ -15,6 +15,8 @@ function printHelp() {
 
 Usage:
   gke setup [options]             Configure GKE for Codex, Claude, Gemini, and Copilot
+  gke setup --scope user          ...and make it available from every folder
+  gke setup --help                List every setup option
   gke demo [directory]            Create a writable demo workspace (default: gke-demo)
   gke project <command>           Create, inspect, validate, or resume a project
   gke capture <command>           Review pending capture proposals
@@ -27,7 +29,8 @@ Start here:
   cd gke-demo
   gke setup
 
-Then restart Codex or Claude from that directory.`);
+Then restart Codex or Claude from that directory. Add --scope user to register
+the same workspace with every client in every folder instead.`);
 }
 
 function runSetup(args) {

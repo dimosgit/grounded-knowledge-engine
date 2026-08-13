@@ -69,6 +69,49 @@ try {
     new RegExp(`KB_MCP_REPO_ROOT = ${JSON.stringify(realpathSync(demoRoot))}`),
   );
 
+  // A packaged install must be able to register itself for every folder, with
+  // the KB pinned to the user's workspace rather than the install directory.
+  const fakeHome = path.join(sandbox, "home");
+  mkdirSync(fakeHome, { recursive: true });
+  run(gkeBin, ["setup", "--scope=user", "--client=all", "--skip-smoke"], {
+    cwd: demoRoot,
+    env: { GKE_MCP_HOME: fakeHome },
+  });
+  const userClaude = JSON.parse(readFileSync(path.join(fakeHome, ".claude.json"), "utf8"));
+  assert.equal(userClaude.mcpServers.kb.env.KB_MCP_REPO_ROOT, realpathSync(demoRoot));
+  assert.match(userClaude.mcpServers.kb.args.join(" "), /dist\/tools\/kb-mcp-server\/server\.js/);
+  assert.ok(
+    userClaude.mcpServers.kb.args.every((arg) => !arg.startsWith(demoRoot)),
+    "the server must launch from the installed package, not the workspace",
+  );
+  const userGemini = JSON.parse(
+    readFileSync(path.join(fakeHome, ".gemini", "settings.json"), "utf8"),
+  );
+  assert.equal(userGemini.mcpServers.kb.env.KB_MCP_REPO_ROOT, realpathSync(demoRoot));
+
+  // Re-running is idempotent; pointing the same global name at a second
+  // workspace must fail loudly instead of silently shadowing the first.
+  run(gkeBin, ["setup", "--scope=user", "--client=all", "--skip-smoke"], {
+    cwd: demoRoot,
+    env: { GKE_MCP_HOME: fakeHome },
+  });
+  run(gkeBin, ["demo", "second-vault"], { cwd: demoParent });
+  const secondRoot = path.join(demoParent, "second-vault");
+  assert.throws(
+    () =>
+      run(gkeBin, ["setup", "--scope=user", "--client=claude", "--skip-smoke"], {
+        cwd: secondRoot,
+        env: { GKE_MCP_HOME: fakeHome },
+      }),
+    /already registered at user scope/i,
+  );
+  run(gkeBin, ["setup", "--scope=user", "--client=claude", "--skip-smoke", "--force"], {
+    cwd: secondRoot,
+    env: { GKE_MCP_HOME: fakeHome },
+  });
+  const repointed = JSON.parse(readFileSync(path.join(fakeHome, ".claude.json"), "utf8"));
+  assert.equal(repointed.mcpServers.kb.env.KB_MCP_REPO_ROOT, realpathSync(secondRoot));
+
   const resume = run(gkeBin, ["project", "resume", "router-rollout", "--repo-root", demoRoot], {
     cwd: demoRoot,
   });

@@ -2,6 +2,23 @@
 
 All notable changes to Grounded Knowledge Engine are documented here.
 
+## Unreleased
+
+### Client registration
+
+- Added `gke setup --scope user` (`npm run setup:mcp -- --scope user`), which
+  registers the server in each client's home configuration — `~/.claude.json`,
+  `~/.codex/config.toml`, `~/.gemini/settings.json`, and VS Code's user
+  `mcp.json` — so Claude Code, Codex, Gemini CLI, and Copilot reach a workspace
+  from every folder instead of only the checkout that generated the config.
+  Scope selects where the registration is written; the served knowledge base is
+  unchanged, recorded as an absolute path.
+- Refused to silently repoint an existing user-scope server name at a different
+  workspace, since those names are global. Register additional vaults under
+  their own `--workspace` ID, or pass `--force`.
+- Backed up each home configuration to `<file>.gke-backup` before the first
+  modification, and added `gke setup --help`.
+
 ## 0.2.1 — 2026-08-13
 
 ### Agent behavior and attribution
