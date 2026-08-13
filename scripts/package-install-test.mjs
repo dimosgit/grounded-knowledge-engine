@@ -35,6 +35,17 @@ try {
   assert.equal(packResult.length, 1);
   const tarball = path.join(packOutput, packResult[0].filename);
   assert.ok(existsSync(tarball), "npm pack must create the release artifact");
+  const packedPaths = new Set(packResult[0].files.map((file) => file.path));
+  for (const requiredPath of [
+    ".github/copilot-instructions.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "GEMINI.md",
+    "skills/grounded-knowledge-workflow/SKILL.md",
+    "skills/grounded-knowledge-workflow/agents/openai.yaml",
+  ]) {
+    assert.ok(packedPaths.has(requiredPath), `release artifact must include ${requiredPath}`);
+  }
 
   run(npmBin, ["install", "--global", "--prefix", installPrefix, tarball]);
   const gkeBin =

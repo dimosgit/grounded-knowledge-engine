@@ -2,7 +2,22 @@
 
 All notable changes to Grounded Knowledge Engine are documented here.
 
-## 0.2.1 — 2026-08-02
+## 0.2.1 — 2026-08-13
+
+### Agent behavior and attribution
+
+- Made `AGENTS.md` the explicit operating contract for grounded MCP routing and
+  added repository instructions for GitHub Copilot.
+- Defined AI assistants as tools rather than contributors and prohibited AI
+  author, co-author, reviewer, session, and release attribution.
+- Included the agent contract, client guidance, and grounded knowledge workflow
+  skill in the installable release package.
+
+### Operator Cockpit
+
+- Expanded the Context Graph with readable project, decision, checkpoint,
+  attention, and explicitly scoped evidence relationships.
+- Added direct project-task writeback through the shared project service.
 
 ### Sanitization
 
