@@ -183,7 +183,7 @@ authored package as complete.
 **Roast by Antigravity Reviewer:**
 This is useful in theory, but Microsoft Copilot Studio integration should not block the core local-first value. Adding HTTP and authentication on top of a local stdio tool creates substantial deployment and network-boundary work, making this the lowest-priority proposal unless real users require it.
 
-## 14. Claude Reviewer — Roast & Feasibility
+## 14. Internal Review — Roast & Feasibility
 
 **Verdict: DEFER. Highest effort, highest risk, lowest demonstrable payoff — and it actively fights the local-first thesis it claims to preserve.**
 
@@ -227,7 +227,7 @@ GitHub Copilot adapter: ~0.5 day. The full remote gateway as specced: ~12–20 e
 
 **Bottom line:** Take the low-cost GitHub Copilot adapter, ship it with Project Context, and shelve the rest behind a real user need. Building a remote gateway merely to prove a _local-first_ tool works against the product's clearest adoption path.
 
-— _Claude Reviewer_
+— _Internal review_
 
 ## 15. Accepted Decisions — 2026-06-22
 
