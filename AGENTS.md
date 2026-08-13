@@ -10,6 +10,37 @@ and the same engine core is exposed through a CLI, a local MCP server, and the
 optional Operator Cockpit web preview. This repo is **public** — see
 Sanitization below before committing anything.
 
+## Agent operating contract
+
+This file is the repository's agent contract. Do not create a second contract
+file with overlapping rules.
+
+- Use the connected GKE MCP server first when a request depends on the user's
+  documents, a named workspace or client, previous research, project state,
+  decisions, or handoffs. For ordinary grounded Q&A use
+  `kb.answer_and_capture`; for a named project use `kb.resume_project`; use
+  `kb.search` only for evidence-only retrieval and `kb.get_record` only for an
+  explicitly requested record.
+- Do not use GKE MCP merely to inspect or debug this repository's source code.
+  The checked-out files and tests are authoritative for implementation work.
+- If a task should use GKE but no `kb.*` tools are visible, say that the MCP
+  connection is unavailable, run `npm run setup:mcp -- --client <client>` when
+  local configuration is in scope, and remind the operator that clients must be
+  restarted to reload their tool catalog. Do not silently pretend an
+  ungrounded answer came from GKE.
+- MCP tools are model-controlled: registration makes them available but does
+  not force a call. These routing rules are therefore mandatory for applicable
+  tasks.
+
+## Authorship and attribution
+
+AI assistants are tools, not repository contributors. Never use an AI product,
+model, bot, or session identity as a commit author, committer, co-author,
+reviewer signature, or release author. Do not add AI attribution trailers such
+as `Co-Authored-By` or session links. Preserve the human operator's configured
+Git identity for commits unless the operator explicitly requests another human
+identity.
+
 ## Two npm trees
 
 The engine (repo root) and the Cockpit (`apps/cockpit`) have separate
