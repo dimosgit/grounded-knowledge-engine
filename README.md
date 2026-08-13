@@ -112,6 +112,21 @@ Named vaults default to writes disabled. See
 [workspace configuration](docs/workspace-config.md) for scan roots, write
 policy, domain vocabulary, and client-specific setup.
 
+By default the registration is project-scoped: only clients opened in that
+folder see the server. Add `--scope user` to write each client's home config
+instead, so Claude Code, Codex, Gemini CLI, and Copilot reach the workspace
+from any directory:
+
+```bash
+gke setup --scope user
+gke setup --scope user --workspace client-alpha
+```
+
+Scope changes where the registration lives, never which knowledge base is
+served — the workspace root is recorded as an absolute path. Because
+user-scope names are global, give each vault its own `--workspace` ID; GKE
+refuses to silently repoint an existing global name at a different workspace.
+
 ## Ingest documents
 
 From a source checkout:
