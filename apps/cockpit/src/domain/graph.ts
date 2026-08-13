@@ -257,10 +257,10 @@ export function getMajorGraphFocusOptions(docs, projectSummaries, tracks) {
       kind: "Overview",
       searchText: "overview all major contexts",
     },
+    ...projectOptions,
+    ...clientOptions,
     ...trackOptions,
     ...moduleOptions,
-    ...clientOptions,
-    ...projectOptions,
   ];
 }
 
