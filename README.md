@@ -106,26 +106,13 @@ cross-workspace retrieval or silently switch between clients.
 ```bash
 gke setup --workspace client-alpha --workspace-root "/path/to/client-alpha"
 gke setup --workspace client-alpha --client codex
+gke setup --scope user   # reach this workspace from every folder
 ```
 
-Named vaults default to writes disabled. See
+Named vaults default to writes disabled, and setup registers the server for
+the current folder unless you pass `--scope user`. See
 [workspace configuration](docs/workspace-config.md) for scan roots, write
-policy, domain vocabulary, and client-specific setup.
-
-By default the registration is project-scoped: only clients opened in that
-folder see the server. Add `--scope user` to write each client's home config
-instead, so Claude Code, Codex, Gemini CLI, and Copilot reach the workspace
-from any directory:
-
-```bash
-gke setup --scope user
-gke setup --scope user --workspace client-alpha
-```
-
-Scope changes where the registration lives, never which knowledge base is
-served — the workspace root is recorded as an absolute path. Because
-user-scope names are global, give each vault its own `--workspace` ID; GKE
-refuses to silently repoint an existing global name at a different workspace.
+policy, registration scope, domain vocabulary, and client-specific setup.
 
 ## Ingest documents
 
