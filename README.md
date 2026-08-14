@@ -14,7 +14,7 @@ hosted service into the source of truth.
 Your Markdown remains canonical. Retrieval indexes are derived and disposable,
 and every workspace stays on your machine.
 
-https://github.com/user-attachments/assets/70c7ed73-d70d-49b3-a077-b641ad3dc284
+https://github.com/user-attachments/assets/aa4af610-c7a8-431a-bdac-e86fc9ab0673
 
 ## What GKE does
 
