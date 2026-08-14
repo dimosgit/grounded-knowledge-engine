@@ -14,9 +14,7 @@ hosted service into the source of truth.
 Your Markdown remains canonical. Retrieval indexes are derived and disposable,
 and every workspace stays on your machine.
 
-<video src="https://raw.githubusercontent.com/dimosgit/grounded-knowledge-engine/main/docs/assets/gke-weekly-context-graph.mp4" width="720" controls></video>
-
-[Watch or download the 45-second demo](docs/assets/gke-weekly-context-graph.mp4).
+https://github.com/user-attachments/assets/582c6681-44a0-4c1a-9c9b-c50930695823
 
 ## What GKE does
 
