@@ -21,7 +21,7 @@ import {
   type OperatorReviewAction,
 } from "../domain/operator-inbox";
 import type { CaptureProposalSummary } from "../lib/capture-review-api";
-import type { WorkspaceReviewReport } from "../../../../tools/projects/types";
+import type { WorkspaceReviewReport } from "@gke/contracts/projects";
 
 /** Days of changed-evidence history the Attention Inbox asks the engine for. */
 const CHANGE_WINDOW_DAYS = 7;

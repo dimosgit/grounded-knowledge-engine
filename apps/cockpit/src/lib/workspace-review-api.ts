@@ -1,4 +1,4 @@
-import type { WorkspaceReviewReport } from "../../../../tools/projects/types";
+import type { WorkspaceReviewReport } from "@gke/contracts/projects";
 
 const WORKSPACE_REVIEW_PATH = "/__gke/review";
 const CLIENT_TIMEOUT_MS = 10_000;

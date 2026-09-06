@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "protectedRoots": [
+    "kb",
+    ".git",
+    ".cache",
+    ".claude",
+    ".codex",
+    ".gemini",
+    ".gke",
+    ".mcp.json",
+    "node_modules",
+    "dist"
+  ],
+  "layers": {
+    "contracts": {
+      "description": "Browser-safe record types and parsers shared by engine and UI.",
+      "roots": ["packages/contracts"],
+      "excludes": [],
+      "reconcile": ["package.json", "tsconfig.json"],
+      "dependsOn": [],
+      "verify": ["npm run test:contracts"]
+    },
+    "core": {
+      "description": "Grounding, project, ingestion, CLI, and MCP implementation.",
+      "roots": ["tools", "scripts"],
+      "excludes": [],
+      "reconcile": ["package.json", "tsconfig.json"],
+      "dependsOn": ["contracts"],
+      "verify": ["npm run typecheck", "npm run lint", "npm run build", "npm run test:gke"]
+    },
+    "ui": {
+      "description": "Optional Operator Cockpit web interface.",
+      "roots": ["apps/cockpit"],
+      "excludes": ["apps/cockpit/content", "apps/cockpit/dist", "apps/cockpit/node_modules"],
+      "reconcile": ["package.json"],
+      "dependsOn": ["contracts"],
+      "verify": [
+        "npm --prefix apps/cockpit run typecheck",
+        "npm --prefix apps/cockpit run lint",
+        "npm --prefix apps/cockpit run format:check",
+        "npm --prefix apps/cockpit run test",
+        "npm --prefix apps/cockpit run build"
+      ]
+    },
+    "demo": {
+      "description": "Sanitized public demonstration knowledge workspace.",
+      "roots": ["demo-kb"],
+      "excludes": [],
+      "reconcile": [],
+      "dependsOn": [],
+      "verify": ["npm run scrub", "npm run eval"]
+    }
+  }
+}

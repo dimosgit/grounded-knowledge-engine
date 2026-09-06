@@ -25,6 +25,17 @@ export {
   type ProjectCheckpoint,
 } from "./checkpoint-service.js";
 export {
+  PROJECT_CONTRACT_VERSION,
+  isPlaceholderSectionItem,
+  meaningfulSectionItems,
+  normalizeProjectId,
+  parseProjectData,
+  parseProjectDocument,
+  parseProjectFrontmatter,
+  sectionItems,
+  sectionSummary,
+} from "./project-manifest.js";
+export {
   addProjectTask,
   createProject,
   getProject,

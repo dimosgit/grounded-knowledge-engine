@@ -36,7 +36,7 @@ service, team wiki, Jira replacement, or general document-management platform.
 
 ## Quick start
 
-GKE requires **Node.js 22.5 or newer**; Node.js 24 is recommended.
+GKE requires **Node 22.5 or newer**; Node 24 is recommended.
 
 Install the current release:
 
@@ -148,7 +148,7 @@ See the [Cockpit guide](apps/cockpit/README.md) or open the
 ## Documentation
 
 - [Five-minute golden path](docs/tutorials/five-minute-golden-path.md)
-- [Architecture](docs/architecture.md)
+- [Boundaries](docs/separation-of-concerns.md)
 - [Workspace configuration](docs/workspace-config.md)
 - [Workspace and project data model](docs/workspace-data-architecture.md)
 - [MCP server reference](tools/kb-mcp-server/README.md)
@@ -183,7 +183,7 @@ Markdown into the preview content directory.
 
 ## Boundaries
 
-- Markdown files are canonical; indexes and preview content are derived.
+- UI uses contracts; the engine owns behavior; Markdown is canonical.
 - The MCP server and private workspace files remain local.
 - Project membership is explicit and deterministic, never inferred from
   semantic similarity.

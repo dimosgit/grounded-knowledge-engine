@@ -8,6 +8,8 @@ same Markdown source of truth.
 ![Current GKE architecture](architecture.svg)
 
 The checked-in SVG is generated from [`architecture.mmd`](architecture.mmd).
+The exact UI/engine/KB ownership and update boundaries are evaluated in
+[`separation-of-concerns.md`](separation-of-concerns.md).
 
 The current engine architecture is documented here. The normative target data
 model for the consultant features—workspaces, projects, checkpoints,
@@ -49,6 +51,7 @@ flowchart TB
 
     subgraph engine[Local engine]
       CLI[CLI · tools/grounding<br/>index · retrieve · evaluate]
+      CONTRACTS[Project contracts · packages/contracts<br/>browser-safe types + parsing]
       PROJECTS[Project core · tools/projects<br/>parse · scope · resume · handoff]
       DECISIONS[Decision core · tools/decisions<br/>record · review · supersede · replay]
       MCP[MCP server · tools/kb-mcp-server<br/>semantic tools + resources over stdio]
@@ -65,7 +68,8 @@ flowchart TB
     CLI --> IDX
     MCP --> IDX
     MCP --> PROJECTS
-    COCKPIT --> PROJECTS
+    PROJECTS --> CONTRACTS
+    COCKPIT --> CONTRACTS
     IDX -.derived from.-> KB
     MCP -->|capture| KB
     PROJECTS --> KB
@@ -73,17 +77,18 @@ flowchart TB
     COCKPIT --> KB
 ```
 
-| Layer                                  | Role                                                                                                                                                                                           | Portability                          |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| **Grounding core** (`tools/grounding`) | Workspace-pinned application service over deterministic BM25/SQLite indexing, search, scoped grounded answers, refresh, and evaluation.                                                        | Shared by CLI, MCP, and Cockpit      |
-| **Project core** (`tools/projects`)    | Workspace-pinned application service over canonical project administration, checkpoints, strict membership, review, cited capsules, and handoff formatting.                                    | Shared by CLI, MCP, and Cockpit      |
-| **Decision core** (`tools/decisions`)  | Workspace-pinned application service over canonical creation, exact retrieval, evidence review diffs, append-only history, supersession, and review-state calculation.                         | Shared by CLI, MCP, and Cockpit      |
-| **Question core** (`tools/questions`)  | Workspace-pinned application service over atomic, exactly deduplicated, workspace-authorized open-question mutation.                                                                           | Shared provider-neutral core         |
-| **Capture core** (`tools/capture`)     | Workspace-pinned application service over deterministic planning, proposal review, conflict-safe apply/reject, grounded capture, and post-mutation refresh.                                    | Shared by CLI, MCP, and Cockpit      |
-| **MCP server** (`tools/kb-mcp-server`) | Four-tool core; the full profile adds decision operations and logical resources without expanding the daily-use catalog.                                                                       | Any MCP client                       |
-| **Cockpit** (`apps/cockpit`)           | Optional browser UI over shared project and decision parsers, with loopback-only preview/apply workflows in local development. The public preview is a static demo build, not a hosted engine. | Local web UI / static public preview |
-| **Index** (BM25 · SQLite)              | Derived retrieval data. Disposable — rebuilt from the docs.                                                                                                                                    | Regenerable                          |
-| **KB** (Markdown)                      | Your notes. The single source of truth.                                                                                                                                                        | Plain files                          |
+| Layer                                        | Role                                                                                                                                                                                           | Portability                          |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| **Grounding core** (`tools/grounding`)       | Workspace-pinned application service over deterministic BM25/SQLite indexing, search, scoped grounded answers, refresh, and evaluation.                                                        | Shared by CLI, MCP, and Cockpit      |
+| **Project contracts** (`packages/contracts`) | Versioned browser-safe project types, parsing, and attention rules.                                                                                                                            | Engine and UI                        |
+| **Project core** (`tools/projects`)          | Workspace-pinned application service over canonical project administration, checkpoints, strict membership, review, cited capsules, and handoff formatting.                                    | Shared by CLI, MCP, and Cockpit      |
+| **Decision core** (`tools/decisions`)        | Workspace-pinned application service over canonical creation, exact retrieval, evidence review diffs, append-only history, supersession, and review-state calculation.                         | Shared by CLI, MCP, and Cockpit      |
+| **Question core** (`tools/questions`)        | Workspace-pinned application service over atomic, exactly deduplicated, workspace-authorized open-question mutation.                                                                           | Shared provider-neutral core         |
+| **Capture core** (`tools/capture`)           | Workspace-pinned application service over deterministic planning, proposal review, conflict-safe apply/reject, grounded capture, and post-mutation refresh.                                    | Shared by CLI, MCP, and Cockpit      |
+| **MCP server** (`tools/kb-mcp-server`)       | Four-tool core; the full profile adds decision operations and logical resources without expanding the daily-use catalog.                                                                       | Any MCP client                       |
+| **Cockpit** (`apps/cockpit`)                 | Optional browser UI over shared project and decision parsers, with loopback-only preview/apply workflows in local development. The public preview is a static demo build, not a hosted engine. | Local web UI / static public preview |
+| **Index** (BM25 · SQLite)                    | Derived retrieval data. Disposable — rebuilt from the docs.                                                                                                                                    | Regenerable                          |
+| **KB** (Markdown)                            | Your notes. The single source of truth.                                                                                                                                                        | Plain files                          |
 
 ## Design choices
 
@@ -91,7 +96,8 @@ flowchart TB
   hosted Cockpit preview is static demo content only, not a remote MCP service.
 - **Derived data is disposable.** The SQLite index is a cache of the Markdown, never the
   other way around — delete it and `--refresh` rebuilds it.
-- **Shared core, multiple surfaces.** CLI, MCP, and Cockpit reuse the
+- **Shared contracts and core, multiple surfaces.** CLI, MCP, and Cockpit reuse
+  the browser-safe project contract plus the
   workspace-pinned grounding, project, decision, open-question, and capture
   application services. CI proves each exposed surface against the same
   Markdown contracts.

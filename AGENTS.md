@@ -31,6 +31,16 @@ file with overlapping rules.
 - MCP tools are model-controlled: registration makes them available but does
   not force a call. These routing rules are therefore mandatory for applicable
   tasks.
+- A change request authorizes ordinary reversible edits and verification only
+  inside the requested repository scope. Preserve unrelated work and untracked
+  private KB files.
+- Publishing, deployment, pushing, release, external communication, production
+  credentials, and destructive or broad data operations require explicit user
+  authority. Preview and confine writes wherever the command supports it.
+- Stop and ask when the required target is ambiguous, instructions conflict,
+  private data may be exposed, an unrelated change would be overwritten, or
+  the next step needs authority beyond the request. Report evidence honestly;
+  never claim an unrun or failed gate passed.
 
 ## Authorship and attribution
 
@@ -64,6 +74,7 @@ script, so "run a single test" means running its npm script directly:
 
 | Script                                     | Covers                                                  |
 | ------------------------------------------ | ------------------------------------------------------- |
+| `npm run test:layers` / `test:contracts`   | layer ownership + browser-safe record compatibility     |
 | `npm run test:mcp:catalog`                 | MCP profiles, output schemas, annotations, size budgets |
 | `npm run test:mcp:transport`               | NDJSON + legacy Content-Length framing                  |
 | `npm run test:mcp:http`                    | loopback HTTP bridge + API-key auth                     |
@@ -127,14 +138,17 @@ Delete the index anytime; `--refresh` rebuilds it from the Markdown.
   shared by CLI, MCP, and Cockpit, plus deterministic indexing, BM25/SQLite
   retrieval, grounded synthesis with file-and-line citations, and the eval
   harness.
+- **`packages/contracts`** — versioned, browser-safe record types, parsers, and
+  attention rules shared by engine and UI. It must not import Node, browser,
+  React, transport, or filesystem APIs.
 - **`tools/projects`** — the shared project model and workspace-pinned
   application service: parses canonical project records
   (`record_type: project`, `project_id`, `kb/projects/<id>/project.md`),
   resolves membership **explicitly only** (`project_id`, canonical folder,
   `source_roots`, links — never semantic similarity), and composes project
   administration, checkpoints, review, resume capsules, and handoffs. The CLI,
-  MCP server, and Cockpit consume this module; keep parser/model modules
-  browser-safe (no Node-only imports).
+  MCP server, and Cockpit consume this module; browser-safe project parsing
+  lives in `packages/contracts`, while Node-only application services stay here.
 - **`tools/questions`** — the workspace-pinned open-question application
   service and atomic repository. It normalizes and exactly deduplicates
   questions, serializes the read/decide/write critical section, authorizes

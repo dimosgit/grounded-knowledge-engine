@@ -1,14 +1,12 @@
 import {
+  calculateProjectAttention,
+  isCompletedProjectStatus,
   meaningfulSectionItems,
   normalizeProjectId,
   parseProjectData,
   sectionItems,
   sectionSummary,
-} from "../../../../tools/projects/project-manifest";
-import {
-  calculateProjectAttention,
-  isCompletedProjectStatus,
-} from "../../../../tools/projects/project-attention";
+} from "@gke/contracts/projects";
 
 const ACTIVE_LIFECYCLES = new Set([
   "active",
