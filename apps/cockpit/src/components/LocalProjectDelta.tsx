@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { CalendarClock, FileClock } from "lucide-react";
 import { getWorkspaceReview } from "../lib/workspace-review-api";
-import type { WorkspaceReviewReport } from "../../../../tools/projects/types";
+import type { WorkspaceReviewReport } from "@gke/contracts/projects";
 
 function isoDateDaysAgo(days: number): string {
   const date = new Date();

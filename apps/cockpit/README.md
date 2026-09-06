@@ -115,6 +115,7 @@ The app is split so `App.tsx` remains a thin orchestrator.
 Markdown source files (demo-kb/ plus kb/ for local preview)
   -> scripts/sync-markdown.ts
   -> content/**/*.md
+  -> @gke/contracts browser-safe record parsing
   -> domain/catalog.ts
   -> domain view models
   -> route views
@@ -160,8 +161,9 @@ The domain layer is pure data transformation where possible.
 - `src/domain/catalog.ts`: builds indexed doc objects from raw Markdown, applies indexing exclusions, computes initial fallback document.
 - `src/domain/docs.ts`: frontmatter parsing; title/excerpt/type/track/tag derivation; labels and ordering; breadcrumbs; Markdown section helpers; digest quick-view extraction; internal doc and asset path resolution.
 - `src/domain/library.ts`: tracks and item counts; tag counts; visible filters; filtered/grouped docs; curation stats; recent docs.
-- `src/domain/projects.ts`: adapts the shared project parser into Cockpit project
-  summaries, status buckets, board columns, linked documents, and handoffs.
+- `src/domain/projects.ts`: adapts the versioned `@gke/contracts` project parser,
+  attention rules, and types into Cockpit summaries, status buckets, board
+  columns, linked documents, and handoffs.
 - `src/domain/graph.ts`: relationship scoring; major-node focus options; overview/focused portfolio graph construction.
 - `src/domain/project-context-map.ts`: portable project-context adapter over existing project,
   decision, checkpoint, checklist, and evidence conventions.
@@ -208,7 +210,7 @@ Canonical projects use:
 Project-linked sources can declare the same `project_id`, live under an
 explicit `source_roots` folder, or be linked from the project record.
 
-The Cockpit imports the browser-safe parser from `tools/projects`, so its
+The Cockpit imports the browser-safe parser from `packages/contracts`, so its
 project facts and handoff format match `kb.resume_project`. Legacy notes using
 `type: project`, `module`, `## Current status`, or `## Next 3 actions` remain
 readable for compatibility.

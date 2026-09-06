@@ -14,6 +14,6 @@
     "outDir": "dist",
     "rootDir": "."
   },
-  "include": ["tools/**/*.ts"],
+  "include": ["tools/**/*.ts", "packages/contracts/src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
