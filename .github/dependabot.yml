@@ -15,6 +15,9 @@ updates:
       interval: "weekly"
     groups:
       cockpit-dependencies:
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
 

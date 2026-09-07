@@ -23,13 +23,7 @@ export type WorkspaceContextState =
   | { status: "demo" };
 
 export type WorkspaceTone =
-  | "neutral"
-  | "writable"
-  | "read-only"
-  | "sensitive"
-  | "restricted"
-  | "demo"
-  | "error";
+  "neutral" | "writable" | "read-only" | "sensitive" | "restricted" | "demo" | "error";
 
 export interface WorkspaceDisplay {
   readonly status: WorkspaceContextState["status"];
