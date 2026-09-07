@@ -1,9 +1,11 @@
 {
   "name": "@gke/contracts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
-    "./projects": "./src/projects.ts"
+    "./projects": "./src/projects.ts",
+    "./decisions": "./src/decisions.ts",
+    "./lifecycle": "./src/lifecycle.ts"
   }
 }

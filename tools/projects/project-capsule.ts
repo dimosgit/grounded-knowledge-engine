@@ -1,3 +1,4 @@
+import { selectProjectNextActions } from "../../packages/contracts/src/projects.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getKbRetriever } from "../grounding/retriever.js";
@@ -98,19 +99,12 @@ export async function resumeProject(
   ]);
   const openQuestions = meaningfulSectionItems(parsed.sections.get("open-questions"));
   const blockersAndQuestions = [...blockers, ...openQuestions];
-  const completed = ["completed", "complete", "done", "shipped", "delivered"].includes(
-    parsed.manifest.status.toLowerCase(),
-  );
-  const recordedNextActions = meaningfulSectionItems(parsed.sections.get("next-actions"));
-  const recommendedNextAction = completed
-    ? "Project completed; no next action required."
-    : latestCheckpoint?.nextStartingPoint || recordedNextActions[0] || "No next action recorded.";
-  const nextThreeActions = completed
-    ? []
-    : unique([
-        ...(recommendedNextAction === "No next action recorded." ? [] : [recommendedNextAction]),
-        ...recordedNextActions,
-      ]).slice(0, 3);
+  const { recommendedNextAction, nextThreeActions } = selectProjectNextActions({
+    content: rawProject,
+    status: manifestDoc.frontmatter.lifecycle || parsed.manifest.status,
+    recordedNextActions: meaningfulSectionItems(parsed.sections.get("next-actions")),
+    fallbackAction: latestCheckpoint?.nextStartingPoint,
+  });
   const completedSinceCheckpoint = latestCheckpoint?.completed || [];
   const keyDocuments = unique([
     ...sectionItems(parsed.sections.get("key-documents")),

@@ -111,6 +111,30 @@ The uniqueparitytoken appears in this evidence line.
   assert.equal(sqliteResult.hits[0]?.track, bm25Result.hits[0]?.track);
   assert.equal(sqliteResult.hits[0]?.module, bm25Result.hits[0]?.module);
 
+  // MCP record reads now share this cache: external Markdown edits must become
+  // visible after the configured TTL without an explicit refresh.
+  const originalNow = Date.now;
+  let now = originalNow();
+  Date.now = () => now;
+  try {
+    for (const [backend, getRetriever] of [
+      ["bm25", getKbRetriever],
+      ["sqlite", getSqliteKbRetriever],
+    ] as const) {
+      const options = { repoRoot: root, scanRoots: ["kb"], cacheTtlMs: 1000 };
+      await getRetriever({ ...options, forceRefresh: true });
+      const added = `kb/topics/external-${backend}.md`;
+      await write(added, "# External edit\n\nFresh record.\n");
+      now += 1001;
+      const refreshed = await getRetriever(options);
+      assert.ok(
+        refreshed.getDocuments().some((doc) => doc.relPath === added),
+        `${backend} must discover external edits after cache expiry`,
+      );
+    }
+  } finally {
+    Date.now = originalNow;
+  }
   console.log("Shared document core and retrieval parity tests passed.");
 } finally {
   await fs.rm(root, { recursive: true, force: true });

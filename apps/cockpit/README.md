@@ -260,3 +260,11 @@ restricted-browser clipboard fallback, and graph controls.
 - New Markdown convention: update `src/domain/docs.ts` or `src/domain/catalog.ts`.
 
 Keep `App.tsx` focused on state orchestration and route composition.
+
+## Core compatibility
+
+Run `npm run check:core` before a UI-only update. The browser uses shared project
+and decision contracts, while local adapters and build configuration require an
+installed core declaring Cockpit API version 1 in `tools/core-api.json`. The first
+upgrade from an unversioned core must update core and UI together. Later UI-only
+updates can preserve the installed core when that version remains compatible.

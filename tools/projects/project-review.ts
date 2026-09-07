@@ -7,7 +7,7 @@ import type { IndexedDocument } from "../grounding/types.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
 import { meaningfulSectionItems } from "./project-manifest.js";
 import { calculateProjectAttention, isValidIsoDate } from "./project-attention.js";
-import { getProject, listProjects } from "./project-service.js";
+import { loadProjectRecords, resolveLoadedProject, type LoadedProject } from "./project-service.js";
 import { isDocumentInProject, resolveProjectDocument } from "./project-scope.js";
 import type {
   ProjectChangedDocument,
@@ -47,8 +47,15 @@ export async function reviewWorkspace(
   }
 
   const requestedProjectId = `${args.projectId || ""}`.trim();
-  const summaries = await listProjects({ repoRoot, scanRoots, workspace });
-  const projectIds = [...new Set(summaries.map((project) => project.projectId))].filter(
+  const records = await loadProjectRecords({ repoRoot, scanRoots, workspace });
+  const byProject = new Map<string, LoadedProject[]>();
+  for (const record of records) {
+    const id = record.parsed.manifest.projectId;
+    const matches = byProject.get(id) || [];
+    matches.push(record);
+    byProject.set(id, matches);
+  }
+  const projectIds = [...byProject.keys()].filter(
     (projectId) => !requestedProjectId || projectId === requestedProjectId,
   );
   if (requestedProjectId && !projectIds.length) {
@@ -64,10 +71,11 @@ export async function reviewWorkspace(
   });
   const allDocuments = retriever.getDocuments();
   const gitAvailable = since ? await isGitWorkspace(repoRoot) : false;
+  const gitState = gitAvailable ? await readGitState(repoRoot) : null;
   const projects: ProjectReviewEntry[] = [];
 
   for (const projectId of projectIds) {
-    const loaded = await getProject(projectId, { repoRoot, scanRoots, workspace });
+    const loaded = resolveLoadedProject(byProject.get(projectId) || [], projectId);
     const manifestDocument = resolveProjectDocument(allDocuments, projectId);
     if (!manifestDocument) throw new Error(`Unknown project ID: ${projectId}`);
     const scopedDocuments = allDocuments.filter((document) =>
@@ -83,7 +91,7 @@ export async function reviewWorkspace(
       repoRoot,
       asOf,
       since,
-      gitAvailable,
+      gitState,
       rawProject: loaded.raw,
       manifestDocument,
       scopedDocuments,
@@ -107,7 +115,7 @@ async function buildProjectReview({
   repoRoot,
   asOf,
   since,
-  gitAvailable,
+  gitState,
   rawProject,
   manifestDocument,
   scopedDocuments,
@@ -116,11 +124,11 @@ async function buildProjectReview({
   repoRoot: string;
   asOf: string;
   since: string | null;
-  gitAvailable: boolean;
+  gitState: GitState | null;
   rawProject: string;
   manifestDocument: IndexedDocument;
   scopedDocuments: IndexedDocument[];
-  parsed: Awaited<ReturnType<typeof getProject>>["parsed"];
+  parsed: LoadedProject["parsed"];
 }): Promise<ProjectReviewEntry> {
   const manifest = parsed.manifest;
   const blockers = meaningfulSectionItems(parsed.sections.get("blockers"));
@@ -134,7 +142,7 @@ async function buildProjectReview({
       openQuestions,
     });
   const changedDocuments = since
-    ? await findChangedDocuments({ repoRoot, since, gitAvailable, documents: scopedDocuments })
+    ? await findChangedDocuments({ repoRoot, since, gitState, documents: scopedDocuments })
     : [];
   const citations = uniqueCitations([
     reviewCitation(rawProject, manifestDocument.relPath),
@@ -163,31 +171,29 @@ async function buildProjectReview({
 async function findChangedDocuments({
   repoRoot,
   since,
-  gitAvailable,
+  gitState,
   documents,
 }: {
   repoRoot: string;
   since: string;
-  gitAvailable: boolean;
+  gitState: GitState | null;
   documents: IndexedDocument[];
 }): Promise<ProjectChangedDocument[]> {
-  const changed = await Promise.all(
-    documents.map(async (document) => {
-      const absPath = resolveDocumentPath(repoRoot, document.relPath);
-      if (gitAvailable) {
-        const tracked = await isGitTracked(repoRoot, document.relPath);
-        if (tracked) {
-          const committedAt = await getGitChangeDate(repoRoot, document.relPath, since);
-          if (committedAt) {
-            return changedDocument(document, committedAt, "git", await citationLine(absPath));
-          }
-          const dirty = await isGitDirty(repoRoot, document.relPath);
-          if (!dirty) return null;
+  const changed = await mapConcurrent(documents, 8, async (document) => {
+    const absPath = resolveDocumentPath(repoRoot, document.relPath);
+    if (gitState) {
+      const tracked = gitState.tracked.has(document.relPath);
+      if (tracked) {
+        const committedAt = await getGitChangeDate(repoRoot, document.relPath, since);
+        if (committedAt) {
+          return changedDocument(document, committedAt, "git", await citationLine(absPath));
         }
+        const dirty = gitState.dirty.has(document.relPath);
+        if (!dirty) return null;
       }
-      return fallbackChangedDocument(document, absPath, since);
-    }),
-  );
+    }
+    return fallbackChangedDocument(document, absPath, since);
+  });
   return changed
     .filter((document): document is ProjectChangedDocument => Boolean(document))
     .sort(
@@ -247,13 +253,45 @@ async function isGitWorkspace(repoRoot: string): Promise<boolean> {
   }
 }
 
-async function isGitTracked(repoRoot: string, relPath: string): Promise<boolean> {
+interface GitState {
+  tracked: Set<string>;
+  dirty: Set<string>;
+}
+
+async function readGitState(repoRoot: string): Promise<GitState | null> {
   try {
-    await runGit(repoRoot, ["ls-files", "--error-unmatch", "--", relPath]);
-    return true;
+    const [tracked, unstaged, staged] = await Promise.all([
+      runGit(repoRoot, ["ls-files", "--cached", "-z"]),
+      runGit(repoRoot, ["diff", "--name-only", "-z"]),
+      runGit(repoRoot, ["diff", "--cached", "--name-only", "-z"]),
+    ]);
+    return {
+      tracked: new Set(tracked.stdout.split("\0").filter(Boolean)),
+      dirty: new Set(
+        [...unstaged.stdout.split("\0"), ...staged.stdout.split("\0")].filter(Boolean),
+      ),
+    };
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function mapConcurrent<T, R>(
+  items: T[],
+  limit: number,
+  action: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await action(items[index]);
+      }
+    }),
+  );
+  return results;
 }
 
 async function getGitChangeDate(
@@ -274,21 +312,6 @@ async function getGitChangeDate(
     return value ? new Date(value).toISOString() : null;
   } catch {
     return null;
-  }
-}
-
-async function isGitDirty(repoRoot: string, relPath: string): Promise<boolean> {
-  try {
-    const { stdout } = await runGit(repoRoot, [
-      "status",
-      "--porcelain",
-      "--untracked-files=no",
-      "--",
-      relPath,
-    ]);
-    return Boolean(stdout.trim());
-  } catch {
-    return true;
   }
 }
 

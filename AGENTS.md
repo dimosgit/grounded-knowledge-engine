@@ -138,8 +138,8 @@ Delete the index anytime; `--refresh` rebuilds it from the Markdown.
   shared by CLI, MCP, and Cockpit, plus deterministic indexing, BM25/SQLite
   retrieval, grounded synthesis with file-and-line citations, and the eval
   harness.
-- **`packages/contracts`** — versioned, browser-safe record types, parsers, and
-  attention rules shared by engine and UI. It must not import Node, browser,
+- **`packages/contracts`** — versioned, browser-safe project/decision record types, parsers,
+  membership, checklist, lifecycle, and attention rules shared by engine and UI. It must not import Node, browser,
   React, transport, or filesystem APIs.
 - **`tools/projects`** — the shared project model and workspace-pinned
   application service: parses canonical project records
@@ -174,7 +174,8 @@ capture → index`. `GKE_INGEST_CONVERTER=auto|native|markitdown` selects the
   `src/domain/` is pure data transformation; `App.tsx` stays a thin
   orchestrator. Extension points: new screen → `src/views/`, derived-data rule
   → `src/domain/`, browser side effect → `src/hooks/`, route syntax →
-  `src/lib/routes.ts`.
+  `src/lib/routes.ts`. Local project writes use the project application service;
+  UI updates require the core API version declared in `tools/core-api.json`.
 
 Knowledge content: `demo-kb/` is the sanitized public demo corpus; `kb/` is
 the private local workspace and is gitignored except deliberately sanitized

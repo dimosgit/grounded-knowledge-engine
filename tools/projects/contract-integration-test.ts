@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import * as contracts from "../../packages/contracts/src/projects.js";
+import * as projects from "./project-manifest.js";
+import * as attention from "./project-attention.js";
+import * as decisionContracts from "../../packages/contracts/src/decisions.js";
+import * as decisions from "../decisions/decision-parser.js";
+assert.equal(projects.parseProjectDocument, contracts.parseProjectDocument);
+assert.equal(projects.normalizeProjectId, contracts.normalizeProjectId);
+assert.equal(attention.calculateProjectAttention, contracts.calculateProjectAttention);
+assert.equal(decisions.parseDecision, decisionContracts.parseDecision);
+console.log("Engine compatibility exports match the shared contracts.");

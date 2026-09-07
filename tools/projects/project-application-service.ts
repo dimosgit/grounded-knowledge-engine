@@ -1,3 +1,5 @@
+import { invalidateWorkspaceRetrieval } from "../grounding/invalidation.js";
+import { updateProjectLifecycle, type ProjectLifecycleOptions } from "./project-lifecycle.js";
 import path from "node:path";
 import type { WorkspaceContext } from "../workspaces/types.js";
 import {
@@ -10,6 +12,9 @@ import {
 import { resumeProject } from "./project-capsule.js";
 import { reviewWorkspace, type ReviewWorkspaceArgs } from "./project-review.js";
 import {
+  completeProjectTask,
+  type CompleteProjectTaskOptions,
+  type CompletedProjectTask,
   addProjectTask,
   createProject,
   getProject,
@@ -39,6 +44,8 @@ type ProjectContextKeys = keyof ProjectServiceOptions;
 
 export type CreateProjectInput = Omit<CreateProjectOptions, ProjectContextKeys>;
 export type UpdateProjectInput = Omit<UpdateProjectOptions, ProjectContextKeys>;
+export type CompleteProjectTaskInput = Omit<CompleteProjectTaskOptions, ProjectContextKeys>;
+export type ProjectLifecycleInput = Omit<ProjectLifecycleOptions, ProjectContextKeys>;
 export type AddProjectTaskInput = Omit<AddProjectTaskOptions, ProjectContextKeys>;
 export type LinkProjectSourceInput = Omit<LinkProjectSourceOptions, ProjectContextKeys>;
 export type CreateProjectCheckpointInput = Omit<CreateProjectCheckpointOptions, ProjectContextKeys>;
@@ -54,7 +61,9 @@ export class ProjectApplicationService {
   private readonly refresh?: () => Promise<void>;
 
   constructor(options: ProjectApplicationServiceOptions = {}) {
-    this.repoRoot = path.resolve(options.repoRoot || process.cwd());
+    this.repoRoot = path.resolve(
+      options.workspace?.realRepoRoot || options.repoRoot || process.cwd(),
+    );
     this.scanRoots = options.scanRoots
       ? [...options.scanRoots]
       : options.workspace
@@ -98,6 +107,23 @@ export class ProjectApplicationService {
     return result;
   }
 
+  async completeTask(input: CompleteProjectTaskInput): Promise<CompletedProjectTask> {
+    const result = await completeProjectTask({ ...input, ...this.context() });
+    await this.refreshAfterMutation(result.dryRun, result.changed);
+    return result;
+  }
+
+  async setLifecycle(input: ProjectLifecycleInput) {
+    if (!this.workspace) throw new Error("Lifecycle mutation requires a pinned workspace.");
+    const result = await updateProjectLifecycle({
+      ...input,
+      ...this.context(),
+      workspace: this.workspace,
+    });
+    await this.refreshAfterMutation(result.dryRun, result.changed);
+    return result;
+  }
+
   async linkSource(input: LinkProjectSourceInput): Promise<UpdatedProject> {
     const result = await linkProjectSource({ ...input, ...this.context() });
     await this.refreshAfterMutation(result.dryRun, result.changed);
@@ -134,7 +160,10 @@ export class ProjectApplicationService {
   }
 
   private async refreshAfterMutation(dryRun: boolean, changed = true): Promise<void> {
-    if (!dryRun && changed && this.refresh) await this.refresh();
+    if (!dryRun && changed) {
+      invalidateWorkspaceRetrieval(this.repoRoot);
+      if (this.refresh) await this.refresh();
+    }
   }
 }
 

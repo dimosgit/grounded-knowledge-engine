@@ -54,7 +54,27 @@ Checklist is canonical.
     // In-progress first, then not-started in checklist order; gated and done
     // excluded; the stale ## Next actions section ignored entirely.
     expect(project.nextActions).toEqual(["Item actively worked on", "Second open item"]);
+    expect(project.recommendedNextAction).toBe("Item actively worked on");
+    expect(project.nextThreeActions).toEqual(project.nextActions);
     expect(project.taskCounts).toEqual({ done: 1, inProgress: 1, gated: 1, todo: 1, total: 4 });
+  });
+
+  it("includes untagged canonical-folder evidence and keeps completed checklists empty", () => {
+    const projectDoc = doc(
+      "kb/projects/example/project.md",
+      "Example",
+      { record_type: "project", project_id: "example" },
+      "## Next actions\n- Stale action\n\n## Delivery checklist\n- [x] Finished",
+    );
+    const evidence = doc("kb/projects/example/evidence.md", "Evidence", {}, "# Evidence");
+    const unrelated = doc("kb/projects/other/evidence.md", "Other", {}, "# Other");
+    const [project] = buildProjectSummaries([projectDoc, evidence, unrelated]);
+    expect(project.nextActions).toEqual([]);
+    expect(project.nextThreeActions).toEqual([]);
+    expect(project.recommendedNextAction).toBe("No next action recorded.");
+    const linked = buildProjectLinkedDocs(project, null, [projectDoc, evidence, unrelated]);
+    expect(linked.map((entry) => entry.path)).toContain(evidence.path);
+    expect(linked.map((entry) => entry.path)).not.toContain(unrelated.path);
   });
 
   it("prefers canonical projects while preserving legacy project notes", () => {

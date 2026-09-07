@@ -1,3 +1,4 @@
+import { assertCoreCompatibility } from "./scripts/core-compatibility";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "node:path";
@@ -14,6 +15,7 @@ import { loadWorkspaceContext } from "../../tools/workspaces/config";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
+await assertCoreCompatibility(repoRoot);
 const workspace = await loadWorkspaceContext({ repoRoot });
 
 export default defineConfig({

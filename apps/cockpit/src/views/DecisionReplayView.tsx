@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowLeft, GitCompareArrows, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import type { DecisionRecord } from "../../../../tools/decisions/types";
+import type { DecisionRecord } from "@gke/contracts/decisions";
 import { CommandBar } from "../components/CommandBar";
 import { DecisionReviewPanel } from "../components/DecisionReviewPanel";
 import { OperatorFrame } from "../components/OperatorFrame";

@@ -26,7 +26,8 @@
     "check:kb": "npm run check:kb-topics && npm run check:kb-digests && npm run check:kb-maintenance",
     "compact:topic": "tsx scripts/compact-topic.ts",
     "apply:topic-frontmatter": "tsx scripts/apply-topic-frontmatter.ts",
-    "backfill:quick-recall": "tsx scripts/backfill-quick-recall.ts"
+    "backfill:quick-recall": "tsx scripts/backfill-quick-recall.ts",
+    "check:core": "tsx scripts/core-compatibility.ts"
   },
   "dependencies": {
     "clsx": "^2.1.1",

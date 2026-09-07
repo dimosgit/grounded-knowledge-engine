@@ -19,6 +19,15 @@ updated: 2026-06-17
 text`;
 
 describe("setLifecycle", () => {
+  it("preserves CRLF and treats repeated settings as a byte-identical no-op", () => {
+    const input = withLifecycle.replace(/\n/g, "\r\n");
+    expect(setLifecycle(input, "next")).toBe(input);
+    expect(setLifecycle(input, "active")).toBe(
+      input.replace("lifecycle: next", "lifecycle: active"),
+    );
+    expect(setLifecycle(input, "")).toBe(input.replace("lifecycle: next\r\n", ""));
+  });
+
   it("replaces an existing lifecycle value, leaving the rest untouched", () => {
     const result = setLifecycle(withLifecycle, "active");
     expect(result).toContain("lifecycle: active");

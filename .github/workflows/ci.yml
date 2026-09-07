@@ -78,6 +78,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Core compatibility
+        run: npm run check:core
+
       - name: Typecheck
         run: npm run typecheck
 

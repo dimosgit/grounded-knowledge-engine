@@ -50,31 +50,7 @@ export function resolveProjectDocument(
   return candidates[0]?.doc || null;
 }
 
-export function isDocumentInProject(
-  doc: IndexedDocument,
-  projectId: string,
-  manifestPath: string,
-  sourceRoots: string[],
-  explicitPaths: string[],
-): boolean {
-  const normalizedProjectId = normalizeProjectId(projectId);
-  if (doc.relPath === manifestPath) return true;
-  if (normalizeProjectId(doc.frontmatter?.project_id) === normalizedProjectId) return true;
-  if (doc.relPath.startsWith(`kb/projects/${normalizedProjectId}/`)) return true;
-  if (
-    sourceRoots.some((root) =>
-      equivalentRoots(root).some(
-        (candidateRoot) =>
-          doc.relPath === candidateRoot ||
-          doc.relPath.startsWith(`${candidateRoot.replace(/\/+$/, "")}/`),
-      ),
-    )
-  )
-    return true;
-  return explicitPaths.some((linkedPath) =>
-    pathsReferToSameDocument(manifestPath, linkedPath, doc.relPath),
-  );
-}
+export { isDocumentInProject } from "../../packages/contracts/src/projects.js";
 
 function isProjectRecord(doc: IndexedDocument): boolean {
   if (doc.frontmatter?.record_type === "project") return true;
@@ -104,41 +80,7 @@ function projectRecordScore(doc: IndexedDocument): number {
   return score;
 }
 
-function pathsReferToSameDocument(
-  manifestPath: string,
-  linkedPath: string,
-  candidatePath: string,
-): boolean {
-  const fromManifest = manifestPath.split("/").slice(0, -1);
-  const resolved = normalizePosixPath([...fromManifest, ...linkedPath.split("/")]);
-  return (
-    equivalentPaths(linkedPath).includes(candidatePath) ||
-    equivalentPaths(resolved).includes(candidatePath)
-  );
-}
-
-function normalizePosixPath(parts: string[]): string {
-  const normalized: string[] = [];
-  for (const part of parts) {
-    if (!part || part === ".") continue;
-    if (part === "..") normalized.pop();
-    else normalized.push(part);
-  }
-  return normalized.join("/");
-}
-
 function fileStem(relPath: string): string {
   const base = relPath.split("/").pop() || relPath;
   return base.replace(/\.[^.]+$/, "");
-}
-
-function equivalentRoots(root: string): string[] {
-  return equivalentPaths(root.replace(/\/+$/, ""));
-}
-
-function equivalentPaths(value: string): string[] {
-  const paths = new Set([value]);
-  if (value.startsWith("kb/")) paths.add(`demo-kb/${value.slice(3)}`);
-  if (value.startsWith("demo-kb/")) paths.add(`kb/${value.slice("demo-kb/".length)}`);
-  return [...paths];
 }
