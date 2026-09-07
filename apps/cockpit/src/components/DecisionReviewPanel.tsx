@@ -1,9 +1,6 @@
 import { CheckCircle2, Eye, Save } from "lucide-react";
 import { useState } from "react";
-import type {
-  DecisionEvidenceChangeRecord,
-  DecisionRecord,
-} from "../../../../tools/decisions/types";
+import type { DecisionEvidenceChangeRecord, DecisionRecord } from "@gke/contracts/decisions";
 import { submitDecisionReview, type DecisionReviewRequest } from "../lib/decision-review-api";
 
 interface DecisionReviewPanelProps {

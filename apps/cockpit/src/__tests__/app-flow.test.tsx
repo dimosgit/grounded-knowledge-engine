@@ -296,7 +296,9 @@ describe("cockpit major flows", () => {
     ).toBeInTheDocument();
     const continueHeading = screen.getByRole("heading", { name: "Continue here" });
     expect(continueHeading).toBeInTheDocument();
-    expect(screen.getByText("Open the project in the Operator Cockpit.")).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("Validate the project view in the Operator Cockpit")).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText("What changed")).toBeInTheDocument();
     expect(screen.getByText("What is blocked")).toBeInTheDocument();
     expect(screen.getByText("What was decided")).toBeInTheDocument();

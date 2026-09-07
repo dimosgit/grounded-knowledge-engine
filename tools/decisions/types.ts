@@ -1,36 +1,25 @@
 import type { WorkspaceContext } from "../workspaces/types.js";
 
-export type DecisionStatus = "proposed" | "active" | "superseded" | "rejected";
-export type DecisionConfidence = "low" | "medium" | "high";
-export type DecisionReviewState = "current" | "due" | "overdue";
-export type DecisionEvidenceChange =
-  | "unchanged"
-  | "strengthened"
-  | "weakened"
-  | "contradicted"
-  | "missing"
-  | "new";
-
-export interface DecisionEvidenceInput {
-  path: string;
-  line: number;
-}
-
-export interface DecisionEvidence extends DecisionEvidenceInput {
-  section: string;
-}
-
-export interface DecisionEvidenceReviewInput extends DecisionEvidenceInput {
-  classification?: Exclude<DecisionEvidenceChange, "missing">;
-  note?: string;
-}
-
-export interface DecisionEvidenceChangeRecord {
-  classification: DecisionEvidenceChange;
-  previous?: DecisionEvidence;
-  current?: DecisionEvidence;
-  note?: string;
-}
+import type {
+  DecisionStatus,
+  DecisionConfidence,
+  DecisionReviewState,
+  DecisionEvidenceInput,
+  DecisionEvidenceReviewInput,
+  DecisionEvidenceChangeRecord,
+  DecisionRecord,
+} from "../../packages/contracts/src/decisions.js";
+export type {
+  DecisionStatus,
+  DecisionConfidence,
+  DecisionReviewState,
+  DecisionEvidenceChange,
+  DecisionEvidenceInput,
+  DecisionEvidence,
+  DecisionEvidenceReviewInput,
+  DecisionEvidenceChangeRecord,
+  DecisionRecord,
+} from "../../packages/contracts/src/decisions.js";
 
 export interface DecisionServiceOptions {
   repoRoot?: string;
@@ -58,32 +47,6 @@ export interface CreateDecisionOptions extends DecisionServiceOptions {
   risks?: string[];
   evidence?: DecisionEvidenceInput[];
   dryRun?: boolean;
-}
-
-export interface DecisionRecord {
-  decisionId: string;
-  workspaceId: string;
-  projectId?: string;
-  title: string;
-  status: DecisionStatus;
-  owner: string;
-  decidedAt: string;
-  evidenceCheckedAt: string;
-  reviewAfter: string;
-  confidence: DecisionConfidence;
-  updated: string;
-  tags: string[];
-  question: string;
-  recommendation: string;
-  alternatives: string[];
-  rationale: string;
-  assumptions: string[];
-  risks: string[];
-  evidence: DecisionEvidence[];
-  reviewHistory: string[];
-  supersession: string[];
-  reviewState: DecisionReviewState;
-  path: string;
 }
 
 export interface CreatedDecision extends DecisionRecord {

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
 import {
+  createProjectMembership,
+  selectProjectNextActions,
   PROJECT_CONTRACT_VERSION,
   calculateProjectAttention,
   meaningfulSectionItems,
@@ -9,8 +10,6 @@ import {
   parseProjectDocument,
   sectionSummary,
 } from "./src/projects.js";
-import * as compatibilityApi from "../../tools/projects/project-manifest.js";
-import * as attentionCompatibilityApi from "../../tools/projects/project-attention.js";
 
 const fixture = `---
 record_type: project
@@ -64,9 +63,6 @@ assert.deepEqual(meaningfulSectionItems(parsed.sections.get("next-actions")), [
 assert.deepEqual(meaningfulSectionItems(parsed.sections.get("blockers")), []);
 assert.deepEqual(parsed.explicitPaths, ["../../sources/boundary-example/evidence.md"]);
 
-assert.equal(compatibilityApi.parseProjectDocument, parseProjectDocument);
-assert.equal(compatibilityApi.normalizeProjectId, normalizeProjectId);
-assert.equal(attentionCompatibilityApi.calculateProjectAttention, calculateProjectAttention);
 assert.deepEqual(
   calculateProjectAttention({
     reviewAfter: "2026-09-05",
@@ -82,15 +78,47 @@ assert.deepEqual(
   },
 );
 
-for (const relativePath of [
-  "../../apps/cockpit/src/domain/projects.ts",
-  "../../apps/cockpit/src/components/LocalProjectDelta.tsx",
-  "../../apps/cockpit/src/hooks/useOperatorAttention.tsx",
-  "../../apps/cockpit/src/lib/workspace-review-api.ts",
+const membership = createProjectMembership(
+  "sample",
+  "kb/projects/sample/project.md",
+  ["kb/sources/sample"],
+  ["../../topics/shared.md"],
+);
+for (const relPath of [
+  "kb/projects/sample/evidence.md",
+  "demo-kb/projects/sample/evidence.md",
+  "kb/sources/sample/note.md",
+  "demo-kb/sources/sample/note.md",
+  "kb/topics/shared.md",
 ]) {
-  const browserConsumer = await fs.readFile(new URL(relativePath, import.meta.url), "utf8");
-  assert.match(browserConsumer, /from "@gke\/contracts\/projects"/);
-  assert.doesNotMatch(browserConsumer, /tools\/projects/);
+  assert.equal(membership({ relPath }), true, relPath);
+}
+assert.equal(membership({ relPath: "kb/projects/unrelated/evidence.md" }), false);
+assert.equal(
+  membership({ relPath: "kb/elsewhere.md", frontmatter: { project_id: "Sample" } }),
+  true,
+);
+const next = selectProjectNextActions({
+  content: "## Delivery checklist\n- [ ] Current action\n- [ ] 🟡 Active action\n- [x] Done action",
+  status: "active",
+  recordedNextActions: ["Stale action"],
+});
+assert.deepEqual(next.nextActions, ["Active action", "Current action"]);
+assert.equal(next.recommendedNextAction, "Active action");
+assert.deepEqual(next.nextThreeActions, next.nextActions);
+for (const content of [
+  "## Delivery checklist\n- [x] Done",
+  "## Delivery checklist\n",
+  "- [ ] 🔴 Waiting",
+]) {
+  const finished = selectProjectNextActions({
+    content,
+    status: "active",
+    recordedNextActions: ["Stale action"],
+  });
+  assert.deepEqual(finished.nextActions, []);
+  assert.deepEqual(finished.nextThreeActions, []);
+  assert.equal(finished.recommendedNextAction, "No next action recorded.");
 }
 
 console.log(`Project contract v${PROJECT_CONTRACT_VERSION} passed.`);

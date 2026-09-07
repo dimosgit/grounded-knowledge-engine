@@ -1,7 +1,12 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { CandidateFile, Frontmatter } from "./types.js";
+import type {
+  CandidateFile,
+  Frontmatter,
+  DocumentSnapshotEntry,
+  DocumentSnapshot,
+} from "./types.js";
 import { DEFAULT_DOMAIN_PROFILE } from "../workspaces/domain-profile.js";
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
@@ -40,6 +45,53 @@ export async function gatherCandidateFiles(
   }
   candidates.sort((a, b) => a.relPath.localeCompare(b.relPath));
   return candidates;
+}
+
+/** The shared filesystem-to-document boundary for every retrieval backend. */
+export async function readDocumentEntries(
+  files: CandidateFile[],
+  workspace?: WorkspaceContext,
+  domain: DomainProfile = DEFAULT_DOMAIN_PROFILE,
+): Promise<DocumentSnapshotEntry[]> {
+  const entries: DocumentSnapshotEntry[] = [];
+  for (const file of files) {
+    let raw: string;
+    try {
+      if (workspace) await authorizeWorkspaceRead(workspace, file.absPath);
+      raw = await fs.readFile(file.absPath, "utf8");
+    } catch {
+      continue;
+    }
+    const { body, frontmatter } = file.relPath.endsWith(".md")
+      ? parseFrontmatter(raw)
+      : { body: raw, frontmatter: {} };
+    entries.push({
+      file,
+      raw,
+      document: {
+        id: entries.length,
+        relPath: file.relPath,
+        body,
+        frontmatter,
+        title: getDocumentTitle(body, file.relPath),
+        track: inferTrack(file.relPath, frontmatter, domain),
+        module: normalizeScalar(frontmatter.module),
+        sourceKind: inferSourceKind(file.relPath, domain),
+        isArchive: file.relPath.startsWith("kb/archive/"),
+      },
+    });
+  }
+  return entries;
+}
+
+export async function loadDocumentSnapshot(
+  repoRoot: string,
+  scanRoots: string[],
+  workspace?: WorkspaceContext,
+  domain?: DomainProfile,
+): Promise<DocumentSnapshot> {
+  const files = await gatherCandidateFiles(repoRoot, scanRoots, workspace);
+  return { files, entries: await readDocumentEntries(files, workspace, domain) };
 }
 
 export function buildManifestHash(files: CandidateFile[]): string {

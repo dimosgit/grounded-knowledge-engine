@@ -1,8 +1,8 @@
+import { workspaceRetrievalGeneration } from "./invalidation.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  authorizeWorkspaceRead,
   authorizeWorkspaceRuntimePath,
   authorizeWorkspaceWrite,
 } from "../workspaces/path-policy.js";
@@ -14,18 +14,15 @@ import {
 } from "../workspaces/domain-profile.js";
 import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 import {
+  readDocumentEntries,
   buildManifestHash,
   gatherCandidateFiles,
-  getDocumentTitle,
-  inferSourceKind,
-  inferTrack,
   normalizeScalar,
   normalizeScanRoots,
-  parseFrontmatter,
   parsePositiveInt,
 } from "./document-core.js";
 import type {
-  CandidateFile,
+  DocumentSnapshotEntry,
   CachedRetrieverIndex,
   IndexedChunk,
   IndexedDocument,
@@ -48,7 +45,7 @@ const __dirname = path.dirname(__filename);
 // corpus; `kb` holds notes captured back by the agent.
 export const DEFAULT_SCAN_ROOTS = ["demo-kb", "kb"];
 
-const INDEX_VERSION = 2;
+const INDEX_VERSION = 3;
 const DEFAULT_INDEX_CACHE_FILE = ".cache/kb-retriever-index.v2.json";
 const DEFAULT_INDEX_CACHE_TTL_MS = 30000;
 const DEFAULT_QUERY_CACHE_TTL_MS = 45000;
@@ -153,6 +150,7 @@ type MatchedTermsMap = Map<number, Set<string>>;
 type TokenContributionMap = Map<number, Map<string, number>>;
 
 interface SearchCacheKeyParts {
+  allowedPaths: string[] | null;
   query: string;
   mode: string;
   limit: number;
@@ -282,9 +280,10 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
   );
   const forceRefresh = Boolean(options.forceRefresh);
   const domain = workspace?.domain ?? DEFAULT_DOMAIN_PROFILE;
-  const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}::${domainFingerprint(domain)}`;
+  const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}::${domainFingerprint(domain)}::${workspaceRetrievalGeneration(repoRoot)}`;
 
   return {
+    snapshot: options.snapshot,
     workspace,
     domain,
     repoRoot,
@@ -299,7 +298,9 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
 }
 
 async function loadOrBuildIndex(options: ResolvedRetrieverOptions): Promise<RetrieverIndex> {
-  const files = await gatherCandidateFiles(options.repoRoot, options.scanRoots, options.workspace);
+  const files =
+    options.snapshot?.files ??
+    (await gatherCandidateFiles(options.repoRoot, options.scanRoots, options.workspace));
   const manifestHash = `${buildManifestHash(files)}::${domainFingerprint(options.domain)}`;
   if (options.workspace) {
     await authorizeWorkspaceRuntimePath(options.workspace, options.cachePath);
@@ -316,7 +317,9 @@ async function loadOrBuildIndex(options: ResolvedRetrieverOptions): Promise<Retr
     repoRoot: options.repoRoot,
     workspace: options.workspace,
     domain: options.domain,
-    files,
+    entries:
+      options.snapshot?.entries ??
+      (await readDocumentEntries(files, options.workspace, options.domain)),
     manifestHash,
     scanRoots: options.scanRoots,
   });
@@ -329,16 +332,15 @@ async function loadOrBuildIndex(options: ResolvedRetrieverOptions): Promise<Retr
 }
 
 async function buildIndex({
-  files,
+  entries,
   manifestHash,
   scanRoots,
-  workspace,
   domain,
 }: {
   repoRoot: string;
   workspace?: WorkspaceContext;
   domain: DomainProfile;
-  files: CandidateFile[];
+  entries: DocumentSnapshotEntry[];
   manifestHash: string;
   scanRoots: string[];
 }): Promise<CachedRetrieverIndex> {
@@ -348,35 +350,10 @@ async function buildIndex({
   const docFreq = new Map<string, number>();
   let totalChunkLength = 0;
 
-  for (const file of files) {
-    let raw;
-    try {
-      if (workspace) await authorizeWorkspaceRead(workspace, file.absPath);
-      raw = await fs.readFile(file.absPath, "utf8");
-    } catch {
-      continue;
-    }
-
-    const isMarkdown = file.relPath.endsWith(".md");
-    const parsed = isMarkdown
-      ? parseFrontmatter(raw)
-      : { frontmatter: {} as Record<string, string>, body: raw };
-    const body = parsed.body || "";
-    if (!body.trim()) continue;
-
-    const frontmatter = parsed.frontmatter || {};
+  for (const { document } of entries) {
     const docId = docs.length;
-    const doc = {
-      id: docId,
-      relPath: file.relPath,
-      title: getDocumentTitle(body, file.relPath),
-      track: inferTrack(file.relPath, frontmatter, domain),
-      module: normalizeScalar(frontmatter.module),
-      sourceKind: inferSourceKind(file.relPath, domain),
-      frontmatter,
-      body,
-      isArchive: file.relPath.startsWith("kb/archive/"),
-    };
+    const doc = { ...document, id: docId };
+    const body = doc.body;
     docs.push(doc);
 
     const bodyLines = body.split(/\r?\n/);
@@ -456,12 +433,15 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
     const track = normalizeScalar(args.track);
     const module = normalizeScalar(args.module);
     const includeArchive = Boolean(args.includeArchive);
+    const allowedPaths =
+      args.allowedPaths === undefined ? null : [...new Set(args.allowedPaths)].sort();
     const disableCache = Boolean(args.disableCache);
     const debug = Boolean(args.debug);
     const debugTopN = parsePositiveInt(args.debugTopN, 5, 1, 25);
     const shouldUseCache = options.queryCacheTtlMs > 0 && !disableCache && !debug;
 
     const cacheKey = buildSearchCacheKey({
+      allowedPaths,
       query,
       mode,
       limit,
@@ -498,7 +478,9 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
     const matchedTerms: MatchedTermsMap = new Map();
     const tokenContributions: TokenContributionMap | null = debug ? new Map() : null;
 
+    const allowedPathSet = allowedPaths === null ? null : new Set(allowedPaths);
     const activeChunks = (chunk: IndexedChunk): boolean => {
+      if (allowedPathSet && !allowedPathSet.has(chunk.path)) return false;
       if (!includeArchive && chunk.isArchive) return false;
       if (track && chunk.track !== track) return false;
       if (module && chunk.module !== module) return false;
@@ -730,6 +712,7 @@ function trimQueryCache(
 }
 
 function buildSearchCacheKey({
+  allowedPaths,
   query,
   mode,
   limit,
@@ -742,6 +725,7 @@ function buildSearchCacheKey({
   debugTopN,
 }: SearchCacheKeyParts): string {
   return JSON.stringify({
+    allowedPaths,
     q: query.toLowerCase(),
     mode,
     limit,

@@ -25,7 +25,13 @@
       "description": "Grounding, project, ingestion, CLI, and MCP implementation.",
       "roots": ["tools", "scripts"],
       "excludes": [],
-      "reconcile": ["package.json", "tsconfig.json"],
+      "reconcile": [
+        "package.json",
+        "tsconfig.json",
+        "package-lock.json",
+        "eslint.config.js",
+        "gke.layers.json"
+      ],
       "dependsOn": ["contracts"],
       "verify": ["npm run typecheck", "npm run lint", "npm run build", "npm run test:gke"]
     },
@@ -36,12 +42,14 @@
       "reconcile": ["package.json"],
       "dependsOn": ["contracts"],
       "verify": [
+        "npm --prefix apps/cockpit run check:core",
         "npm --prefix apps/cockpit run typecheck",
         "npm --prefix apps/cockpit run lint",
         "npm --prefix apps/cockpit run format:check",
         "npm --prefix apps/cockpit run test",
         "npm --prefix apps/cockpit run build"
-      ]
+      ],
+      "requires": ["core"]
     },
     "demo": {
       "description": "Sanitized public demonstration knowledge workspace.",

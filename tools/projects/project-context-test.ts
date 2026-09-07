@@ -16,7 +16,7 @@ assert.equal(canonicalDemo.structured.status, "active");
 assert.match(canonicalDemo.structured.currentFocus, /project-resume capsule/i);
 assert.equal(
   canonicalDemo.structured.recommendedNextAction,
-  "Open the project in the Operator Cockpit.",
+  "Validate the project view in the Operator Cockpit",
 );
 assert.deepEqual(canonicalDemo.structured.blockers, []);
 assert.deepEqual(canonicalDemo.structured.openQuestions, [

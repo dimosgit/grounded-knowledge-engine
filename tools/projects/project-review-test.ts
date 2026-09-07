@@ -174,6 +174,21 @@ try {
     /Unknown project ID/,
   );
 
+  // A warm whole-workspace review reads each manifest once, regardless of project count.
+  await reviewWorkspace({ asOf: "2026-07-13" }, root, ["kb"]);
+  const originalReadFile = fs.readFile.bind(fs);
+  let manifestReads = 0;
+  fs.readFile = (async (...args: Parameters<typeof fs.readFile>) => {
+    if (String(args[0]).endsWith("/project.md")) manifestReads += 1;
+    return originalReadFile(...args);
+  }) as typeof fs.readFile;
+  try {
+    const measured = await reviewWorkspace({ asOf: "2026-07-13" }, root, ["kb"]);
+    assert.equal(manifestReads, measured.structured.projectCount);
+  } finally {
+    fs.readFile = originalReadFile;
+  }
+
   console.log("Project review service tests passed.");
 } finally {
   await fs.rm(root, { recursive: true, force: true });

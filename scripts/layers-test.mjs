@@ -9,6 +9,7 @@ assert.equal(summary.layerCount, 4);
 
 const ui = resolveLayerScope(manifest, "ui");
 assert.deepEqual(ui.layers, ["contracts", "ui"]);
+assert.deepEqual(ui.requires, ["core"]);
 assert.deepEqual(ui.roots, ["packages/contracts", "apps/cockpit"]);
 assert.deepEqual(ui.excludes, [
   "apps/cockpit/content",

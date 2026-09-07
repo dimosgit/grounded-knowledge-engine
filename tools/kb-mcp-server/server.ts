@@ -7,7 +7,6 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { loadWorkspaceContext } from "../workspaces/config.js";
 import { advertisedModeNames, resolveModeAlias } from "../workspaces/domain-profile.js";
-import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import { buildToolCatalog, normalizeMcpProfile } from "./catalog.js";
 import { negotiateProtocolVersion } from "./protocol.js";
 import {
@@ -17,15 +16,7 @@ import {
   type ResourceDependencies,
 } from "./resources.js";
 import { startJsonRpcStdioTransport } from "./transport.js";
-import {
-  gatherCandidateFiles as gatherKnowledgeFiles,
-  getDocumentTitle,
-  inferSourceKind,
-  inferTrack,
-  normalizeScalar,
-  parseFrontmatter,
-  parsePositiveInt,
-} from "../grounding/document-core.js";
+import { normalizeScalar, parsePositiveInt } from "../grounding/document-core.js";
 import type { GroundedTokenUsage } from "../grounding/answer-service.js";
 import { createGroundingApplicationService } from "../grounding/grounding-application-service.js";
 import {
@@ -109,10 +100,6 @@ const MAX_CONTEXT = 3;
 
 const logOrder = { off: 0, error: 1, warn: 2, info: 3, debug: 4 };
 const logLevel = normalizeLogLevel(process.env.KB_MCP_LOG_LEVEL || "error");
-let docCache = {
-  loadedAt: 0,
-  docs: [] as LocalDocument[],
-};
 let pendingDocRefresh: Promise<void> | null = null;
 
 const groundingService = createGroundingApplicationService({
@@ -917,12 +904,10 @@ function formatTokenUsage(usage: GroundedTokenUsage | null | undefined): string 
 }
 
 async function handleKbRefresh() {
-  await getDocuments(true);
-  const stats = await groundingService.refresh("bm25");
-  let sqliteStats: any = null;
-  if (DEFAULT_RETRIEVAL_BACKEND === "sqlite") {
-    sqliteStats = await groundingService.refresh("sqlite");
-  }
+  const allStats =
+    DEFAULT_RETRIEVAL_BACKEND === "sqlite" ? await groundingService.refreshAll() : null;
+  const stats = allStats?.bm25 ?? (await groundingService.refresh("bm25"));
+  const sqliteStats = allStats?.sqlite ?? null;
   return {
     contentText: `Refreshed KB index. Documents: ${stats.documents}, chunks: ${stats.chunks}, tracks: ${Object.keys(stats.byTrack).length}, sources: ${Object.keys(stats.bySourceKind).length}${sqliteStats ? `, sqliteChunks: ${sqliteStats.chunks}` : ""}`,
     structured: { refreshed: true, stats, sqliteStats },
@@ -976,7 +961,7 @@ function scheduleDocumentRefresh(): Promise<void> {
   pendingDocRefresh = new Promise<void>((resolve, reject) => {
     setTimeout(async () => {
       try {
-        await Promise.all([getDocuments(true), groundingService.refresh()]);
+        await groundingService.refresh();
         resolve();
       } catch (error) {
         reject(error);
@@ -1134,7 +1119,7 @@ async function addOpenQuestion(options: JsonObject): Promise<any> {
 }
 
 async function refreshOpenQuestionRetrieval(): Promise<void> {
-  await Promise.all([getDocuments(true), groundingService.refresh()]);
+  await groundingService.refresh();
 }
 
 function buildCapturedNoteBody({
@@ -1378,57 +1363,12 @@ function toTitleCase(text: unknown): string {
 }
 
 async function getDocuments(forceRefresh: boolean): Promise<LocalDocument[]> {
-  const now = Date.now();
-  if (!forceRefresh && docCache.docs.length && now - docCache.loadedAt < DEFAULT_CACHE_TTL_MS) {
-    return docCache.docs;
-  }
-
-  const docs = await loadDocuments();
-  docCache = {
-    loadedAt: now,
-    docs,
-  };
-  log("info", `indexed ${docs.length} documents`);
-  return docs;
-}
-
-async function loadDocuments(): Promise<LocalDocument[]> {
-  const candidates = await gatherKnowledgeFiles(repoRoot, [...workspace.scanRoots], workspace);
-  const docs: LocalDocument[] = [];
-
-  for (const file of candidates) {
-    let raw;
-    try {
-      await authorizeWorkspaceRead(workspace, file.absPath);
-      raw = await fs.readFile(file.absPath, "utf8");
-    } catch {
-      continue;
-    }
-
-    const isMarkdown = file.relPath.endsWith(".md");
-    const parsed = isMarkdown
-      ? parseFrontmatter(raw)
-      : { frontmatter: {} as Record<string, string>, body: raw };
-    const body = parsed.body || "";
-    const frontmatter = parsed.frontmatter || {};
-    const lines = body.split(/\r?\n/);
-    docs.push({
-      id: docs.length,
-      absPath: file.absPath,
-      relPath: file.relPath,
-      frontmatter,
-      body,
-      lines,
-      title: getDocumentTitle(body, file.relPath),
-      track: inferTrack(file.relPath, frontmatter),
-      module: normalizeScalar(frontmatter.module),
-      sourceKind: inferSourceKind(file.relPath),
-      isArchive: file.relPath.startsWith("kb/archive/"),
-    });
-  }
-
-  docs.sort((a, b) => a.relPath.localeCompare(b.relPath));
-  return docs;
+  const documents = await groundingService.listDocuments({ forceRefresh });
+  return documents.map((document) => ({
+    ...document,
+    absPath: path.resolve(repoRoot, document.relPath),
+    lines: document.body.split(/\r?\n/),
+  }));
 }
 
 function normalizeForMatch(value: unknown): string {

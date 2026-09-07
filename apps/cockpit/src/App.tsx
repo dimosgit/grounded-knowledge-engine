@@ -606,8 +606,11 @@ export default function App() {
     projectBodyOverrides,
   ]);
   const projectSummaries = useMemo(
-    () => buildProjectSummaries(projectDocs, lifecycleOverrides),
-    [lifecycleOverrides, projectDocs],
+    () =>
+      projectDocs === docs
+        ? catalogProjectSummaries
+        : buildProjectSummaries(projectDocs, lifecycleOverrides),
+    [catalogProjectSummaries, docs, lifecycleOverrides, projectDocs],
   );
   const activeProject = useMemo(
     () => getActiveProject(projectSummaries, selectedProjectId),
@@ -648,12 +651,8 @@ export default function App() {
     // session-only there.
     if (!import.meta.env.DEV) return;
     try {
-      const response = await fetch("/__board/lifecycle", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path: project.sourceDocPath, lifecycle }),
-      });
-      if (!response.ok) throw new Error(await response.text());
+      const { moveProjectLifecycle } = await import("./lib/project-lifecycle-api");
+      await moveProjectLifecycle(project.sourceDocPath, lifecycle);
     } catch (error) {
       // Revert the optimistic move so the board keeps matching the markdown.
       setLifecycleOverrides((current) => {
@@ -681,20 +680,34 @@ export default function App() {
   };
   const openQuestionItems = useMemo(() => buildOpenQuestionItems(docs), [docs]);
   const graphFocusOptions = useMemo(
-    () => filterMajorGraphFocusOptions(docs, projectSummaries, tracks, graphQuery),
-    [docs, graphQuery, projectSummaries, tracks],
+    () =>
+      viewMode === "graph"
+        ? filterMajorGraphFocusOptions(docs, projectSummaries, tracks, graphQuery)
+        : [],
+    [docs, graphQuery, projectSummaries, tracks, viewMode],
   );
   const contextGraph = useMemo(
     () =>
-      buildMajorContextGraph(docs, projectSummaries, tracks, selectedGraphPath, {
-        layers: graphLayers,
-        projectStatus: graphStatusFilter,
-      }),
-    [docs, graphLayers, graphStatusFilter, projectSummaries, tracks, selectedGraphPath],
+      buildMajorContextGraph(
+        viewMode === "graph" ? docs : [],
+        viewMode === "graph" ? projectSummaries : [],
+        viewMode === "graph" ? tracks : [],
+        selectedGraphPath,
+        {
+          layers: graphLayers,
+          projectStatus: graphStatusFilter,
+        },
+      ),
+    [docs, graphLayers, graphStatusFilter, projectSummaries, tracks, selectedGraphPath, viewMode],
   );
   const graphFocusOption = useMemo(() => {
-    return getMajorGraphFocusOption(docs, projectSummaries, tracks, contextGraph.focusId);
-  }, [docs, projectSummaries, tracks, contextGraph.focusId]);
+    return getMajorGraphFocusOption(
+      viewMode === "graph" ? docs : [],
+      viewMode === "graph" ? projectSummaries : [],
+      viewMode === "graph" ? tracks : [],
+      contextGraph.focusId,
+    );
+  }, [docs, projectSummaries, tracks, contextGraph.focusId, viewMode]);
   const graphProject = useMemo(() => {
     if (contextGraph.focusNode?.kind !== "project") return null;
     return (

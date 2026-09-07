@@ -90,6 +90,54 @@ async function main(): Promise<void> {
       });
     }
 
+    const pinnedRefresh = createGroundingApplicationService({
+      workspace: workspaceA,
+      scanRoots: ["kb/topics/alpha-one.md"],
+    });
+    const refreshedBackends = await pinnedRefresh.refreshAll();
+    for (const backend of ["bm25", "sqlite"] as const) {
+      assert.equal(
+        refreshedBackends[backend].documents,
+        3,
+        "Shared refresh must use the pinned workspace scan roots, not caller overrides",
+      );
+      assert.equal((await pinnedRefresh.listDocuments({ backend })).length, 3);
+    }
+
+    // Scope must precede both backend candidate windows and the final top-K cutoff.
+    for (let index = 0; index < 600; index += 1) {
+      await fs.writeFile(
+        path.join(rootB, `kb/topics/competitor-${index}.md`),
+        "# Cobalt rollout policy\n\nCobalt rollout policy establishes isolated evidence.\n",
+      );
+    }
+    const allowedPath = "kb/topics/allowed.md";
+    await fs.writeFile(
+      path.join(rootB, allowedPath),
+      "# Deployment notes\n\nThe cobalt rollout policy requires a staged deployment with review.\n",
+    );
+    for (const backend of ["bm25", "sqlite"] as const) {
+      const service = createGroundingApplicationService({ workspace: workspaceB, backend });
+      await service.refresh();
+      const input = { query: "cobalt rollout policy", mode: "generic", limit: 8 };
+      const global = await service.search(input);
+      assert.ok(!global.hits.some((hit) => hit.path === allowedPath));
+      const scoped = await service.search({ ...input, allowedPaths: [allowedPath] });
+      assert.ok(scoped.hits.length > 0);
+      assert.ok(scoped.hits.every((hit) => hit.path === allowedPath));
+      const repeated = await service.search({ ...input, allowedPaths: [allowedPath, allowedPath] });
+      assert.equal(repeated.metrics?.cache?.hit, true);
+      const empty = await service.search({ ...input, allowedPaths: [] });
+      assert.equal(empty.hits.length, 0);
+      assert.ok((await service.search(input)).hits.every((hit) => hit.path !== allowedPath));
+      const answer = await service.answer(
+        { question: input.query, mode: "generic", strict: false },
+        { allowedPaths: [allowedPath] },
+      );
+      assert.equal(answer.abstained, false);
+      assert.ok(answer.evidence.every((hit) => hit.path === allowedPath));
+    }
+
     assert.deepEqual(parity.get("sqlite")?.documents, parity.get("bm25")?.documents);
     assert.deepEqual(parity.get("sqlite")?.hits, parity.get("bm25")?.hits);
     console.log(

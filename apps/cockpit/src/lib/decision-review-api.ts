@@ -1,7 +1,7 @@
 import type {
   DecisionEvidenceChangeRecord,
   DecisionEvidenceReviewInput,
-} from "../../../../tools/decisions/types";
+} from "@gke/contracts/decisions";
 
 const DECISION_REVIEW_PATH = "/__gke/decisions/review";
 

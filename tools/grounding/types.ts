@@ -13,7 +13,20 @@ export interface CandidateFile {
   mtimeMs: number;
 }
 
+export interface DocumentSnapshotEntry {
+  file: CandidateFile;
+  raw: string;
+  document: IndexedDocument;
+}
+
+export interface DocumentSnapshot {
+  files: CandidateFile[];
+  entries: DocumentSnapshotEntry[];
+}
+
 export interface RetrieverOptions {
+  /** Internal snapshot used to rebuild multiple indexes from one read pass. */
+  snapshot?: DocumentSnapshot;
   workspace?: WorkspaceContext;
   repoRoot?: string;
   scanRoots?: string[] | string;
@@ -25,6 +38,7 @@ export interface RetrieverOptions {
 }
 
 export interface ResolvedRetrieverOptions {
+  snapshot?: DocumentSnapshot;
   workspace?: WorkspaceContext;
   domain: DomainProfile;
   repoRoot: string;
@@ -38,6 +52,8 @@ export interface ResolvedRetrieverOptions {
 }
 
 export interface SearchArgs {
+  /** Exact document scope, applied before ranking. An empty list matches nothing. */
+  allowedPaths?: readonly string[];
   query?: string;
   mode?: SearchMode | string;
   limit?: number | string;

@@ -15,7 +15,8 @@ whole source trees. That makes a small UI upgrade feel like an engine upgrade
 even when the knowledge base should remain untouched.
 
 This change establishes `packages/contracts` as the versioned, browser-safe
-record boundary shared by the UI and engine. The remaining direction is
+record boundary shared by the UI and engine. It includes project and decision
+records, project membership, checklist selection, and lifecycle transforms. The remaining direction is
 incremental:
 
 1. treat UI, engine, contracts, and KB as explicit update scopes;
@@ -87,9 +88,9 @@ has formal input/output schemas and safety annotations.
 For in-repository UI work, `packages/contracts` owns the versioned browser-safe
 project parser, attention rules, and cross-surface types. The Cockpit imports
 the named `@gke/contracts` boundary, while the former `tools/projects` entry
-points remain compatibility re-exports for engine and downstream consumers. A
-contract test prevents browser consumers from silently returning to a private
-cross-layer import.
+points remain compatibility re-exports for engine and downstream consumers. An import-graph gate checks every production browser file and contract module
+for forbidden dependencies and runtime cycles. Contract fixture tests run without
+either consumer present; compatibility-shim tests belong to the engine suite.
 
 ### The Cockpit has an internal UI architecture
 
@@ -220,6 +221,22 @@ definition of the source boundary. The `reconcile` list names shared root files
 that require comparison but are not owned by the selected layer. `all` is a
 virtual composite of every declared layer.
 
+`dependsOn` names source scopes to copy together. `requires` names installed
+prerequisites without adding their files to the copy. The UI requires `core`
+because its local adapters call engine services and its build loads workspace
+configuration. This distinction preserves narrow copy scopes without claiming
+that the UI build is independent of core.
+
+The installed core declares `cockpitApiVersion` in `tools/core-api.json`.
+`npm --prefix apps/cockpit run check:core` checks that marker; Vite also checks it
+at startup. API version 1 is the first declared compatibility baseline. A legacy
+core without the marker, or a different API version, is rejected with an
+instruction to update core. **The first upgrade to this boundary requires core
+and UI together; later compatible UI updates can copy only UI and contracts.**
+Run compatibility verification against the proposed source and installed core
+before applying a downstream update. Scoped copying itself remains a downstream
+responsibility.
+
 Root manifests and TypeScript configuration are downstream integration seams;
 the plan identifies them for deliberate reconciliation rather than automatic
 overwrite by a layer copy.
@@ -267,7 +284,8 @@ flags remain a **recommended downstream implementation**. That adapter should:
 
 Because the UI consumes the contracts package, the `ui` scope must include its
 compatible contract version and run `npm run test:contracts`. It does not need
-to copy all of `tools/`.
+to copy all of `tools/` when the installed core satisfies the declared API
+requirement. Run `check:core` before selecting a UI-only update.
 
 ## Recommended target architecture
 
@@ -293,9 +311,54 @@ core                    -> no React or browser dependency
 
 `packages/contracts` is the first extracted boundary. It lets the UI and engine
 share project meaning without the UI importing engine internals, while
-`npm run test:contracts` proves the compatibility re-export and Cockpit adapter
-remain aligned. Extract `packages/core` only when a second consumer needs a
+`npm run test:contracts` checks self-contained record fixtures,
+`npm run test:contracts:integration` checks engine re-exports, and
+`npm run test:layers` checks production import directions and runtime cycles. Extract `packages/core` only when a second consumer needs a
 direct TypeScript API; until then, MCP avoids premature package maintenance.
+
+## Shared mutation and retrieval ownership
+
+Project creation, metadata updates, source links, task additions/completions and
+board lifecycle moves share the same per-project mutation lock. Lifecycle
+persistence lives in the project application service; the local HTTP adapter
+owns only request validation and response translation. Successful application
+mutations invalidate in-process retrieval, while no-ops and dry runs do not.
+
+Both retrieval backends filter allowed document paths before candidate limits
+and ranking, and scope participates in query-cache identity. Document parsing
+has one filesystem boundary. MCP record lookup reuses indexed documents;
+refreshing both backends can reuse a single document snapshot. SQLite stores
+full frontmatter and body data for parity with BM25. Derived index versions are
+bumped automatically; Markdown records require no migration.
+
+Workspace review parses project records once per request and batches tracking
+and dirty-file metadata, with bounded concurrency for per-file Git history.
+Cockpit reuses unchanged project summaries and avoids corpus-wide graph
+calculations outside the graph screen. Shared membership and next-action rules
+keep UI and engine interpretations aligned; checklist actions take precedence
+over older next-action prose, including when no actionable checklist items
+remain.
+
+## Implementation verification (2026-09-07)
+
+The separation-of-concerns follow-up passes the full engine suite and all 199
+Cockpit tests across 35 test files. Both npm trees pass type checking, lint,
+format checking and production builds; the Cockpit also passes its production
+boundary and bundle-budget checks. Engine lint retains existing warnings.
+
+Regression coverage includes retrieval scope before candidate limits on both
+backends, concurrent project mutations, shared document read counts, isolated
+contracts, import-boundary violations and UI/engine project semantics. These
+checks validate behavior and the specific repeated-work reductions; they are
+not an end-to-end latency benchmark or a manual browser acceptance run.
+
+A second implementation review caught four gaps that the initial tests missed:
+SQLite record reads did not expire after external Markdown edits; shared refresh
+could honor caller scan roots instead of the pinned workspace; the import checker
+missed TypeScript import-equals declarations; and lifecycle edits normalized CRLF
+frontmatter. Each now has a regression that failed before its fix. Both backends
+honor cache expiry, shared refresh uses workspace scan roots, import-equals edges
+are checked, and lifecycle edits preserve existing line endings.
 
 ## Decision
 

@@ -156,6 +156,10 @@ export interface LoadedProject {
 }
 
 export async function createProject(options: CreateProjectOptions): Promise<CreatedProject> {
+  return withProjectMutation(options, () => createProjectUnlocked(options));
+}
+
+async function createProjectUnlocked(options: CreateProjectOptions): Promise<CreatedProject> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const projectId = requireCanonicalProjectId(options.projectId);
   const title = cleanScalar(options.title) || titleFromProjectId(projectId);
@@ -208,7 +212,7 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   );
 
   if (!options.dryRun) {
-    await atomicWrite(absPath, content, options.workspace);
+    await writeProjectFile(absPath, content, options.workspace);
     for (const sourceAbs of sourceDirectoryPaths) {
       await fs.mkdir(sourceAbs, { recursive: true });
     }
@@ -217,67 +221,66 @@ export async function createProject(options: CreateProjectOptions): Promise<Crea
   return { projectId, path: relPath, sourceDirectories, content, dryRun: Boolean(options.dryRun) };
 }
 
-export async function listProjects(options: ProjectServiceOptions = {}): Promise<ProjectSummary[]> {
-  const repoRoot = path.resolve(options.repoRoot || process.cwd());
+/** A request-level snapshot; discover and parse each project manifest only once. */
+export async function loadProjectRecords(
+  options: ProjectServiceOptions = {},
+): Promise<LoadedProject[]> {
+  const repoRoot = path.resolve(
+    options.workspace?.realRepoRoot || options.repoRoot || process.cwd(),
+  );
   const records = await discoverProjectRecords(
     repoRoot,
-    options.scanRoots || DEFAULT_SCAN_ROOTS,
+    options.scanRoots || options.workspace?.scanRoots || DEFAULT_SCAN_ROOTS,
     options.workspace,
   );
-  const summaries: ProjectSummary[] = [];
-
+  const loaded: LoadedProject[] = [];
   for (const record of records) {
     if (options.workspace)
       await authorizeWorkspaceOperationalRead(options.workspace, record.absPath);
     const raw = await fs.readFile(record.absPath, "utf8");
-    const parsed = parseProjectDocument(raw, record.relPath, "");
-    summaries.push({
+    loaded.push({
+      raw,
+      parsed: parseProjectDocument(raw, record.relPath, ""),
+      path: record.relPath,
+    });
+  }
+  return loaded;
+}
+
+export function resolveLoadedProject(
+  records: LoadedProject[],
+  projectIdInput: string,
+): LoadedProject {
+  const projectId = requireCanonicalProjectId(projectIdInput);
+  const matches = records.filter((record) => record.parsed.manifest.projectId === projectId);
+  if (!matches.length) throw new Error(`Unknown project ID: ${projectId}`);
+  if (matches.length > 1)
+    throw new Error(
+      `Duplicate project ID '${projectId}' found in: ${matches.map((record) => record.path).join(", ")}`,
+    );
+  return matches[0];
+}
+
+export async function listProjects(options: ProjectServiceOptions = {}): Promise<ProjectSummary[]> {
+  return (await loadProjectRecords(options))
+    .map(({ parsed, path }) => ({
       projectId: parsed.manifest.projectId,
       title: parsed.manifest.title,
       status: parsed.manifest.status,
       owner: parsed.manifest.owner,
       track: parsed.manifest.track,
       updated: parsed.manifest.updated,
-      path: record.relPath,
+      path,
       workspaceId: parsed.manifest.workspaceId,
-    });
-  }
-
-  return summaries.sort(
-    (a, b) => a.projectId.localeCompare(b.projectId) || a.path.localeCompare(b.path),
-  );
+    }))
+    .sort((a, b) => a.projectId.localeCompare(b.projectId) || a.path.localeCompare(b.path));
 }
 
 export async function getProject(
   projectIdInput: string,
   options: ProjectServiceOptions = {},
 ): Promise<LoadedProject> {
-  const repoRoot = path.resolve(options.repoRoot || process.cwd());
-  const projectId = requireCanonicalProjectId(projectIdInput);
-  const records = await discoverProjectRecords(
-    repoRoot,
-    options.scanRoots || DEFAULT_SCAN_ROOTS,
-    options.workspace,
-  );
-  const matches: LoadedProject[] = [];
-
-  for (const record of records) {
-    if (options.workspace)
-      await authorizeWorkspaceOperationalRead(options.workspace, record.absPath);
-    const raw = await fs.readFile(record.absPath, "utf8");
-    const parsed = parseProjectDocument(raw, record.relPath, "");
-    if (parsed.manifest.projectId === projectId) {
-      matches.push({ raw, parsed, path: record.relPath });
-    }
-  }
-
-  if (!matches.length) throw new Error(`Unknown project ID: ${projectId}`);
-  if (matches.length > 1) {
-    throw new Error(
-      `Duplicate project ID '${projectId}' found in: ${matches.map((item) => item.path).join(", ")}`,
-    );
-  }
-  return matches[0];
+  return resolveLoadedProject(await loadProjectRecords(options), projectIdInput);
 }
 
 export async function validateProject(
@@ -323,6 +326,10 @@ export async function validateAllProjects(
 }
 
 export async function updateProject(options: UpdateProjectOptions): Promise<UpdatedProject> {
+  return withProjectMutation(options, () => updateProjectUnlocked(options));
+}
+
+async function updateProjectUnlocked(options: UpdateProjectOptions): Promise<UpdatedProject> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const loaded = await getProject(options.projectId, {
     repoRoot,
@@ -373,7 +380,7 @@ export async function updateProject(options: UpdateProjectOptions): Promise<Upda
       options.workspace,
       "write",
     );
-    await atomicWrite(target, content, options.workspace);
+    await writeProjectFile(target, content, options.workspace);
   }
   return {
     projectId: loaded.parsed.manifest.projectId,
@@ -388,7 +395,7 @@ export async function addProjectTask(options: AddProjectTaskOptions): Promise<Ad
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const lockPath = options.dryRun
     ? null
-    : await acquireProjectTaskLock(repoRoot, options.projectId, options.workspace);
+    : await acquireProjectMutationLock(repoRoot, options.projectId, options.workspace);
   try {
     const loaded = await getProject(options.projectId, {
       repoRoot,
@@ -427,7 +434,7 @@ export async function addProjectTask(options: AddProjectTaskOptions): Promise<Ad
         options.workspace,
         "write",
       );
-      await atomicWrite(target, content, options.workspace);
+      await writeProjectFile(target, content, options.workspace);
     }
 
     return {
@@ -455,7 +462,7 @@ export async function completeProjectTask(
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
   const lockPath = options.dryRun
     ? null
-    : await acquireProjectTaskLock(repoRoot, options.projectId, options.workspace);
+    : await acquireProjectMutationLock(repoRoot, options.projectId, options.workspace);
   try {
     const loaded = await getProject(options.projectId, {
       repoRoot,
@@ -506,7 +513,7 @@ export async function completeProjectTask(
         options.workspace,
         "write",
       );
-      await atomicWrite(target, content, options.workspace);
+      await writeProjectFile(target, content, options.workspace);
     }
 
     return {
@@ -523,6 +530,12 @@ export async function completeProjectTask(
 }
 
 export async function linkProjectSource(
+  options: LinkProjectSourceOptions,
+): Promise<UpdatedProject> {
+  return withProjectMutation(options, () => linkProjectSourceUnlocked(options));
+}
+
+async function linkProjectSourceUnlocked(
   options: LinkProjectSourceOptions,
 ): Promise<UpdatedProject> {
   const repoRoot = path.resolve(options.repoRoot || process.cwd());
@@ -552,7 +565,7 @@ export async function linkProjectSource(
   if (!items.some((item) => item.includes(`](${relativeTarget})`))) {
     items.push(`- ${markdownLink}`);
   }
-  return updateProject({
+  return updateProjectUnlocked({
     repoRoot,
     scanRoots: options.scanRoots,
     workspace: options.workspace,
@@ -886,7 +899,7 @@ function normalizeProjectTaskDisplayText(value: string): string {
 
 async function discoverProjectRecords(
   repoRoot: string,
-  scanRoots: string[],
+  scanRoots: readonly string[],
   workspace?: WorkspaceContext,
 ): Promise<Array<{ absPath: string; relPath: string }>> {
   const records: Array<{ absPath: string; relPath: string }> = [];
@@ -944,7 +957,7 @@ async function resolveSafeWorkspacePath(
   return target;
 }
 
-async function atomicWrite(
+export async function writeProjectFile(
   target: string,
   content: string,
   workspace?: WorkspaceContext,
@@ -961,7 +974,26 @@ async function atomicWrite(
   }
 }
 
-async function acquireProjectTaskLock(
+/** Serialize the entire read/modify/write operation across project writers. */
+export async function withProjectMutation<T>(
+  options: ProjectServiceOptions & { projectId: string; dryRun?: boolean },
+  mutate: () => Promise<T>,
+): Promise<T> {
+  const repoRoot = path.resolve(
+    options.workspace?.realRepoRoot || options.repoRoot || process.cwd(),
+  );
+  const projectId = requireCanonicalProjectId(options.projectId);
+  const lockPath = options.dryRun
+    ? null
+    : await acquireProjectMutationLock(repoRoot, projectId, options.workspace);
+  try {
+    return await mutate();
+  } finally {
+    if (lockPath) await fs.rm(lockPath, { force: true });
+  }
+}
+
+async function acquireProjectMutationLock(
   repoRoot: string,
   projectIdInput: string,
   workspace?: WorkspaceContext,

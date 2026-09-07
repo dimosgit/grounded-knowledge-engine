@@ -419,3 +419,149 @@ function fileStem(relPath: string): string {
   const base = relPath.split("/").pop() || relPath;
   return base.replace(/\.[^.]+$/, "");
 }
+
+// Status circles used in project checklists (see the Legend line in project
+// records). The checkbox itself is the status ([x] done, [ ] not started); a
+// circle appears only when it adds information the checkbox cannot express:
+// 🟡 in progress · 🔴 gated/waiting. Legacy 🟢/⚪ markers are still parsed.
+const TASK_STATUS_EMOJI: Record<string, string> = {
+  "🟢": "done",
+  "🟡": "inProgress",
+  "🔴": "gated",
+  "⚪": "todo",
+};
+
+// Parses every `- [ ] / - [x]` checklist line in a project doc into a task the
+// UI can render directly. The circle emoji (when present) refines the status;
+// a checked box always means done. The trailing [XS|S|M|L|XL] complexity
+// marker is split out so views can show it as a chip.
+export function parseProjectTasks(content: string) {
+  const taskRegex = /^\s*-\s+\[([ xX])\]\s+(.*)$/;
+  const tasks: Array<{ text: string; status: string; weight: string | null }> = [];
+
+  for (const line of (content || "").split("\n")) {
+    const match = line.match(taskRegex);
+    if (!match) continue;
+    const checked = match[1].trim().toLowerCase() === "x";
+    let text = match[2].trim();
+
+    let status = checked ? "done" : "todo";
+    const emojiMatch = text.match(/^(🟢|🟡|🔴|⚪)\s*/u);
+    if (emojiMatch) {
+      if (!checked) status = TASK_STATUS_EMOJI[emojiMatch[1]] || status;
+      text = text.slice(emojiMatch[0].length);
+    }
+
+    const weightMatch = text.match(/\s*[[(](XS|S|M|L|XL)[\])]$/i);
+    const weight = weightMatch ? weightMatch[1].toUpperCase() : null;
+    if (weightMatch) text = text.slice(0, weightMatch.index).trim();
+
+    tasks.push({ text: stripInlineMarkdown(text), status, weight });
+  }
+  return tasks;
+}
+
+function stripInlineMarkdown(value: string): string {
+  return value
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim();
+}
+
+/** Select actionable tasks once for every surface; recorded prose is a legacy fallback. */
+export function selectProjectNextActions(input: {
+  content: string;
+  status: string;
+  recordedNextActions: string[];
+  fallbackAction?: string;
+}) {
+  const tasks = parseProjectTasks(input.content);
+  const hasChecklist =
+    tasks.length > 0 || /^##\s+(?:delivery|execution) checklist\s*$/im.test(input.content);
+  const completed = isCompletedProjectStatus(input.status);
+  const actions = completed
+    ? []
+    : hasChecklist
+      ? [
+          ...tasks.filter((task) => task.status === "inProgress"),
+          ...tasks.filter((task) => task.status === "todo"),
+        ].map((task) => task.text)
+      : [
+          ...new Set(
+            [input.fallbackAction, ...input.recordedNextActions].filter((value): value is string =>
+              Boolean(value),
+            ),
+          ),
+        ];
+  return {
+    tasks,
+    nextActions: actions.slice(0, 5),
+    recommendedNextAction: completed
+      ? "Project completed; no next action required."
+      : actions[0] || "No next action recorded.",
+    nextThreeActions: actions.slice(0, 3),
+  };
+}
+
+export interface ProjectScopeDocument {
+  relPath: string;
+  frontmatter?: Record<string, unknown>;
+}
+
+export function createProjectMembership(
+  projectId: string,
+  manifestPath: string,
+  sourceRoots: string[],
+  explicitPaths: string[],
+): (doc: ProjectScopeDocument) => boolean {
+  const id = normalizeProjectId(projectId);
+  const roots = [...new Set(sourceRoots.flatMap(equivalentRoots))];
+  const canonicalRoots = equivalentRoots(`kb/projects/${id}`);
+  const links = new Set(
+    explicitPaths.flatMap((linkedPath) => [
+      ...equivalentPaths(linkedPath),
+      ...equivalentPaths(
+        normalizePosixPath([...manifestPath.split("/").slice(0, -1), ...linkedPath.split("/")]),
+      ),
+    ]),
+  );
+  return (doc) =>
+    doc.relPath === manifestPath ||
+    (Boolean(id) && normalizeProjectId(doc.frontmatter?.project_id) === id) ||
+    canonicalRoots.some((root) => doc.relPath.startsWith(`${root}/`)) ||
+    roots.some((root) => doc.relPath === root || doc.relPath.startsWith(`${root}/`)) ||
+    links.has(doc.relPath);
+}
+
+export function isDocumentInProject(
+  doc: ProjectScopeDocument,
+  projectId: string,
+  manifestPath: string,
+  sourceRoots: string[],
+  explicitPaths: string[],
+): boolean {
+  return createProjectMembership(projectId, manifestPath, sourceRoots, explicitPaths)(doc);
+}
+
+function normalizePosixPath(parts: string[]): string {
+  const normalized: string[] = [];
+  for (const part of parts) {
+    if (!part || part === ".") continue;
+    if (part === "..") normalized.pop();
+    else normalized.push(part);
+  }
+  return normalized.join("/");
+}
+
+function equivalentRoots(root: string): string[] {
+  return equivalentPaths(root.replace(/\/+$/, ""));
+}
+
+function equivalentPaths(value: string): string[] {
+  const paths = new Set([value]);
+  if (value.startsWith("kb/")) paths.add(`demo-kb/${value.slice(3)}`);
+  if (value.startsWith("demo-kb/")) paths.add(`kb/${value.slice("demo-kb/".length)}`);
+  return [...paths];
+}

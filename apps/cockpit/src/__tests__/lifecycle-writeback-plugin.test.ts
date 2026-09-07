@@ -4,11 +4,17 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   createLifecycleWritebackPlugin,
   handleLifecycleWritebackRequest,
 } from "../../scripts/lifecycle-writeback-plugin";
+import {
+  completeProjectTask,
+  updateProject,
+  linkProjectSource,
+} from "../../../../tools/projects/project-service";
+import { createGroundingApplicationService } from "../../../../tools/grounding/grounding-application-service";
 import { loadWorkspaceContext } from "../../../../tools/workspaces/config";
 
 interface TestServer {
@@ -68,6 +74,74 @@ describe("project lifecycle writeback dev-server plugin", () => {
     expect(await fs.readFile(path.join(repoRoot, physicalPath), "utf8")).toContain(
       "lifecycle: completed",
     );
+  });
+
+  test("serializes lifecycle, task, metadata and source-link writes without losing changes", async () => {
+    const repoRoot = await makeWorkspace();
+    const relPath = "kb/projects/local/project.md";
+    const target = path.join(await fs.realpath(repoRoot), relPath);
+    await writeWorkspaceFile(
+      repoRoot,
+      relPath,
+      "---\nrecord_type: project\nproject_id: local\nlifecycle: next\nowner: original\n---\n# Local\n\n## Delivery checklist\n\n- [ ] Preserve this task\n",
+    );
+    await writeWorkspaceFile(repoRoot, "kb/evidence.md", "# Evidence\n");
+    const server = await startServer(repoRoot);
+    const readFile = fs.readFile.bind(fs);
+    let unlock!: () => void;
+    let observed!: () => void;
+    const held = new Promise<void>((resolve) => {
+      unlock = resolve;
+    });
+    const readObserved = new Promise<void>((resolve) => {
+      observed = resolve;
+    });
+    let reads = 0;
+    const spy = vi.spyOn(fs, "readFile").mockImplementation(async (...args) => {
+      const content = await readFile(...args);
+      if (String(args[0]) === target && ++reads === 2) {
+        observed();
+        await held;
+      }
+      return content;
+    });
+    const move = requestJson(server.baseUrl, "/__board/lifecycle", {
+      method: "POST",
+      body: { path: relPath, lifecycle: "active" },
+    });
+    await readObserved;
+    const operations = [
+      completeProjectTask({ repoRoot, projectId: "local", text: "Preserve this task" }),
+      updateProject({ repoRoot, projectId: "local", owner: "updated" }),
+      linkProjectSource({ repoRoot, projectId: "local", sourcePath: "kb/evidence.md" }),
+    ];
+    unlock();
+    try {
+      const [response] = await Promise.all([move, ...operations]);
+      expect(response.status).toBe(200);
+      const content = await readFile(target, "utf8");
+      expect(content).toContain("lifecycle: active");
+      expect(content).toContain("[x] Preserve this task");
+      expect(content).toContain("owner: updated");
+      expect(content).toContain("../../evidence.md");
+    } finally {
+      unlock();
+      spy.mockRestore();
+    }
+  });
+
+  test("invalidates a warm retriever after a successful board move", async () => {
+    const repoRoot = await makeWorkspace();
+    const relPath = "kb/projects/local/project.md";
+    await writeWorkspaceFile(repoRoot, relPath, "---\nlifecycle: next\n---\n# Local\n");
+    const service = createGroundingApplicationService({ repoRoot, scanRoots: ["kb"] });
+    expect((await service.listDocuments())[0].frontmatter.lifecycle).toBe("next");
+    const server = await startServer(repoRoot);
+    await requestJson(server.baseUrl, "/__board/lifecycle", {
+      method: "POST",
+      body: { path: relPath, lifecycle: "active" },
+    });
+    expect((await service.listDocuments())[0].frontmatter.lifecycle).toBe("active");
   });
 
   test("requires loopback, same-origin JSON mutations", async () => {

@@ -1,10 +1,10 @@
+import { workspaceRetrievalGeneration } from "./invalidation.js";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import {
-  authorizeWorkspaceRead,
   authorizeWorkspaceRuntimePath,
   authorizeWorkspaceWrite,
 } from "../workspaces/path-policy.js";
@@ -17,18 +17,15 @@ import {
 import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 import { DEFAULT_SCAN_ROOTS } from "./retriever.js";
 import {
+  readDocumentEntries,
   buildManifestHash,
   gatherCandidateFiles,
-  getDocumentTitle,
-  inferSourceKind,
-  inferTrack,
   normalizeScalar,
   normalizeScanRoots,
-  parseFrontmatter,
   parsePositiveInt,
 } from "./document-core.js";
 import type {
-  CandidateFile,
+  DocumentSnapshotEntry,
   IndexedDocument,
   KbRetriever,
   ResolvedRetrieverOptions,
@@ -43,7 +40,8 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const INDEX_VERSION = 1;
+const INDEX_VERSION = 2;
+const DEFAULT_INDEX_CACHE_TTL_MS = 30000;
 const DEFAULT_SQLITE_INDEX_FILE = ".cache/kb-retriever.sqlite";
 const DEFAULT_QUERY_CACHE_TTL_MS = 45000;
 const DEFAULT_QUERY_CACHE_MAX_ENTRIES = 240;
@@ -135,6 +133,7 @@ const STOPWORDS = new Set([
 ]);
 
 let runtimeCache = {
+  loadedAt: 0,
   cacheKey: "",
   retriever: null as KbRetriever | null,
 };
@@ -148,6 +147,7 @@ interface ChunkDraft {
 }
 
 interface SearchCacheKeyParts {
+  allowedPaths: string[] | null;
   query: string;
   mode: string;
   limit: number;
@@ -188,6 +188,7 @@ interface RerankAdjustment {
 }
 
 interface RunFtsArgs {
+  allowedPaths: string[] | null;
   ftsQuery?: string;
   query: string;
   mode: string;
@@ -216,7 +217,8 @@ export async function getSqliteKbRetriever(options: RetrieverOptions = {}): Prom
   if (
     !resolved.forceRefresh &&
     runtimeCache.retriever &&
-    runtimeCache.cacheKey === resolved.cacheKey
+    runtimeCache.cacheKey === resolved.cacheKey &&
+    Date.now() - runtimeCache.loadedAt < resolved.cacheTtlMs
   ) {
     return runtimeCache.retriever;
   }
@@ -224,6 +226,7 @@ export async function getSqliteKbRetriever(options: RetrieverOptions = {}): Prom
   const db = await loadOrBuildDatabase(resolved);
   const retriever = createSqliteRetriever(db, resolved);
   runtimeCache = {
+    loadedAt: Date.now(),
     cacheKey: resolved.cacheKey,
     retriever,
   };
@@ -261,14 +264,20 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
   );
   const forceRefresh = Boolean(options.forceRefresh);
   const domain = workspace?.domain ?? DEFAULT_DOMAIN_PROFILE;
-  const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}::${domainFingerprint(domain)}`;
+  const cacheKey = `${repoRoot}::${scanRoots.join(",")}::${cachePath}::${domainFingerprint(domain)}::${workspaceRetrievalGeneration(repoRoot)}`;
   return {
+    snapshot: options.snapshot,
     workspace,
     domain,
     repoRoot,
     scanRoots,
     cachePath,
-    cacheTtlMs: 0,
+    cacheTtlMs: parsePositiveInt(
+      options.cacheTtlMs,
+      DEFAULT_INDEX_CACHE_TTL_MS,
+      1000,
+      10 * 60 * 1000,
+    ),
     queryCacheTtlMs,
     queryCacheMaxEntries,
     forceRefresh,
@@ -277,7 +286,9 @@ function resolveOptions(options: RetrieverOptions): ResolvedRetrieverOptions {
 }
 
 async function loadOrBuildDatabase(options: ResolvedRetrieverOptions): Promise<DatabaseSync> {
-  const files = await gatherCandidateFiles(options.repoRoot, options.scanRoots, options.workspace);
+  const files =
+    options.snapshot?.files ??
+    (await gatherCandidateFiles(options.repoRoot, options.scanRoots, options.workspace));
   const manifestHash = `${buildManifestHash(files)}::${domainFingerprint(options.domain)}`;
   if (options.workspace) {
     await authorizeWorkspaceRuntimePath(options.workspace, options.cachePath);
@@ -299,7 +310,9 @@ async function loadOrBuildDatabase(options: ResolvedRetrieverOptions): Promise<D
       repoRoot: options.repoRoot,
       workspace: options.workspace,
       domain: options.domain,
-      files,
+      entries:
+        options.snapshot?.entries ??
+        (await readDocumentEntries(files, options.workspace, options.domain)),
       manifestHash,
       scanRoots: options.scanRoots,
     });
@@ -325,16 +338,15 @@ function isDatabaseCurrent(db: DatabaseSync, manifestHash: string): boolean {
 async function rebuildDatabase(
   db: DatabaseSync,
   {
-    files,
+    entries,
     manifestHash,
     scanRoots,
-    workspace,
     domain,
   }: {
     repoRoot: string;
     workspace?: WorkspaceContext;
     domain: DomainProfile;
-    files: CandidateFile[];
+    entries: DocumentSnapshotEntry[];
     manifestHash: string;
     scanRoots: string[];
   },
@@ -364,6 +376,8 @@ async function rebuildDatabase(
       status TEXT,
       type TEXT,
       updated TEXT,
+      body TEXT NOT NULL,
+      frontmatter_json TEXT NOT NULL,
       mtime_ms REAL NOT NULL,
       size INTEGER NOT NULL,
       content_hash TEXT NOT NULL,
@@ -435,8 +449,8 @@ async function rebuildDatabase(
 
   const insertDocument = db.prepare(`
     INSERT INTO documents
-      (id, path, title, source_kind, module, track, status, type, updated, mtime_ms, size, content_hash, is_archive)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, path, title, source_kind, module, track, status, type, updated, mtime_ms, size, content_hash, is_archive, body, frontmatter_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertChunk = db.prepare(`
     INSERT INTO chunks
@@ -460,32 +474,13 @@ async function rebuildDatabase(
   try {
     let docId = 0;
     let chunkId = 0;
-    for (const file of files) {
-      let raw;
-      try {
-        if (workspace) await authorizeWorkspaceRead(workspace, file.absPath);
-        raw = await fs.readFile(file.absPath, "utf8");
-      } catch {
-        continue;
-      }
-
-      const isMarkdown = file.relPath.endsWith(".md");
-      const parsed = isMarkdown
-        ? parseFrontmatter(raw)
-        : { frontmatter: {} as Record<string, string>, body: raw };
-      const body = parsed.body || "";
-      if (!body.trim()) continue;
-
-      const frontmatter = parsed.frontmatter || {};
-      const title = getDocumentTitle(body, file.relPath);
-      const sourceKind = inferSourceKind(file.relPath, domain);
-      const track = inferTrack(file.relPath, frontmatter, domain);
-      const module = normalizeScalar(frontmatter.module);
+    for (const { file, raw, document } of entries) {
+      const { body, frontmatter, title, sourceKind, track, module } = document;
       const status = normalizeScalar(frontmatter.status);
       const type = normalizeScalar(frontmatter.type);
       const updated = normalizeScalar(frontmatter.updated);
       const contentHash = crypto.createHash("sha1").update(raw).digest("hex");
-      const isArchive = file.relPath.startsWith("kb/archive/") ? 1 : 0;
+      const isArchive = document.isArchive ? 1 : 0;
 
       insertDocument.run(
         docId,
@@ -501,6 +496,8 @@ async function rebuildDatabase(
         file.size,
         contentHash,
         isArchive,
+        body,
+        JSON.stringify(frontmatter),
       );
 
       if (sourceKind === "kb-term") {
@@ -581,11 +578,14 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
     const track = normalizeScalar(args.track);
     const module = normalizeScalar(args.module);
     const includeArchive = Boolean(args.includeArchive);
+    const allowedPaths =
+      args.allowedPaths === undefined ? null : [...new Set(args.allowedPaths)].sort();
     const disableCache = Boolean(args.disableCache);
     const debug = Boolean(args.debug);
     const debugTopN = parsePositiveInt(args.debugTopN, 5, 1, 25);
     const shouldUseCache = options.queryCacheTtlMs > 0 && !disableCache && !debug;
     const cacheKey = buildSearchCacheKey({
+      allowedPaths,
       query,
       mode,
       limit,
@@ -617,6 +617,7 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
     const tokenWeights = buildWeightedQueryTokens(query, options.domain);
     const ftsQuery = buildFtsQuery([...tokenWeights.keys()]);
     const sqlRows = runFtsQuery(db, {
+      allowedPaths,
       ftsQuery,
       query,
       mode,
@@ -733,6 +734,8 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
         status,
         type,
         updated,
+        body,
+        frontmatter_json,
         is_archive AS isArchive
       FROM documents
       ORDER BY path
@@ -746,8 +749,8 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
         track: `${row.track || ""}`,
         module: `${row.module || ""}`,
         sourceKind: `${row.sourceKind || ""}`,
-        frontmatter: {},
-        body: "",
+        frontmatter: JSON.parse(String(row.frontmatter_json || "{}")),
+        body: String(row.body || ""),
         isArchive: Boolean(row.isArchive),
       }));
   }
@@ -783,8 +786,8 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
       track: `${row.track || ""}`,
       module: `${row.module || ""}`,
       sourceKind: `${row.source_kind || ""}`,
-      frontmatter: {},
-      body: "",
+      frontmatter: JSON.parse(String(row.frontmatter_json || "{}")),
+      body: String(row.body || ""),
       isArchive: Boolean(row.is_archive),
     };
   }
@@ -805,7 +808,7 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
 
 function runFtsQuery(
   db: DatabaseSync,
-  { ftsQuery, query, mode, track, module, includeArchive, windowSize }: RunFtsArgs,
+  { ftsQuery, query, mode, track, module, includeArchive, windowSize, allowedPaths }: RunFtsArgs,
 ): SqliteChunkRow[] {
   const rows: SqliteChunkRow[] = [];
   if (ftsQuery) {
@@ -819,6 +822,10 @@ function runFtsQuery(
     if (module) {
       filters.push("c.module = ?");
       params.push(module);
+    }
+    if (allowedPaths !== null) {
+      filters.push("c.path IN (SELECT value FROM json_each(?))");
+      params.push(JSON.stringify(allowedPaths));
     }
     const where = filters.length ? `AND ${filters.join(" AND ")}` : "";
     rows.push(
@@ -850,12 +857,20 @@ function runFtsQuery(
   }
 
   if (rows.length) return rows;
-  return seedFallbackRows(db, { query, mode, track, module, includeArchive, windowSize });
+  return seedFallbackRows(db, {
+    query,
+    mode,
+    track,
+    module,
+    includeArchive,
+    windowSize,
+    allowedPaths,
+  });
 }
 
 function seedFallbackRows(
   db: DatabaseSync,
-  { query, mode, track, module, includeArchive, windowSize }: RunFtsArgs,
+  { query, mode, track, module, includeArchive, windowSize, allowedPaths }: RunFtsArgs,
 ): SqliteChunkRow[] {
   const filters = ["LOWER(c.text) LIKE ?"];
   const params = [`%${query.toLowerCase()}%`];
@@ -867,6 +882,10 @@ function seedFallbackRows(
   if (module) {
     filters.push("c.module = ?");
     params.push(module);
+  }
+  if (allowedPaths !== null) {
+    filters.push("c.path IN (SELECT value FROM json_each(?))");
+    params.push(JSON.stringify(allowedPaths));
   }
   const rows = db
     .prepare(
@@ -1270,6 +1289,7 @@ function trimQueryCache(
 
 function buildSearchCacheKey(payload: SearchCacheKeyParts): string {
   return JSON.stringify({
+    allowedPaths: payload.allowedPaths,
     q: payload.query.toLowerCase(),
     mode: payload.mode,
     limit: payload.limit,

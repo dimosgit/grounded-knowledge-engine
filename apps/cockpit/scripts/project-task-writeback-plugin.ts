@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import type { Plugin, ViteDevServer } from "vite";
-import { completeProjectTask } from "../../../tools/projects/project-service.js";
+import { createProjectApplicationService } from "../../../tools/projects/project-application-service.js";
 import { loadWorkspaceContext } from "../../../tools/workspaces/config.js";
 import type { WorkspaceContext } from "../../../tools/workspaces/types.js";
 import {
@@ -89,9 +89,7 @@ export async function handleProjectTaskWritebackRequest(
     assertOnlyKeys(body, ["projectId", "taskText"]);
     const projectId = requireText(body.projectId, "project_id");
     const taskText = requireText(body.taskText, "task_text");
-    const result = await completeProjectTask({
-      repoRoot: options.repoRoot,
-      workspace: options.workspace,
+    const result = await createProjectApplicationService(options).completeTask({
       projectId,
       text: taskText,
     });

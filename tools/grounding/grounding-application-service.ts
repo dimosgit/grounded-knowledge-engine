@@ -5,15 +5,16 @@ import {
   type GroundedAnswerInput,
   type GroundedAnswerResult,
 } from "./answer-service.js";
-import { getKbRetriever } from "./retriever.js";
+import { loadDocumentSnapshot, normalizeScanRoots } from "./document-core.js";
+import { getKbRetriever, DEFAULT_SCAN_ROOTS } from "./retriever.js";
 import type {
+  DocumentSnapshot,
   IndexedDocument,
   KbRetriever,
   RetrievalBackend,
   RetrieverOptions,
   RetrieverStats,
   SearchArgs,
-  SearchHit,
   SearchResult,
 } from "./types.js";
 
@@ -46,9 +47,7 @@ export class GroundingApplicationService {
       repoRoot: workspace
         ? workspace.realRepoRoot
         : path.resolve(options.repoRoot || path.join(__dirname, "..", "..")),
-      scanRoots: cloneScanRoots(
-        options.scanRoots ?? (workspace ? [...workspace.scanRoots] : undefined),
-      ),
+      scanRoots: cloneScanRoots(workspace ? [...workspace.scanRoots] : options.scanRoots),
       cachePath: options.cachePath,
       cacheTtlMs: options.cacheTtlMs,
       queryCacheTtlMs: options.queryCacheTtlMs,
@@ -79,15 +78,13 @@ export class GroundingApplicationService {
     return answerGrounded(input, {
       search: async (args) => {
         const { backend: _backend, ...searchArgs } = args;
-        const result = {
-          ...retriever.search(
-            allowedPaths ? { ...searchArgs, limit: 30, disableCache: true } : searchArgs,
-          ),
+        return {
+          ...retriever.search({
+            ...searchArgs,
+            ...(allowedPaths ? { allowedPaths: [...allowedPaths] } : {}),
+          }),
           backend,
         };
-        return allowedPaths
-          ? scopeSearchResult(result, allowedPaths, Number(searchArgs.limit) || 8)
-          : result;
       },
       listDocuments: async () => documents,
       domain: this.context.workspace?.domain,
@@ -111,6 +108,22 @@ export class GroundingApplicationService {
     };
   }
 
+  /** Rebuild both backends from the same document bytes with one filesystem read pass. */
+  async refreshAll(): Promise<Record<RetrievalBackend, RetrieverStats>> {
+    const snapshot = await loadDocumentSnapshot(
+      this.context.repoRoot!,
+      normalizeScanRoots(this.context.scanRoots || DEFAULT_SCAN_ROOTS, DEFAULT_SCAN_ROOTS),
+      this.context.workspace,
+      this.context.workspace?.domain,
+    );
+    const bm25 = await this.getRetriever("bm25", true, snapshot);
+    const sqlite = await this.getRetriever("sqlite", true, snapshot);
+    return {
+      bm25: { ...bm25.getStats(), backend: "bm25" },
+      sqlite: { ...sqlite.getStats(), backend: "sqlite" },
+    };
+  }
+
   private resolveBackend(value: unknown): RetrievalBackend {
     return value === undefined || value === null || value === ""
       ? this.defaultBackend
@@ -120,9 +133,11 @@ export class GroundingApplicationService {
   private async getRetriever(
     backend: RetrievalBackend,
     forceRefresh = false,
+    snapshot?: DocumentSnapshot,
   ): Promise<KbRetriever> {
     const options = {
       ...this.context,
+      snapshot,
       scanRoots: cloneScanRoots(this.context.scanRoots),
       forceRefresh,
     };
@@ -146,41 +161,4 @@ export function normalizeRetrievalBackend(value: unknown): RetrievalBackend {
 
 function cloneScanRoots(scanRoots: RetrieverOptions["scanRoots"]): RetrieverOptions["scanRoots"] {
   return Array.isArray(scanRoots) ? [...scanRoots] : scanRoots;
-}
-
-function scopeSearchResult(
-  result: SearchResult,
-  allowedPaths: ReadonlySet<string>,
-  limit: number,
-): SearchResult {
-  const hits = result.hits.filter((hit) => allowedPaths.has(hit.path)).slice(0, limit);
-  return {
-    ...result,
-    hitCount: hits.length,
-    hits,
-    signals: buildEvidenceSignals(hits, result.queryTokens),
-  };
-}
-
-function buildEvidenceSignals(hits: SearchHit[], queryTokens: string[]) {
-  const topHits = hits.slice(0, 5);
-  const coveredTokens = new Set<string>();
-  const sourceCounts = new Map<string, number>();
-  for (const hit of topHits) {
-    for (const token of hit.matchedTokens || []) coveredTokens.add(token);
-    sourceCounts.set(hit.path, (sourceCounts.get(hit.path) || 0) + 1);
-  }
-  const dominantSourceShare = topHits.length
-    ? Math.max(...sourceCounts.values()) / topHits.length
-    : 0;
-  return {
-    topScore: roundSignal(topHits[0]?.score || 0),
-    uniqueSources: sourceCounts.size,
-    tokenCoverage: roundSignal(queryTokens.length ? coveredTokens.size / queryTokens.length : 0),
-    dominantSourceShare: roundSignal(dominantSourceShare),
-  };
-}
-
-function roundSignal(value: number): number {
-  return Number(value.toFixed(3));
 }

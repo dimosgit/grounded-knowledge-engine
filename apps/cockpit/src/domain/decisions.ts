@@ -1,12 +1,5 @@
-import {
-  calculateDecisionReviewState,
-  parseDecision,
-} from "../../../../tools/decisions/decision-parser";
-import type {
-  DecisionRecord,
-  DecisionReviewState,
-  DecisionStatus,
-} from "../../../../tools/decisions/types";
+import { calculateDecisionReviewState, parseDecision } from "@gke/contracts/decisions";
+import type { DecisionRecord, DecisionReviewState, DecisionStatus } from "@gke/contracts/decisions";
 
 export type DecisionLedgerFilter = "all" | DecisionReviewState | DecisionStatus;
 

@@ -44,7 +44,7 @@ export function validateLayerManifest(manifest, options = {}) {
     }
     assertObjectKeys(
       layer,
-      ["description", "roots", "excludes", "reconcile", "dependsOn", "verify"],
+      ["description", "roots", "excludes", "reconcile", "dependsOn", "requires", "verify"],
       `layer '${name}'`,
     );
     if (typeof layer.description !== "string" || !layer.description.trim()) {
@@ -53,6 +53,11 @@ export function validateLayerManifest(manifest, options = {}) {
     assertStringArray(layer.roots, `layer '${name}' roots`, { nonEmpty: true });
     assertStringArray(layer.excludes, `layer '${name}' excludes`);
     assertStringArray(layer.reconcile, `layer '${name}' reconcile`);
+    assertStringArray(layer.requires || [], `layer '${name}' requires`);
+    for (const dependency of layer.requires || []) {
+      if (!manifest.layers[dependency] || dependency === name)
+        throw new Error(`invalid required layer '${dependency}' for '${name}'`);
+    }
     assertStringArray(layer.dependsOn, `layer '${name}' dependsOn`);
     assertStringArray(layer.verify, `layer '${name}' verify`, { nonEmpty: true });
 
@@ -123,6 +128,9 @@ export function resolveLayerScope(manifest, scope) {
     scope,
     schemaVersion: manifest.schemaVersion,
     layers,
+    requires: [...new Set(layers.flatMap((name) => manifest.layers[name].requires || []))].filter(
+      (name) => !layers.includes(name),
+    ),
     roots: [...new Set(layers.flatMap((name) => manifest.layers[name].roots))],
     excludes: [...new Set(layers.flatMap((name) => manifest.layers[name].excludes))],
     reconcile: [...new Set(layers.flatMap((name) => manifest.layers[name].reconcile))],
