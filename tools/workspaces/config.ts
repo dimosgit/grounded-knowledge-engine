@@ -5,6 +5,8 @@ import {
   type LoadWorkspaceContextOptions,
   type WorkspaceConfigFile,
   type WorkspaceContext,
+  type WorkspaceFocusAreaConfig,
+  type WorkspaceFocusAreaIcon,
   type WorkspaceSensitivity,
   type WorkspaceUiConfig,
 } from "./types.js";
@@ -138,11 +140,107 @@ function normalizeUiConfig(value: unknown): WorkspaceUiConfig {
     typeof config.defaultActiveTrack === "string" && config.defaultActiveTrack.trim()
       ? config.defaultActiveTrack.trim()
       : undefined;
+  const focusAreas = normalizeFocusAreas(config.focusAreas);
+  const requestedFocusAreaId =
+    typeof config.defaultFocusAreaId === "string" ? config.defaultFocusAreaId.trim() : "";
+  const defaultFocusAreaId =
+    requestedFocusAreaId && focusAreas.some((area) => area.id === requestedFocusAreaId)
+      ? requestedFocusAreaId
+      : undefined;
   return Object.freeze({
     ...(sourceFolders ? { sourceFolders: Object.freeze(sourceFolders) } : {}),
     ...(rootFiles ? { rootFiles: Object.freeze(rootFiles) } : {}),
     ...(defaultActiveTrack ? { defaultActiveTrack } : {}),
+    ...(focusAreas.length ? { focusAreas: Object.freeze(focusAreas) } : {}),
+    ...(defaultFocusAreaId ? { defaultFocusAreaId } : {}),
   });
+}
+
+const FOCUS_AREA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const PROJECT_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/i;
+const AREA_ICONS = new Set<WorkspaceFocusAreaIcon>(["briefcase", "sparkles", "graduation-cap"]);
+
+function normalizeFocusAreas(value: unknown): WorkspaceFocusAreaConfig[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const areas: WorkspaceFocusAreaConfig[] = [];
+  for (const candidate of value.slice(0, 12)) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const raw = candidate as Record<string, unknown>;
+    const id = typeof raw.id === "string" ? raw.id.trim().toLowerCase() : "";
+    const label = typeof raw.label === "string" ? raw.label.trim().replace(/\s+/g, " ") : "";
+    if (!FOCUS_AREA_ID.test(id) || !label || label.length > 80 || seen.has(id)) continue;
+    seen.add(id);
+    const description =
+      typeof raw.description === "string"
+        ? raw.description.trim().replace(/\s+/g, " ").slice(0, 240)
+        : "";
+    const icon = AREA_ICONS.has(raw.icon as WorkspaceFocusAreaIcon)
+      ? (raw.icon as WorkspaceFocusAreaIcon)
+      : undefined;
+    const projectIds = normalizeProjectIds(raw.projectIds);
+    const documentPaths = normalizeDocumentPaths(raw.documentPaths);
+    const focusRecordIds = normalizeFocusRecordIds(raw.focusRecordIds, projectIds, documentPaths);
+    areas.push(
+      Object.freeze({
+        id,
+        label,
+        ...(description ? { description } : {}),
+        ...(icon ? { icon } : {}),
+        ...(projectIds.length ? { projectIds: Object.freeze(projectIds) } : {}),
+        ...(documentPaths.length ? { documentPaths: Object.freeze(documentPaths) } : {}),
+        ...(focusRecordIds.length ? { focusRecordIds: Object.freeze(focusRecordIds) } : {}),
+      }),
+    );
+  }
+  return areas;
+}
+
+function normalizeProjectIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(value.map((item) => `${item}`.trim()).filter((item) => PROJECT_ID.test(item))),
+  ].slice(0, 160);
+}
+
+function normalizeDocumentPaths(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => normalizeDocumentPath(item)).filter(Boolean))].slice(
+    0,
+    320,
+  );
+}
+
+function normalizeDocumentPath(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const normalized = value
+    .trim()
+    .replaceAll("\\", "/")
+    .replace(/^\.\/+/, "");
+  if (
+    !normalized ||
+    normalized.length > 240 ||
+    normalized.startsWith("/") ||
+    normalized.includes("..")
+  ) {
+    return "";
+  }
+  return normalized.startsWith("kb/") && normalized.endsWith(".md") ? normalized : "";
+}
+
+function normalizeFocusRecordIds(
+  value: unknown,
+  projectIds: string[],
+  documentPaths: string[],
+): string[] {
+  if (!Array.isArray(value)) return [];
+  const valid = new Set([
+    ...projectIds.map((id) => `project:${id}`),
+    ...documentPaths.map((path) => `document:${path}`),
+  ]);
+  return [
+    ...new Set(value.map((item) => `${item}`.trim()).filter((item) => valid.has(item))),
+  ].slice(0, 24);
 }
 
 function assertOptionalString(config: Record<string, unknown>, field: string): void {

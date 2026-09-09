@@ -1,24 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "./styles/themes.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-:root {
-  --bg: #f3f6f7;
-  --panel: #ffffff;
-  --panel-soft: #eef4f6;
-  --ink: #132129;
-  --muted: #5d6c75;
-  --line: #d2dee5;
-  --brand: #0f7f79;
-  --brand-soft: rgba(15, 127, 121, 0.15);
-  --accent: #df6f2d;
-  --accent-soft: rgba(223, 111, 45, 0.14);
-  --shadow: 0 22px 48px rgba(13, 37, 48, 0.08);
-  --shadow-soft: 0 10px 28px rgba(15, 37, 48, 0.06);
-}
 
 * {
   box-sizing: border-box;
@@ -46,7 +30,7 @@
    bright OS default. Uses the same palette as the Library panes below; more
    specific rules there still win where they apply. */
 * {
-  scrollbar-color: #1e293b transparent;
+  scrollbar-color: var(--line) transparent;
   scrollbar-width: thin;
 }
 
@@ -60,14 +44,14 @@
 }
 
 *::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: var(--line);
   border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: 8px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background: #2a3548;
+  background: rgb(var(--color-surface-container-highest));
   border: 2px solid transparent;
   background-clip: padding-box;
 }
@@ -80,12 +64,9 @@ body,
 }
 
 body {
-  font-family: "Manrope", "Segoe UI", sans-serif;
+  font-family: var(--theme-body-font);
   color: var(--ink);
-  background:
-    radial-gradient(1400px 680px at -20% -8%, #d8eef5 0%, rgba(216, 238, 245, 0) 72%),
-    radial-gradient(1000px 500px at 115% 8%, #ffe1cf 0%, rgba(255, 225, 207, 0) 66%),
-    linear-gradient(180deg, #f8fbfc 0%, var(--bg) 100%);
+  background: var(--bg);
 }
 
 .app-shell {
@@ -238,7 +219,7 @@ body {
 }
 
 .font-serif {
-  font-family: "Fraunces", serif;
+  font-family: var(--theme-display-font);
 }
 
 .bg-slate-50 {
@@ -335,7 +316,7 @@ body {
 
 .hub-hero h1 {
   margin: 0.4rem 0;
-  font-family: "Fraunces", serif;
+  font-family: var(--theme-display-font);
   font-size: clamp(1.45rem, 2.4vw, 2.05rem);
 }
 
@@ -473,7 +454,7 @@ body {
   justify-content: center;
   gap: 0.2rem;
   padding: 0 0.35rem;
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--theme-mono-font);
   font-size: 0.63rem;
   font-weight: 600;
   letter-spacing: 0.02em;
@@ -526,7 +507,7 @@ body {
 
 .hub-section-heading h2 {
   margin: 0;
-  font-family: "Fraunces", serif;
+  font-family: var(--theme-display-font);
   font-size: 1.1rem;
 }
 
@@ -627,7 +608,7 @@ body {
 
 .hub-tip h2 {
   margin: 0;
-  font-family: "Fraunces", serif;
+  font-family: var(--theme-display-font);
   font-size: 1rem;
 }
 
@@ -666,7 +647,7 @@ body {
 
 .sidebar-header h1 {
   margin: 0.35rem 0;
-  font-family: "Fraunces", serif;
+  font-family: var(--theme-display-font);
   font-size: 1.55rem;
   line-height: 1.08;
   letter-spacing: -0.02em;
@@ -935,7 +916,7 @@ body {
 
 .doc-item span,
 .content-header p {
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--theme-mono-font);
   color: var(--muted);
   font-size: 0.71rem;
 }
@@ -1037,7 +1018,7 @@ body {
   align-items: center;
   flex-wrap: wrap;
   gap: 0.32rem;
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--theme-mono-font);
   font-size: 0.69rem;
   color: var(--muted);
 }
@@ -1157,7 +1138,7 @@ body {
 
 .digest-quickview h2 {
   margin: 0;
-  font-family: "Fraunces", serif;
+  font-family: var(--theme-display-font);
   font-size: 1.1rem;
 }
 
@@ -1281,7 +1262,7 @@ body {
 
 .markdown-toc-title {
   margin: 0;
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--theme-mono-font);
   font-size: 0.71rem;
   text-transform: uppercase;
   letter-spacing: 0.09em;
@@ -1335,7 +1316,7 @@ body {
 .markdown h4 {
   line-height: 1.2;
   margin-top: 1.35em;
-  font-family: "Fraunces", serif;
+  font-family: var(--theme-display-font);
   letter-spacing: -0.01em;
   scroll-margin-top: 5.7rem;
 }
@@ -1396,9 +1377,9 @@ body {
 .markdown-mermaid-block {
   margin: 1.2rem 0;
   padding: 0.85rem;
-  border: 1px solid rgba(15, 127, 121, 0.24);
-  border-radius: 12px;
-  background: linear-gradient(180deg, rgba(238, 247, 250, 0.85), rgba(226, 240, 247, 0.7));
+  border: 1px solid var(--line);
+  border-radius: var(--theme-card-radius);
+  background: var(--surface-soft);
   overflow: auto;
 }
 
@@ -1415,7 +1396,7 @@ body {
 
 .markdown-mermaid-error {
   margin: 0 0 0.6rem;
-  color: #842029;
+  color: var(--danger);
   font-size: 0.88rem;
   font-weight: 600;
 }
@@ -1429,7 +1410,7 @@ body {
   border-radius: 999px;
   background: rgba(13, 44, 60, 0.88);
   color: #eaf7ff;
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--theme-mono-font);
   font-size: 0.72rem;
   line-height: 1;
   padding: 0.4rem 0.65rem;
@@ -1456,7 +1437,7 @@ body {
 }
 
 .markdown code {
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--theme-mono-font);
 }
 
 .markdown :not(pre) > code {
@@ -1487,7 +1468,7 @@ body {
   margin-left: 0.42rem;
   opacity: 0;
   color: #3b6779;
-  font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  font-family: var(--theme-mono-font);
   font-size: 0.72em;
   text-decoration: none;
   transition:
@@ -1742,7 +1723,7 @@ body {
   }
 
   body {
-    font-family: "Inter", "Segoe UI", sans-serif;
+    font-family: var(--theme-body-font);
     color: #d8e3fb;
     background: #081425;
   }
@@ -1767,7 +1748,7 @@ body {
   .sidebar-header h1,
   .content-header h1,
   .hub-hero h1 {
-    font-family: "Geist", "Inter", sans-serif;
+    font-family: var(--theme-display-font);
     color: #d8e3fb;
   }
 
@@ -1883,7 +1864,7 @@ body {
   .markdown-content h2,
   .markdown-content h3,
   .markdown-content h4 {
-    font-family: "Geist", "Inter", sans-serif;
+    font-family: var(--theme-display-font);
     color: #d8e3fb;
   }
 
@@ -1930,7 +1911,7 @@ body {
 /* Final legacy-compatibility overrides. Keep these outside Tailwind layers so
    they win over the older light-theme rules after Tailwind reorders layers. */
 body {
-  font-family: "Inter", "Segoe UI", sans-serif;
+  font-family: var(--theme-body-font);
   color: #d8e3fb;
   background: #081425;
 }
@@ -1974,7 +1955,7 @@ body {
 .markdown-content h2,
 .markdown-content h3,
 .markdown-content h4 {
-  font-family: "Geist", "Inter", sans-serif;
+  font-family: var(--theme-display-font);
   color: #d8e3fb;
 }
 
@@ -2149,13 +2130,13 @@ body {
   padding: 0.5rem;
   background: #081425;
   color: #d8e3fb;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--theme-mono-font);
   font-size: 13px;
 }
 
 .cockpit-library .curation-stats em {
   color: #c3c5d8;
-  font-family: "Inter", sans-serif;
+  font-family: var(--theme-body-font);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2278,7 +2259,7 @@ body {
 .cockpit-library .doc-group h2 {
   margin: 0.9rem 0 0.35rem;
   padding: 0 0.5rem;
-  font-family: "Inter", sans-serif;
+  font-family: var(--theme-body-font);
   font-size: 12px;
   line-height: 16px;
   letter-spacing: 0.05em;
@@ -2320,7 +2301,7 @@ body {
 }
 
 .cockpit-library .doc-item span {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--theme-mono-font);
   font-size: 11px;
 }
 
@@ -2362,7 +2343,7 @@ body {
 }
 
 .cockpit-library .content-breadcrumbs {
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--theme-mono-font);
   font-size: 12px;
 }
 
@@ -2514,7 +2495,7 @@ body {
   display: block;
   margin: 0 0 0.45rem;
   color: #7bc7c0;
-  font-family: "Inter", sans-serif;
+  font-family: var(--theme-body-font);
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -2523,7 +2504,7 @@ body {
 
 .cockpit-library .sidebar-header h1 {
   color: #f1f5f9;
-  font-family: "Geist", "Inter", sans-serif;
+  font-family: var(--theme-display-font);
   font-size: 1.12rem;
   font-weight: 700;
 }
@@ -2560,7 +2541,7 @@ body {
   border-radius: 6px;
   background: #151f2e;
   color: #eef4ff;
-  font-family: "Inter", sans-serif;
+  font-family: var(--theme-body-font);
 }
 
 .cockpit-library .search-box input::placeholder {
@@ -2713,7 +2694,7 @@ body {
   border-radius: 999px;
   padding: 0.18rem 0.55rem;
   color: #9aa7bb;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--theme-mono-font);
   font-size: 0.68rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -2723,7 +2704,7 @@ body {
   max-width: 17ch;
   margin: 0;
   color: #f7fbff;
-  font-family: "Geist", "Inter", sans-serif;
+  font-family: var(--theme-display-font);
   font-size: 2.5rem;
   line-height: 1.12;
   letter-spacing: 0;
@@ -2815,7 +2796,7 @@ body {
 
 .cockpit-library .digest-quickview h2 {
   color: #c7d3e7;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--theme-mono-font);
   font-size: 0.82rem;
   font-weight: 800;
   letter-spacing: 0.1em;
@@ -2837,7 +2818,7 @@ body {
 .cockpit-library .digest-quick-card h3 {
   margin-bottom: 0.75rem;
   color: #dce7ff;
-  font-family: "Geist", "Inter", sans-serif;
+  font-family: var(--theme-display-font);
   font-size: clamp(1.22rem, 2vw, 1.55rem);
   font-weight: 700;
   line-height: 1.25;
@@ -2869,7 +2850,7 @@ body {
   border-radius: 4px;
   background: #2c3548;
   color: #e3ebff;
-  font-family: "JetBrains Mono", monospace;
+  font-family: var(--theme-mono-font);
   font-size: 0.88rem;
   font-weight: 800;
   letter-spacing: 0.03em;
@@ -2908,7 +2889,7 @@ body {
 .cockpit-library .markdown-content h3,
 .cockpit-library .markdown-content h4 {
   color: #edf4ff;
-  font-family: "Geist", "Inter", sans-serif;
+  font-family: var(--theme-display-font);
   letter-spacing: 0;
 }
 
@@ -3035,7 +3016,7 @@ body {
 
 .cockpit-library .markdown-toc-title {
   color: #8b9ab1;
-  font-family: "Inter", sans-serif;
+  font-family: var(--theme-body-font);
 }
 
 .cockpit-library .markdown-toc-list {
@@ -3175,4 +3156,223 @@ body {
   .cockpit-library .markdown-content td {
     font-size: 0.96rem;
   }
+}
+
+/* Warm Paper coverage for the legacy Knowledge Base reader. The reader keeps
+   its compact information layout, while every visual role comes from the
+   shared semantic palette instead of the older dark-only literals above. */
+html[data-theme="warm"] body,
+html[data-theme="warm"] .app-shell,
+html[data-theme="warm"] .cockpit-library,
+html[data-theme="warm"] .cockpit-library .content,
+html[data-theme="warm"] .cockpit-library .content-body,
+html[data-theme="warm"] .cockpit-library .markdown {
+  background: rgb(var(--color-surface-main));
+  color: rgb(var(--color-on-surface));
+}
+
+html[data-theme="warm"] .cockpit-library .sidebar,
+html[data-theme="warm"] .cockpit-library .sidebar-header,
+html[data-theme="warm"] .cockpit-library .filter-panel,
+html[data-theme="warm"] .cockpit-library .merge-toggle {
+  background: rgb(var(--color-surface-sidebar));
+}
+
+html[data-theme="warm"] .cockpit-library .sidebar,
+html[data-theme="warm"] .cockpit-library .sidebar-header,
+html[data-theme="warm"] .cockpit-library .search-box,
+html[data-theme="warm"] .cockpit-library .merge-toggle,
+html[data-theme="warm"] .cockpit-library .content-header,
+html[data-theme="warm"] .cockpit-library .markdown-content h2,
+html[data-theme="warm"] .cockpit-library .markdown table,
+html[data-theme="warm"] .cockpit-library .markdown table th,
+html[data-theme="warm"] .cockpit-library .markdown table td,
+html[data-theme="warm"] .cockpit-library .markdown-code-block,
+html[data-theme="warm"] .cockpit-library .markdown-image img {
+  border-color: rgb(var(--color-border-subtle));
+}
+
+html[data-theme="warm"] .cockpit-library .curation-card,
+html[data-theme="warm"] .cockpit-library .search-box input,
+html[data-theme="warm"] .cockpit-library .filter-field select,
+html[data-theme="warm"] .cockpit-library .filter-chip,
+html[data-theme="warm"] .cockpit-library .action-btn,
+html[data-theme="warm"] .cockpit-library .doc-badge,
+html[data-theme="warm"] .cockpit-library .markdown-copy-btn,
+html[data-theme="warm"] .cockpit-library .content-guidance,
+html[data-theme="warm"] .cockpit-library .markdown-toc {
+  border-color: rgb(var(--color-border-subtle));
+  background: rgb(var(--color-surface-container-low));
+  color: rgb(var(--color-on-surface));
+}
+
+html[data-theme="warm"] .cockpit-library .curation-stats {
+  background: transparent;
+}
+
+html[data-theme="warm"] .cockpit-library .curation-stats span,
+html[data-theme="warm"] .cockpit-library .markdown-content ul:not(.markdown-toc-list) > li {
+  border-color: rgb(var(--color-border-subtle));
+  background: rgb(var(--color-surface-container-lowest));
+  color: rgb(var(--color-on-surface));
+}
+
+html[data-theme="warm"] .cockpit-library .content-header {
+  background: rgb(var(--color-surface) / 0.96);
+}
+
+html[data-theme="warm"] .cockpit-library .doc-item {
+  border-color: transparent;
+  background: transparent;
+  color: rgb(var(--color-on-surface));
+}
+
+html[data-theme="warm"] .cockpit-library .doc-item:hover {
+  border-color: rgb(var(--color-border-subtle));
+  background: rgb(var(--color-surface-container-low));
+}
+
+html[data-theme="warm"] .cockpit-library .doc-item.active {
+  border-color: rgb(var(--color-primary) / 0.35);
+  background: rgb(var(--color-primary) / 0.1);
+}
+
+html[data-theme="warm"] .cockpit-library .doc-item.active::before {
+  background: rgb(var(--color-primary));
+}
+
+html[data-theme="warm"] .cockpit-library .overline,
+html[data-theme="warm"] .cockpit-library .breadcrumb-link,
+html[data-theme="warm"] .cockpit-library .markdown-content a,
+html[data-theme="warm"] .cockpit-library .markdown-toc-link.is-active {
+  color: rgb(var(--color-primary));
+}
+
+html[data-theme="warm"] .cockpit-library .sidebar-header h1,
+html[data-theme="warm"] .cockpit-library .doc-item strong,
+html[data-theme="warm"] .cockpit-library .breadcrumb-label.is-current,
+html[data-theme="warm"] .reader-document-header h1,
+html[data-theme="warm"] .cockpit-library .markdown-content h1,
+html[data-theme="warm"] .cockpit-library .markdown-content h2,
+html[data-theme="warm"] .cockpit-library .markdown-content h3,
+html[data-theme="warm"] .cockpit-library .markdown-content h4,
+html[data-theme="warm"] .cockpit-library .markdown table th {
+  color: rgb(var(--color-on-surface));
+}
+
+html[data-theme="warm"] .cockpit-library .meta,
+html[data-theme="warm"] .cockpit-library .curation-stats em,
+html[data-theme="warm"] .cockpit-library .filter-field span,
+html[data-theme="warm"] .cockpit-library .filter-panel-heading p,
+html[data-theme="warm"] .cockpit-library .merge-toggle,
+html[data-theme="warm"] .cockpit-library .doc-group h2,
+html[data-theme="warm"] .cockpit-library .doc-item span,
+html[data-theme="warm"] .cockpit-library .doc-item small,
+html[data-theme="warm"] .cockpit-library .content-breadcrumbs,
+html[data-theme="warm"] .cockpit-library .content-title-meta p,
+html[data-theme="warm"] .reader-kicker span,
+html[data-theme="warm"] .reader-document-header p,
+html[data-theme="warm"] .cockpit-library .doc-badge,
+html[data-theme="warm"] .cockpit-library .doc-badge.metric,
+html[data-theme="warm"] .cockpit-library .markdown-content p,
+html[data-theme="warm"] .cockpit-library .markdown-content li,
+html[data-theme="warm"] .cockpit-library .markdown-content td,
+html[data-theme="warm"] .cockpit-library .markdown-toc-title,
+html[data-theme="warm"] .cockpit-library .markdown-toc-link {
+  color: rgb(var(--color-on-surface-variant));
+}
+
+html[data-theme="warm"] .cockpit-library .search-box input::placeholder {
+  color: rgb(var(--color-outline));
+}
+
+html[data-theme="warm"] .cockpit-library .filter-chip:hover,
+html[data-theme="warm"] .cockpit-library .filter-chip.active,
+html[data-theme="warm"] .cockpit-library .action-btn:hover,
+html[data-theme="warm"] .cockpit-library .doc-badge.canonical,
+html[data-theme="warm"] .cockpit-library .doc-badge.module,
+html[data-theme="warm"] .cockpit-library .doc-badge.client,
+html[data-theme="warm"] .cockpit-library .digest-link-btn,
+html[data-theme="warm"] .cockpit-library .quick-recall-jump:hover {
+  border-color: rgb(var(--color-primary) / 0.4);
+  background: rgb(var(--color-primary) / 0.1);
+  color: rgb(var(--color-primary));
+}
+
+html[data-theme="warm"] .cockpit-library .markdown :not(pre) > code,
+html[data-theme="warm"] .cockpit-library .markdown-code-block,
+html[data-theme="warm"] .cockpit-library .markdown pre,
+html[data-theme="warm"] .cockpit-library .markdown-copy-btn,
+html[data-theme="warm"] .cockpit-library .markdown table th {
+  border-color: rgb(var(--color-border-subtle));
+  background: rgb(var(--color-surface-container-low));
+  color: rgb(var(--color-on-surface));
+}
+
+html[data-theme="warm"] .cockpit-library .markdown blockquote {
+  border-left-color: rgb(var(--color-primary));
+  background: rgb(var(--color-primary) / 0.08);
+  color: rgb(var(--color-on-surface));
+}
+
+html[data-theme="warm"] .cockpit-library .digest-quickview {
+  border-color: rgb(var(--color-border-subtle));
+  border-left-color: rgb(var(--color-primary));
+  background: rgb(var(--color-surface-container-low));
+  box-shadow: var(--theme-shadow);
+}
+
+html[data-theme="warm"] .cockpit-library .digest-quickview::after {
+  background: linear-gradient(135deg, rgb(var(--color-primary) / 0.08), transparent 42%);
+}
+
+html[data-theme="warm"] .cockpit-library .quick-recall-icon,
+html[data-theme="warm"] .cockpit-library .digest-quickview h2,
+html[data-theme="warm"] .cockpit-library .digest-quick-card h3 {
+  color: rgb(var(--color-primary));
+}
+
+html[data-theme="warm"] .cockpit-library .digest-quick-card p,
+html[data-theme="warm"] .cockpit-library .digest-quick-card li {
+  color: rgb(var(--color-on-surface-variant));
+}
+
+html[data-theme="warm"] .cockpit-library .quick-recall-jump {
+  border-color: rgb(var(--color-outline-variant));
+  background: rgb(var(--color-surface-container));
+  color: rgb(var(--color-on-surface));
+}
+
+html[data-theme="warm"] .cockpit-library .filter-warning {
+  border-color: rgb(var(--color-status-waiting) / 0.35);
+  background: rgb(var(--color-status-waiting) / 0.1);
+}
+
+html[data-theme="warm"] .cockpit-library .filter-warning p {
+  color: rgb(var(--color-status-waiting));
+}
+
+html[data-theme="warm"] .cockpit-library .doc-nav,
+html[data-theme="warm"] .cockpit-library .filter-bar,
+html[data-theme="warm"] .cockpit-library .markdown {
+  scrollbar-color: rgb(var(--color-outline-variant)) rgb(var(--color-surface-main));
+}
+
+html[data-theme="warm"] .cockpit-library .doc-nav::-webkit-scrollbar-track,
+html[data-theme="warm"] .cockpit-library .filter-bar::-webkit-scrollbar-track,
+html[data-theme="warm"] .cockpit-library .markdown::-webkit-scrollbar-track {
+  background: rgb(var(--color-surface-main));
+}
+
+html[data-theme="warm"] .cockpit-library .doc-nav::-webkit-scrollbar-thumb,
+html[data-theme="warm"] .cockpit-library .filter-bar::-webkit-scrollbar-thumb,
+html[data-theme="warm"] .cockpit-library .markdown::-webkit-scrollbar-thumb {
+  border-color: rgb(var(--color-surface-main));
+  background: rgb(var(--color-outline-variant));
+}
+
+html[data-theme="warm"] .cockpit-library .doc-nav::-webkit-scrollbar-thumb:hover,
+html[data-theme="warm"] .cockpit-library .filter-bar::-webkit-scrollbar-thumb:hover,
+html[data-theme="warm"] .cockpit-library .markdown::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--color-outline));
 }

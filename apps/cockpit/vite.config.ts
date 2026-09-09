@@ -15,12 +15,17 @@ import { loadWorkspaceContext } from "../../tools/workspaces/config";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
+const workspaceRoot = process.env.KB_PREVIEW_REPO_ROOT
+  ? path.resolve(process.env.KB_PREVIEW_REPO_ROOT)
+  : repoRoot;
 await assertCoreCompatibility(repoRoot);
-const workspace = await loadWorkspaceContext({ repoRoot });
+const workspace = await loadWorkspaceContext({ repoRoot: workspaceRoot });
 
 export default defineConfig({
   define: {
     __KB_DEFAULT_ACTIVE_TRACK__: JSON.stringify(workspace.ui.defaultActiveTrack ?? "all"),
+    __KB_FOCUS_AREAS__: JSON.stringify(workspace.ui.focusAreas ?? []),
+    __KB_DEFAULT_FOCUS_AREA__: JSON.stringify(workspace.ui.defaultFocusAreaId ?? ""),
   },
   plugins: [
     react(),

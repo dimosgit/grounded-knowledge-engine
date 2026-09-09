@@ -74,6 +74,25 @@ export interface WorkspaceUiConfig {
   readonly sourceFolders?: ReadonlyArray<{ readonly from: string; readonly to?: string }>;
   readonly rootFiles?: readonly string[];
   readonly defaultActiveTrack?: string;
+  /**
+   * Optional local-only Cockpit focus environments. They explicitly scope the
+   * records rendered by the area-first flow; the engine never infers them.
+   */
+  readonly focusAreas?: readonly WorkspaceFocusAreaConfig[];
+  readonly defaultFocusAreaId?: string;
+}
+
+export type WorkspaceFocusAreaIcon = "briefcase" | "sparkles" | "graduation-cap";
+
+export interface WorkspaceFocusAreaConfig {
+  readonly id: string;
+  readonly label: string;
+  readonly description?: string;
+  readonly icon?: WorkspaceFocusAreaIcon;
+  readonly projectIds?: readonly string[];
+  readonly documentPaths?: readonly string[];
+  /** Ordered `project:<id>` / `document:<path>` records for the focus surface. */
+  readonly focusRecordIds?: readonly string[];
 }
 
 export interface WorkspaceContext {

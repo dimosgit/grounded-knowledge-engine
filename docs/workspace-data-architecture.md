@@ -153,7 +153,7 @@ sensitive workspaces use separate roots and processes.
 
 A workspace represents one trust domain, such as:
 
-- Personal projects.
+- Independent projects.
 - One client.
 - One employer or internal organization.
 - One deliberately shared public/demo corpus.
