@@ -6,7 +6,7 @@
 
 ## 2. Objective
 
-Make GKE safe for a consultant who works across sensitive client and personal projects on the same machine. Introduce explicit workspace profiles, process-level isolation, read/write policy, and visible workspace identity so an agent cannot accidentally retrieve or capture information into the wrong workspace. Keep the first milestone focused on enforceable boundaries; audit and compliance features remain optional follow-up work.
+Make GKE safe for an operator who works across sensitive client and independent projects on the same machine. Introduce explicit workspace profiles, process-level isolation, read/write policy, and visible workspace identity so an agent cannot accidentally retrieve or capture information into the wrong workspace. Keep the first milestone focused on enforceable boundaries; audit and compliance features remain optional follow-up work.
 
 ### Implementation status — 2026-07-29
 

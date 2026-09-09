@@ -60,6 +60,7 @@ import {
   parseDecisionDetail,
   type DecisionLedgerFilter,
 } from "./domain/decisions";
+import { buildAreaFocus, getFocusArea, normalizeFocusAreas, type AreaRecord } from "./domain/areas";
 import {
   type OperatorDestination,
   type OperatorInboxKindFilter,
@@ -74,8 +75,11 @@ import {
 } from "./domain/command-palette";
 import {
   getAppRoute,
+  setHashAreaExplore,
+  setHashAreas,
   getHashPath,
   setHashAttention,
+  setHashFocus,
   setHashGraph,
   setHashHub,
   setHashDecision,
@@ -89,6 +93,7 @@ import { useRecentDestinations } from "./hooks/useRecentDestinations";
 import { useRecentPaths } from "./hooks/useRecentPaths";
 import { useRouteSync } from "./hooks/useRouteSync";
 import { useMarkdownBody } from "./hooks/useMarkdownBody";
+import { FocusNavigationProvider } from "./hooks/useFocusNavigation";
 import { createMarkdownContentLoader } from "./lib/content-loader";
 import { renderHighlighted } from "./components/HighlightedText";
 
@@ -120,6 +125,15 @@ const DecisionReplayView = lazy(() =>
 const AttentionView = lazy(() =>
   import("./views/AttentionView").then((module) => ({ default: module.AttentionView })),
 );
+const AreaChooserView = lazy(() =>
+  import("./views/AreaChooserView").then((module) => ({ default: module.AreaChooserView })),
+);
+const AreaFocusView = lazy(() =>
+  import("./views/AreaFocusView").then((module) => ({ default: module.AreaFocusView })),
+);
+const AreaExploreView = lazy(() =>
+  import("./views/AreaExploreView").then((module) => ({ default: module.AreaExploreView })),
+);
 
 export { isExternalResource, normalizeDocPath, resolveMarkdownAssetPath, resolveMarkdownDocPath };
 
@@ -139,12 +153,17 @@ const markdownContentLoader = createMarkdownContentLoader(markdownModules);
 const DEFAULT_ACTIVE_TAG = "modules";
 const DEFAULT_HIDE_MERGED = true;
 declare const __KB_DEFAULT_ACTIVE_TRACK__: string | undefined;
+declare const __KB_FOCUS_AREAS__: unknown;
+declare const __KB_DEFAULT_FOCUS_AREA__: string | undefined;
 // Workspaces can pin the initial track filter via `.gke/workspace.json` (ui.defaultActiveTrack).
 const DEFAULT_ACTIVE_TRACK =
   typeof __KB_DEFAULT_ACTIVE_TRACK__ === "string" && __KB_DEFAULT_ACTIVE_TRACK__
     ? __KB_DEFAULT_ACTIVE_TRACK__
     : "all";
 const DEFAULT_ACTIVE_ITEM = "all";
+const FOCUS_AREAS = normalizeFocusAreas(__KB_FOCUS_AREAS__);
+const FOCUS_AREA_IDS = FOCUS_AREAS.map((area) => area.id);
+const DEFAULT_FOCUS_AREA_ID = getFocusArea(FOCUS_AREAS, __KB_DEFAULT_FOCUS_AREA__ || "")?.id || "";
 
 function ViewLoading({ label }: { label: string }) {
   return (
@@ -165,6 +184,10 @@ export default function App() {
     ? docs.find((doc) => doc.path === initialHashPath) || null
     : null;
   const initialRoute = getAppRoute();
+  const initialFocusAreaId = getFocusArea(
+    FOCUS_AREAS,
+    initialRoute.areaId || DEFAULT_FOCUS_AREA_ID,
+  )?.id;
   const [query, setQuery] = useState("");
   const [activeTrack, setActiveTrack] = useState(initialDocFromHash?.track || DEFAULT_ACTIVE_TRACK);
   const [activeItemType, setActiveItemType] = useState(DEFAULT_ACTIVE_ITEM);
@@ -172,6 +195,9 @@ export default function App() {
   const [hideMerged, setHideMerged] = useState(DEFAULT_HIDE_MERGED);
   const [viewMode, setViewMode] = useState(() => {
     const route = initialRoute;
+    if (route.mode === "areas") return "areas";
+    if (route.mode === "focus") return initialFocusAreaId ? "focus" : "areas";
+    if (route.mode === "explore") return initialFocusAreaId ? "explore" : "areas";
     if (route.mode === "hub") return "hub";
     if (route.mode === "attention") return "attention";
     if (route.mode === "projects") return "projects";
@@ -179,6 +205,7 @@ export default function App() {
     if (route.mode === "decisions") return "decisions";
     if (route.mode === "decision") return "decision";
     if (route.mode === "graph") return "graph";
+    if (!route.mode && DEFAULT_FOCUS_AREA_ID) return initialFocusAreaId ? "focus" : "areas";
     return initialDocFromHash ? "library" : "hub";
   });
   const [isReadingMode, setIsReadingMode] = useState(false);
@@ -203,6 +230,7 @@ export default function App() {
   );
   const [inboxProjectId, setInboxProjectId] = useState(initialRoute.inboxProjectId || "");
   const [selectedGraphPath, setSelectedGraphPath] = useState(initialRoute.focusPath || "overview");
+  const [selectedAreaId, setSelectedAreaId] = useState(initialFocusAreaId || "");
   const [graphQuery, setGraphQuery] = useState("");
   const [graphLayers, setGraphLayers] = useState<string[]>(INITIAL_GRAPH_LAYERS);
   const [graphStatusFilter, setGraphStatusFilter] = useState("all");
@@ -233,7 +261,9 @@ export default function App() {
     setInboxKind,
     setInboxPriority,
     setInboxProjectId,
+    setSelectedAreaId,
     setViewMode,
+    areaIds: FOCUS_AREA_IDS,
   });
 
   const tracks = useMemo(() => buildTracks(docs), [docs]);
@@ -442,6 +472,35 @@ export default function App() {
     setHashHub();
   }
 
+  function goToAreas() {
+    setIsReadingMode(false);
+    setSelectedAreaId("");
+    setViewMode("areas");
+    setHashAreas();
+  }
+
+  function goToAreaFocus(areaId: string) {
+    if (!getFocusArea(FOCUS_AREAS, areaId)) {
+      goToAreas();
+      return;
+    }
+    setIsReadingMode(false);
+    setSelectedAreaId(areaId);
+    setViewMode("focus");
+    setHashFocus(areaId);
+  }
+
+  function goToAreaExplore(areaId = selectedAreaId) {
+    if (!getFocusArea(FOCUS_AREAS, areaId)) {
+      goToAreas();
+      return;
+    }
+    setIsReadingMode(false);
+    setSelectedAreaId(areaId);
+    setViewMode("explore");
+    setHashAreaExplore(areaId);
+  }
+
   function goToAttention(
     filters = { kind: inboxKind, priority: inboxPriority, projectId: inboxProjectId },
   ) {
@@ -514,6 +573,16 @@ export default function App() {
     setSelectedProjectId(projectId);
     setViewMode("project");
     setHashProject(projectId, section);
+  }
+
+  function openAreaRecord(record: AreaRecord) {
+    if (record.kind === "project" && record.projectId) {
+      openProject(record.projectId);
+      return;
+    }
+    if (record.kind === "document" && record.path) {
+      openDoc(record.path);
+    }
   }
 
   function openProjectDeliveryChecklist(projectId) {
@@ -635,6 +704,11 @@ export default function App() {
   const projectColumns = useMemo(
     () => buildProjectColumns(filteredProjectSummaries),
     [filteredProjectSummaries],
+  );
+  const selectedArea = useMemo(() => getFocusArea(FOCUS_AREAS, selectedAreaId), [selectedAreaId]);
+  const selectedAreaFocus = useMemo(
+    () => buildAreaFocus(selectedArea, { projects: projectSummaries, documents: docs }),
+    [docs, projectSummaries, selectedArea],
   );
   const moveProject = async (projectId, bucket) => {
     const project = projectSummaries.find((item) => item.id === projectId);
@@ -807,6 +881,55 @@ export default function App() {
   });
 
   function renderActiveView() {
+    if (viewMode === "areas") {
+      return (
+        <Suspense fallback={<ViewLoading label="focus areas" />}>
+          <AreaChooserView
+            areas={FOCUS_AREAS}
+            selectedAreaId={selectedAreaId}
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onSelectArea={goToAreaFocus}
+            onOpenWorkspace={goToHub}
+          />
+        </Suspense>
+      );
+    }
+
+    if (viewMode === "focus" && selectedArea) {
+      return (
+        <Suspense fallback={<ViewLoading label="focused area" />}>
+          <AreaFocusView
+            area={selectedArea}
+            focus={selectedAreaFocus}
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onChooseArea={goToAreas}
+            onExplore={() => goToAreaExplore(selectedArea.id)}
+            onOpenWorkspace={goToHub}
+            onOpenRecord={openAreaRecord}
+          />
+        </Suspense>
+      );
+    }
+
+    if (viewMode === "explore" && selectedArea) {
+      return (
+        <Suspense fallback={<ViewLoading label="area records" />}>
+          <AreaExploreView
+            area={selectedArea}
+            scope={selectedAreaFocus}
+            palette={palette}
+            onCommand={() => setIsCommandBarOpen(true)}
+            onChooseArea={goToAreas}
+            onBackToFocus={() => goToAreaFocus(selectedArea.id)}
+            onOpenWorkspace={goToHub}
+            onOpenRecord={openAreaRecord}
+          />
+        </Suspense>
+      );
+    }
+
     if (viewMode === "attention") {
       return (
         <Suspense fallback={<ViewLoading label="attention inbox" />}>
@@ -1057,7 +1180,19 @@ export default function App() {
     );
   }
 
+  const focusNavigation = FOCUS_AREAS.length
+    ? {
+        currentArea: selectedArea,
+        onOpenCurrent: () => (selectedArea ? goToAreaFocus(selectedArea.id) : goToAreas()),
+        onChooseArea: goToAreas,
+      }
+    : null;
+
   return (
-    <OperatorAttentionProvider value={attention}>{renderActiveView()}</OperatorAttentionProvider>
+    <OperatorAttentionProvider value={attention}>
+      <FocusNavigationProvider value={focusNavigation}>
+        {renderActiveView()}
+      </FocusNavigationProvider>
+    </OperatorAttentionProvider>
   );
 }

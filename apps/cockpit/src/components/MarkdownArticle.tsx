@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useTheme } from "../hooks/useTheme";
 import { writeTextToClipboard } from "../utils/clipboard";
 
 const TOC_MIN_HEADINGS = 4;
@@ -149,13 +150,15 @@ function CopyablePre({ children, forceWrap = false, ...props }) {
 function MermaidDiagram({ chart }) {
   const diagramRef = useRef(null);
   const [error, setError] = useState("");
+  const { theme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
+    const diagramElement = diagramRef.current;
 
     async function renderChart() {
-      if (!diagramRef.current) return;
-      diagramRef.current.innerHTML = "";
+      if (!diagramElement) return;
+      diagramElement.innerHTML = "";
       setError("");
 
       try {
@@ -165,17 +168,37 @@ function MermaidDiagram({ chart }) {
 
         mermaid.initialize({
           startOnLoad: false,
-          theme: "neutral",
+          theme: theme === "warm" ? "base" : "dark",
+          themeVariables:
+            theme === "warm"
+              ? {
+                  background: "#fbf9f5",
+                  primaryColor: "#e8f0eb",
+                  primaryTextColor: "#1e2721",
+                  primaryBorderColor: "#7b9282",
+                  lineColor: "#5b7464",
+                  secondaryColor: "#f2ece4",
+                  tertiaryColor: "#f7f0e8",
+                }
+              : {
+                  background: "#08090d",
+                  primaryColor: "#151821",
+                  primaryTextColor: "#eef0f6",
+                  primaryBorderColor: "#556477",
+                  lineColor: "#8d9ab0",
+                  secondaryColor: "#11131a",
+                  tertiaryColor: "#1a1d27",
+                },
           securityLevel: "strict",
           suppressErrorRendering: true,
         });
 
         const { svg, bindFunctions } = await mermaid.render(renderId, chart);
-        if (cancelled || !diagramRef.current) return;
+        if (cancelled) return;
 
-        diagramRef.current.innerHTML = svg;
+        diagramElement.innerHTML = svg;
         if (typeof bindFunctions === "function") {
-          bindFunctions(diagramRef.current);
+          bindFunctions(diagramElement);
         }
       } catch (cause) {
         if (cancelled) return;
@@ -188,11 +211,11 @@ function MermaidDiagram({ chart }) {
     renderChart();
     return () => {
       cancelled = true;
-      if (diagramRef.current) {
-        diagramRef.current.innerHTML = "";
+      if (diagramElement) {
+        diagramElement.innerHTML = "";
       }
     };
-  }, [chart]);
+  }, [chart, theme]);
 
   if (error) {
     return (
