@@ -129,6 +129,24 @@ export function scopeAreaRecords(
   return { records: [...projects, ...documents], projects, documents };
 }
 
+/**
+ * Determines whether a configured area has at least one record in the
+ * currently available catalog. This is deliberately exact: unavailable local
+ * records must not turn a default route into an empty focus view.
+ */
+export function hasAvailableAreaRecords(
+  area: FocusAreaDefinition | null,
+  available: { projectIds: Iterable<string>; documentPaths: Iterable<string> },
+): boolean {
+  if (!area) return false;
+  const projectIds = new Set(available.projectIds);
+  const documentPaths = new Set(available.documentPaths);
+  return (
+    area.projectIds.some((projectId) => projectIds.has(projectId)) ||
+    area.documentPaths.some((documentPath) => documentPaths.has(documentPath))
+  );
+}
+
 export function buildAreaFocus(
   area: FocusAreaDefinition | null,
   input: { projects: AreaProjectRecord[]; documents: AreaDocumentRecord[] },

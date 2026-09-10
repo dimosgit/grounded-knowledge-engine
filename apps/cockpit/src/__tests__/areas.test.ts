@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { buildAreaFocus, normalizeFocusAreas, scopeAreaRecords } from "../domain/areas";
+import {
+  buildAreaFocus,
+  hasAvailableAreaRecords,
+  normalizeFocusAreas,
+  scopeAreaRecords,
+} from "../domain/areas";
 
 const areas = normalizeFocusAreas([
   {
@@ -51,6 +56,21 @@ describe("explicit focus areas", () => {
     ]);
     expect(scope.records.map((record) => record.title)).not.toContain("Learning");
     expect(scope.records.map((record) => record.title)).not.toContain("Unmapped");
+  });
+
+  test("opens a default area only when one of its configured records is available", () => {
+    expect(
+      hasAvailableAreaRecords(areas[0], {
+        projectIds: records.projects.map((project) => project.id),
+        documentPaths: records.documents.map((document) => document.path),
+      }),
+    ).toBe(true);
+    expect(
+      hasAvailableAreaRecords(areas[0], {
+        projectIds: [],
+        documentPaths: ["kb/topics/unmapped.md"],
+      }),
+    ).toBe(false);
   });
 
   test("uses only configured focus order and omits missing records honestly", () => {
