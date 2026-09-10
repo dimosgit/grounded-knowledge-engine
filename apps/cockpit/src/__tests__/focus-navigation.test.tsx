@@ -13,6 +13,7 @@ const AREA: FocusAreaDefinition = {
   icon: "sparkles",
   projectIds: [],
   documentPaths: [],
+  focusTasks: [],
   focusRecordIds: [],
 };
 

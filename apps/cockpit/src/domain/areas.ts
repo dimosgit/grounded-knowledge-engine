@@ -9,7 +9,13 @@ export interface FocusAreaDefinition {
   icon: FocusAreaIcon;
   projectIds: string[];
   documentPaths: string[];
+  focusTasks: FocusTaskDefinition[];
   focusRecordIds: string[];
+}
+
+export interface FocusTaskDefinition {
+  id: string;
+  title: string;
 }
 
 export interface AreaProjectRecord {
@@ -31,12 +37,13 @@ export interface AreaDocumentRecord {
 
 export interface AreaRecord {
   id: string;
-  kind: "project" | "document";
+  kind: "project" | "document" | "task";
   title: string;
   summary: string;
   metadata: string;
   projectId?: string;
   path?: string;
+  taskId?: string;
 }
 
 export interface AreaScope {
@@ -52,6 +59,7 @@ export interface AreaFocus extends AreaScope {
 
 const AREA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PROJECT_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/i;
+const FOCUS_TASK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const FOCUS_ICONS = new Set<FocusAreaIcon>(FOCUS_AREA_ICONS);
 
 /**
@@ -72,9 +80,11 @@ export function normalizeFocusAreas(value: unknown): FocusAreaDefinition[] {
     seen.add(id);
     const projectIds = uniqueStrings(raw.projectIds, (item) => PROJECT_ID.test(item), 160);
     const documentPaths = uniqueStrings(raw.documentPaths, isDocumentPath, 320);
+    const focusTasks = normalizeFocusTasks(raw.focusTasks);
     const validFocusIds = new Set([
       ...projectIds.map((projectId) => `project:${projectId}`),
       ...documentPaths.map((path) => `document:${path}`),
+      ...focusTasks.map((task) => `task:${task.id}`),
     ]);
     areas.push({
       id,
@@ -86,6 +96,7 @@ export function normalizeFocusAreas(value: unknown): FocusAreaDefinition[] {
       icon: FOCUS_ICONS.has(raw.icon as FocusAreaIcon) ? (raw.icon as FocusAreaIcon) : "briefcase",
       projectIds,
       documentPaths,
+      focusTasks,
       focusRecordIds: uniqueStrings(raw.focusRecordIds, (item) => validFocusIds.has(item), 24),
     });
   }
@@ -106,26 +117,45 @@ export function scopeAreaRecords(
   if (!area) return { records: [], projects: [], documents: [] };
   const allowedProjectIds = new Set(area.projectIds);
   const allowedDocumentPaths = new Set(area.documentPaths);
-  const projects = input.projects
-    .filter((project) => allowedProjectIds.has(project.id))
-    .map((project) => ({
-      id: `project:${project.id}`,
-      kind: "project" as const,
-      title: project.title,
-      summary: project.recommendedNextAction || project.currentFocus || "No next action recorded.",
-      metadata: project.statusBucket || "Project",
-      projectId: project.id,
-    }));
-  const documents = input.documents
-    .filter((document) => allowedDocumentPaths.has(document.path))
-    .map((document) => ({
-      id: `document:${document.path}`,
-      kind: "document" as const,
-      title: document.title,
-      summary: document.excerpt || "No summary recorded.",
-      metadata: document.trackLabel || "Note",
-      path: document.path,
-    }));
+  const catalog = buildAreaCatalog(input);
+  const projects = catalog.projects.filter((project) =>
+    allowedProjectIds.has(project.projectId || ""),
+  );
+  const documents = catalog.documents.filter((document) =>
+    allowedDocumentPaths.has(document.path || ""),
+  );
+  const tasks = area.focusTasks.map((task) => ({
+    id: `task:${task.id}`,
+    kind: "task" as const,
+    title: task.title,
+    summary: "A lightweight task kept in this local focus area.",
+    metadata: "Focus task",
+    taskId: task.id,
+  }));
+  return { records: [...projects, ...documents, ...tasks], projects, documents };
+}
+
+/** Converts available projects and documents into the safe, display-only focus record shape. */
+export function buildAreaCatalog(input: {
+  projects: AreaProjectRecord[];
+  documents: AreaDocumentRecord[];
+}): AreaScope {
+  const projects = input.projects.map((project) => ({
+    id: `project:${project.id}`,
+    kind: "project" as const,
+    title: project.title,
+    summary: project.recommendedNextAction || project.currentFocus || "No next action recorded.",
+    metadata: project.statusBucket || "Project",
+    projectId: project.id,
+  }));
+  const documents = input.documents.map((document) => ({
+    id: `document:${document.path}`,
+    kind: "document" as const,
+    title: document.title,
+    summary: document.excerpt || "No summary recorded.",
+    metadata: document.trackLabel || "Note",
+    path: document.path,
+  }));
   return { records: [...projects, ...documents], projects, documents };
 }
 
@@ -143,7 +173,8 @@ export function hasAvailableAreaRecords(
   const documentPaths = new Set(available.documentPaths);
   return (
     area.projectIds.some((projectId) => projectIds.has(projectId)) ||
-    area.documentPaths.some((documentPath) => documentPaths.has(documentPath))
+    area.documentPaths.some((documentPath) => documentPaths.has(documentPath)) ||
+    area.focusTasks.length > 0
   );
 }
 
@@ -174,6 +205,23 @@ function uniqueStrings(
     .map((item) => (typeof item === "string" ? item.trim() : ""))
     .filter((item) => item && predicate(item));
   return [...new Set(values)].slice(0, limit);
+}
+
+function normalizeFocusTasks(value: unknown): FocusTaskDefinition[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const tasks: FocusTaskDefinition[] = [];
+  for (const candidate of value.slice(0, 24)) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const raw = candidate as Record<string, unknown>;
+    const id = typeof raw.id === "string" ? raw.id.trim().toLowerCase() : "";
+    const title =
+      typeof raw.title === "string" ? raw.title.trim().replace(/\s+/g, " ").slice(0, 240) : "";
+    if (!FOCUS_TASK_ID.test(id) || !title || seen.has(id)) continue;
+    seen.add(id);
+    tasks.push({ id, title });
+  }
+  return tasks;
 }
 
 function isDocumentPath(value: string): boolean {
