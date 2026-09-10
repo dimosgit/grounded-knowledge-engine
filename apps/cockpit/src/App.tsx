@@ -61,12 +61,14 @@ import {
   type DecisionLedgerFilter,
 } from "./domain/decisions";
 import {
+  buildAreaCatalog,
   buildAreaFocus,
   getFocusArea,
   hasAvailableAreaRecords,
   normalizeFocusAreas,
   type AreaRecord,
 } from "./domain/areas";
+import type { FocusMutation } from "./lib/focus-api";
 import {
   type OperatorDestination,
   type OperatorInboxKindFilter,
@@ -167,9 +169,9 @@ const DEFAULT_ACTIVE_TRACK =
     ? __KB_DEFAULT_ACTIVE_TRACK__
     : "all";
 const DEFAULT_ACTIVE_ITEM = "all";
-const FOCUS_AREAS = normalizeFocusAreas(__KB_FOCUS_AREAS__);
-const FOCUS_AREA_IDS = FOCUS_AREAS.map((area) => area.id);
-const DEFAULT_FOCUS_AREA_ID = getFocusArea(FOCUS_AREAS, __KB_DEFAULT_FOCUS_AREA__ || "")?.id || "";
+const INITIAL_FOCUS_AREAS = normalizeFocusAreas(__KB_FOCUS_AREAS__);
+const INITIAL_DEFAULT_FOCUS_AREA_ID =
+  getFocusArea(INITIAL_FOCUS_AREAS, __KB_DEFAULT_FOCUS_AREA__ || "")?.id || "";
 
 function ViewLoading({ label }: { label: string }) {
   return (
@@ -184,6 +186,8 @@ function ViewLoading({ label }: { label: string }) {
 
 export default function App() {
   const docs = useMemo(() => buildDocs(catalogEntries), []);
+  const [focusAreas, setFocusAreas] = useState(INITIAL_FOCUS_AREAS);
+  const focusAreaIds = useMemo(() => focusAreas.map((area) => area.id), [focusAreas]);
   const availableAreaRecords = useMemo(() => {
     const projectIds = docs.flatMap((doc) => {
       const declaredProjectId =
@@ -199,7 +203,10 @@ export default function App() {
     ? docs.find((doc) => doc.path === initialHashPath) || null
     : null;
   const initialRoute = getAppRoute();
-  const initialFocusArea = getFocusArea(FOCUS_AREAS, initialRoute.areaId || DEFAULT_FOCUS_AREA_ID);
+  const initialFocusArea = getFocusArea(
+    INITIAL_FOCUS_AREAS,
+    initialRoute.areaId || INITIAL_DEFAULT_FOCUS_AREA_ID,
+  );
   const initialFocusAreaId = initialFocusArea?.id;
   const hasDefaultFocusRecords = hasAvailableAreaRecords(initialFocusArea, availableAreaRecords);
   const [query, setQuery] = useState("");
@@ -219,7 +226,7 @@ export default function App() {
     if (route.mode === "decisions") return "decisions";
     if (route.mode === "decision") return "decision";
     if (route.mode === "graph") return "graph";
-    if (!route.mode && DEFAULT_FOCUS_AREA_ID && hasDefaultFocusRecords) return "focus";
+    if (!route.mode && INITIAL_DEFAULT_FOCUS_AREA_ID && hasDefaultFocusRecords) return "focus";
     return initialDocFromHash ? "library" : "hub";
   });
   const [isReadingMode, setIsReadingMode] = useState(false);
@@ -277,7 +284,7 @@ export default function App() {
     setInboxProjectId,
     setSelectedAreaId,
     setViewMode,
-    areaIds: FOCUS_AREA_IDS,
+    areaIds: focusAreaIds,
   });
 
   const tracks = useMemo(() => buildTracks(docs), [docs]);
@@ -295,6 +302,22 @@ export default function App() {
     if (tracks.some((track) => track.key === activeTrack)) return;
     setActiveTrack(tracks[0].key);
   }, [activeTrack, tracks]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    let active = true;
+    void import("./lib/focus-api")
+      .then(({ getFocusAreas }) => getFocusAreas())
+      .then((rawAreas) => {
+        if (active) setFocusAreas(normalizeFocusAreas(rawAreas));
+      })
+      // The bundled public preview intentionally has no local Focus endpoint.
+      // Keep the build-time definition as a safe fallback if local settings are unavailable.
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (activeItemType !== "archive") return;
@@ -494,7 +517,7 @@ export default function App() {
   }
 
   function goToAreaFocus(areaId: string) {
-    if (!getFocusArea(FOCUS_AREAS, areaId)) {
+    if (!getFocusArea(focusAreas, areaId)) {
       goToAreas();
       return;
     }
@@ -505,7 +528,7 @@ export default function App() {
   }
 
   function goToAreaExplore(areaId = selectedAreaId) {
-    if (!getFocusArea(FOCUS_AREAS, areaId)) {
+    if (!getFocusArea(focusAreas, areaId)) {
       goToAreas();
       return;
     }
@@ -719,11 +742,29 @@ export default function App() {
     () => buildProjectColumns(filteredProjectSummaries),
     [filteredProjectSummaries],
   );
-  const selectedArea = useMemo(() => getFocusArea(FOCUS_AREAS, selectedAreaId), [selectedAreaId]);
+  const selectedArea = useMemo(
+    () => getFocusArea(focusAreas, selectedAreaId),
+    [focusAreas, selectedAreaId],
+  );
+  const areaCatalog = useMemo(
+    () => buildAreaCatalog({ projects: projectSummaries, documents: docs }),
+    [docs, projectSummaries],
+  );
   const selectedAreaFocus = useMemo(
     () => buildAreaFocus(selectedArea, { projects: projectSummaries, documents: docs }),
     [docs, projectSummaries, selectedArea],
   );
+  async function updateSelectedAreaFocus(mutation: FocusMutation): Promise<void> {
+    if (!import.meta.env.DEV) {
+      throw new Error("Focus changes are available only in a writable local workspace.");
+    }
+    const { updateFocus } = await import("./lib/focus-api");
+    const nextFocusAreas = normalizeFocusAreas(await updateFocus(mutation));
+    if (!nextFocusAreas.some((area) => area.id === mutation.areaId)) {
+      throw new Error("Focus update did not return the selected area.");
+    }
+    setFocusAreas(nextFocusAreas);
+  }
   const moveProject = async (projectId, bucket) => {
     const project = projectSummaries.find((item) => item.id === projectId);
     if (!project || project.statusBucket === bucket) return;
@@ -899,7 +940,7 @@ export default function App() {
       return (
         <Suspense fallback={<ViewLoading label="focus areas" />}>
           <AreaChooserView
-            areas={FOCUS_AREAS}
+            areas={focusAreas}
             selectedAreaId={selectedAreaId}
             palette={palette}
             onCommand={() => setIsCommandBarOpen(true)}
@@ -922,6 +963,9 @@ export default function App() {
             onExplore={() => goToAreaExplore(selectedArea.id)}
             onOpenWorkspace={goToHub}
             onOpenRecord={openAreaRecord}
+            availableRecords={areaCatalog.records}
+            onUpdateFocus={updateSelectedAreaFocus}
+            canManageFocus={import.meta.env.DEV}
           />
         </Suspense>
       );
@@ -1194,7 +1238,7 @@ export default function App() {
     );
   }
 
-  const focusNavigation = FOCUS_AREAS.length
+  const focusNavigation = focusAreas.length
     ? {
         currentArea: selectedArea,
         onOpenCurrent: () => (selectedArea ? goToAreaFocus(selectedArea.id) : goToAreas()),

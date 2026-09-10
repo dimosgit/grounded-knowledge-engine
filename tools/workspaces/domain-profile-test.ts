@@ -199,9 +199,11 @@ async function testWorkspaceConfigCarriesDomainAndUi(): Promise<void> {
               icon: "briefcase",
               projectIds: ["delivery-plan"],
               documentPaths: ["kb/plans/delivery-outline.md"],
+              focusTasks: [{ id: "review-plan", title: "Review the delivery plan" }],
               focusRecordIds: [
                 "project:delivery-plan",
                 "document:kb/plans/delivery-outline.md",
+                "task:review-plan",
                 "project:other-project",
               ],
             },
@@ -228,7 +230,12 @@ async function testWorkspaceConfigCarriesDomainAndUi(): Promise<void> {
         icon: "briefcase",
         projectIds: ["delivery-plan"],
         documentPaths: ["kb/plans/delivery-outline.md"],
-        focusRecordIds: ["project:delivery-plan", "document:kb/plans/delivery-outline.md"],
+        focusTasks: [{ id: "review-plan", title: "Review the delivery plan" }],
+        focusRecordIds: [
+          "project:delivery-plan",
+          "document:kb/plans/delivery-outline.md",
+          "task:review-plan",
+        ],
       },
     ]);
     assert.equal(workspace.ui.defaultFocusAreaId, "work");

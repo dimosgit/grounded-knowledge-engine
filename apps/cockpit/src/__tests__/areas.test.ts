@@ -91,6 +91,25 @@ describe("explicit focus areas", () => {
     expect(focus.next).toEqual([]);
   });
 
+  test("keeps local focus tasks explicit and ordered without exposing other area records", () => {
+    const [taskArea] = normalizeFocusAreas([
+      {
+        id: "learning",
+        label: "Learning",
+        focusTasks: [{ id: "lesson-review", title: "Review the next lesson" }],
+        focusRecordIds: ["task:lesson-review"],
+      },
+    ]);
+
+    const focus = buildAreaFocus(taskArea, records);
+    expect(focus.current).toMatchObject({
+      id: "task:lesson-review",
+      kind: "task",
+      title: "Review the next lesson",
+    });
+    expect(focus.records).toHaveLength(1);
+  });
+
   test("drops malformed and cross-area focus configuration", () => {
     const [valid] = normalizeFocusAreas([
       {

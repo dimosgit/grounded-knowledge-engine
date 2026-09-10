@@ -7,6 +7,7 @@ import {
   type WorkspaceContext,
   type WorkspaceFocusAreaConfig,
   type WorkspaceFocusAreaIcon,
+  type WorkspaceFocusTaskConfig,
   type WorkspaceSensitivity,
   type WorkspaceUiConfig,
 } from "./types.js";
@@ -158,6 +159,7 @@ function normalizeUiConfig(value: unknown): WorkspaceUiConfig {
 
 const FOCUS_AREA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const PROJECT_ID = /^[a-z0-9][a-z0-9._-]{0,127}$/i;
+const FOCUS_TASK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const AREA_ICONS = new Set<WorkspaceFocusAreaIcon>(["briefcase", "sparkles", "graduation-cap"]);
 
 function normalizeFocusAreas(value: unknown): WorkspaceFocusAreaConfig[] {
@@ -180,7 +182,13 @@ function normalizeFocusAreas(value: unknown): WorkspaceFocusAreaConfig[] {
       : undefined;
     const projectIds = normalizeProjectIds(raw.projectIds);
     const documentPaths = normalizeDocumentPaths(raw.documentPaths);
-    const focusRecordIds = normalizeFocusRecordIds(raw.focusRecordIds, projectIds, documentPaths);
+    const focusTasks = normalizeFocusTasks(raw.focusTasks);
+    const focusRecordIds = normalizeFocusRecordIds(
+      raw.focusRecordIds,
+      projectIds,
+      documentPaths,
+      focusTasks,
+    );
     areas.push(
       Object.freeze({
         id,
@@ -189,6 +197,7 @@ function normalizeFocusAreas(value: unknown): WorkspaceFocusAreaConfig[] {
         ...(icon ? { icon } : {}),
         ...(projectIds.length ? { projectIds: Object.freeze(projectIds) } : {}),
         ...(documentPaths.length ? { documentPaths: Object.freeze(documentPaths) } : {}),
+        ...(focusTasks.length ? { focusTasks: Object.freeze(focusTasks) } : {}),
         ...(focusRecordIds.length ? { focusRecordIds: Object.freeze(focusRecordIds) } : {}),
       }),
     );
@@ -228,15 +237,34 @@ function normalizeDocumentPath(value: unknown): string {
   return normalized.startsWith("kb/") && normalized.endsWith(".md") ? normalized : "";
 }
 
+function normalizeFocusTasks(value: unknown): WorkspaceFocusTaskConfig[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const tasks: WorkspaceFocusTaskConfig[] = [];
+  for (const candidate of value.slice(0, 24)) {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) continue;
+    const raw = candidate as Record<string, unknown>;
+    const id = typeof raw.id === "string" ? raw.id.trim().toLowerCase() : "";
+    const title =
+      typeof raw.title === "string" ? raw.title.trim().replace(/\s+/g, " ").slice(0, 240) : "";
+    if (!FOCUS_TASK_ID.test(id) || !title || seen.has(id)) continue;
+    seen.add(id);
+    tasks.push(Object.freeze({ id, title }));
+  }
+  return tasks;
+}
+
 function normalizeFocusRecordIds(
   value: unknown,
   projectIds: string[],
   documentPaths: string[],
+  focusTasks: WorkspaceFocusTaskConfig[],
 ): string[] {
   if (!Array.isArray(value)) return [];
   const valid = new Set([
     ...projectIds.map((id) => `project:${id}`),
     ...documentPaths.map((path) => `document:${path}`),
+    ...focusTasks.map((task) => `task:${task.id}`),
   ]);
   return [
     ...new Set(value.map((item) => `${item}`.trim()).filter((item) => valid.has(item))),

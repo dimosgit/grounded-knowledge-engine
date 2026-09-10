@@ -91,8 +91,15 @@ export interface WorkspaceFocusAreaConfig {
   readonly icon?: WorkspaceFocusAreaIcon;
   readonly projectIds?: readonly string[];
   readonly documentPaths?: readonly string[];
-  /** Ordered `project:<id>` / `document:<path>` records for the focus surface. */
+  /** Lightweight local tasks that do not belong to one canonical project record. */
+  readonly focusTasks?: readonly WorkspaceFocusTaskConfig[];
+  /** Ordered `project:<id>` / `document:<path>` / `task:<id>` focus records. */
   readonly focusRecordIds?: readonly string[];
+}
+
+export interface WorkspaceFocusTaskConfig {
+  readonly id: string;
+  readonly title: string;
 }
 
 export interface WorkspaceContext {

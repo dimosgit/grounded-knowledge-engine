@@ -7,6 +7,7 @@ import { createCaptureReviewPlugin } from "./scripts/capture-review-plugin";
 import { createGroundedAskPlugin } from "./scripts/grounded-ask-plugin";
 import { createLifecycleWritebackPlugin } from "./scripts/lifecycle-writeback-plugin";
 import { createProjectTaskWritebackPlugin } from "./scripts/project-task-writeback-plugin";
+import { createFocusWritebackPlugin } from "./scripts/focus-writeback-plugin";
 import { createWorkspaceReviewPlugin } from "./scripts/workspace-review-plugin";
 import { createDecisionReviewPlugin } from "./scripts/decision-review-plugin";
 import { createWorkspaceContextPlugin } from "./scripts/workspace-context-plugin";
@@ -31,6 +32,7 @@ export default defineConfig({
     react(),
     createLifecycleWritebackPlugin({ repoRoot, workspace }),
     createProjectTaskWritebackPlugin({ repoRoot, workspace }),
+    createFocusWritebackPlugin({ repoRoot, workspace }),
     createGroundedAskPlugin({ repoRoot, workspace }),
     createCaptureReviewPlugin({ repoRoot, workspace }),
     createWorkspaceReviewPlugin({ repoRoot, workspace }),

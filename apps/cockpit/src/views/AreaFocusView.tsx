@@ -1,8 +1,10 @@
 import { ArrowRight, CircleDot, FileText, ListFilter, Target } from "lucide-react";
 import { AreaIcon } from "../components/AreaIcon";
+import { FocusManagerDrawer } from "../components/FocusManagerDrawer";
 import { FocusShell } from "../components/FocusShell";
 import type { CommandPaletteBinding } from "../domain/command-palette";
 import type { AreaFocus, AreaRecord, FocusAreaDefinition } from "../domain/areas";
+import type { FocusMutation } from "../lib/focus-api";
 
 interface AreaFocusViewProps {
   area: FocusAreaDefinition;
@@ -13,6 +15,9 @@ interface AreaFocusViewProps {
   onExplore: () => void;
   onOpenWorkspace: () => void;
   onOpenRecord: (record: AreaRecord) => void;
+  availableRecords: AreaRecord[];
+  onUpdateFocus: (mutation: FocusMutation) => Promise<void>;
+  canManageFocus: boolean;
 }
 
 export function AreaFocusView({
@@ -24,6 +29,9 @@ export function AreaFocusView({
   onExplore,
   onOpenWorkspace,
   onOpenRecord,
+  availableRecords,
+  onUpdateFocus,
+  canManageFocus,
 }: AreaFocusViewProps) {
   return (
     <FocusShell
@@ -47,14 +55,24 @@ export function AreaFocusView({
               </p>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onExplore}
-            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded border border-outline-variant bg-surface-container px-4 text-body-md font-semibold text-on-surface hover:border-primary hover:text-primary"
-          >
-            <ListFilter size={16} aria-hidden="true" />
-            Explore this area
-          </button>
+          <div className="flex flex-wrap gap-2">
+            {canManageFocus ? (
+              <FocusManagerDrawer
+                area={area}
+                focus={focus}
+                availableRecords={availableRecords}
+                onUpdate={onUpdateFocus}
+              />
+            ) : null}
+            <button
+              type="button"
+              onClick={onExplore}
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded border border-outline-variant bg-surface-container px-4 text-body-md font-semibold text-on-surface hover:border-primary hover:text-primary"
+            >
+              <ListFilter size={16} aria-hidden="true" />
+              Explore this area
+            </button>
+          </div>
         </header>
 
         {focus.current ? (
@@ -66,7 +84,9 @@ export function AreaFocusView({
             <FocusRecordCard
               record={focus.current}
               primary
-              onOpen={() => onOpenRecord(focus.current!)}
+              onOpen={
+                focus.current.kind === "task" ? undefined : () => onOpenRecord(focus.current!)
+              }
             />
           </section>
         ) : (
@@ -128,9 +148,9 @@ function FocusRecordCard({
 }: {
   record: AreaRecord;
   primary?: boolean;
-  onOpen: () => void;
+  onOpen?: () => void;
 }) {
-  const Icon = record.kind === "project" ? CircleDot : FileText;
+  const Icon = record.kind === "project" ? CircleDot : record.kind === "task" ? Target : FileText;
   return (
     <article
       className={`mt-4 rounded-xl border p-6 md:p-8 ${
@@ -151,21 +171,42 @@ function FocusRecordCard({
           </h2>
           <p className="mt-2 text-body-md leading-6 text-on-surface-variant">{record.summary}</p>
         </div>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded bg-primary px-4 text-body-md font-semibold text-on-primary hover:brightness-110"
-        >
-          Open {record.kind === "project" ? "project" : "note"}
-          <ArrowRight size={16} aria-hidden="true" />
-        </button>
+        {onOpen ? (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded bg-primary px-4 text-body-md font-semibold text-on-primary hover:brightness-110"
+          >
+            Open {record.kind === "project" ? "project" : "note"}
+            <ArrowRight size={16} aria-hidden="true" />
+          </button>
+        ) : (
+          <span className="inline-flex h-10 shrink-0 items-center rounded border border-primary/35 px-4 text-body-md font-semibold text-primary">
+            Focus task
+          </span>
+        )}
       </div>
     </article>
   );
 }
 
 function FocusRow({ record, onOpen }: { record: AreaRecord; onOpen: () => void }) {
-  const Icon = record.kind === "project" ? CircleDot : FileText;
+  const Icon = record.kind === "project" ? CircleDot : record.kind === "task" ? Target : FileText;
+  if (record.kind === "task") {
+    return (
+      <article className="flex w-full items-center gap-4 px-5 py-4 text-left">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-surface-container text-on-surface-variant">
+          <Icon size={17} aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-body-md font-semibold text-on-surface">{record.title}</span>
+          <span className="mt-1 block truncate text-metadata text-on-surface-variant">
+            {record.summary}
+          </span>
+        </span>
+      </article>
+    );
+  }
   return (
     <button
       type="button"
