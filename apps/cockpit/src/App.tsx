@@ -60,7 +60,13 @@ import {
   parseDecisionDetail,
   type DecisionLedgerFilter,
 } from "./domain/decisions";
-import { buildAreaFocus, getFocusArea, normalizeFocusAreas, type AreaRecord } from "./domain/areas";
+import {
+  buildAreaFocus,
+  getFocusArea,
+  hasAvailableAreaRecords,
+  normalizeFocusAreas,
+  type AreaRecord,
+} from "./domain/areas";
 import {
   type OperatorDestination,
   type OperatorInboxKindFilter,
@@ -178,16 +184,24 @@ function ViewLoading({ label }: { label: string }) {
 
 export default function App() {
   const docs = useMemo(() => buildDocs(catalogEntries), []);
+  const availableAreaRecords = useMemo(() => {
+    const projectIds = docs.flatMap((doc) => {
+      const declaredProjectId =
+        typeof doc.frontmatter?.project_id === "string" ? doc.frontmatter.project_id : "";
+      const canonicalProjectId = /^kb\/projects\/([^/]+)\/project\.md$/.exec(doc.path)?.[1] || "";
+      return [declaredProjectId, canonicalProjectId].filter(Boolean);
+    });
+    return { projectIds, documentPaths: docs.map((doc) => doc.path) };
+  }, [docs]);
   const currentYear = new Date().getFullYear();
   const initialHashPath = getHashPath();
   const initialDocFromHash = initialHashPath
     ? docs.find((doc) => doc.path === initialHashPath) || null
     : null;
   const initialRoute = getAppRoute();
-  const initialFocusAreaId = getFocusArea(
-    FOCUS_AREAS,
-    initialRoute.areaId || DEFAULT_FOCUS_AREA_ID,
-  )?.id;
+  const initialFocusArea = getFocusArea(FOCUS_AREAS, initialRoute.areaId || DEFAULT_FOCUS_AREA_ID);
+  const initialFocusAreaId = initialFocusArea?.id;
+  const hasDefaultFocusRecords = hasAvailableAreaRecords(initialFocusArea, availableAreaRecords);
   const [query, setQuery] = useState("");
   const [activeTrack, setActiveTrack] = useState(initialDocFromHash?.track || DEFAULT_ACTIVE_TRACK);
   const [activeItemType, setActiveItemType] = useState(DEFAULT_ACTIVE_ITEM);
@@ -205,7 +219,7 @@ export default function App() {
     if (route.mode === "decisions") return "decisions";
     if (route.mode === "decision") return "decision";
     if (route.mode === "graph") return "graph";
-    if (!route.mode && DEFAULT_FOCUS_AREA_ID) return initialFocusAreaId ? "focus" : "areas";
+    if (!route.mode && DEFAULT_FOCUS_AREA_ID && hasDefaultFocusRecords) return "focus";
     return initialDocFromHash ? "library" : "hub";
   });
   const [isReadingMode, setIsReadingMode] = useState(false);
