@@ -1,0 +1,64 @@
+{
+  "fictional": true,
+  "purpose": "Sanitized UI fixture with neutral example categories",
+  "selectionMode": "explicit configuration, not inferred ranking",
+  "areas": [
+    {
+      "id": "delivery",
+      "label": "Delivery",
+      "current": {
+        "id": "delivery-1",
+        "title": "Review the delivery checklist",
+        "actionLabel": "Open item"
+      },
+      "upNext": [
+        {
+          "id": "delivery-2",
+          "title": "Prepare a workshop outline"
+        },
+        {
+          "id": "delivery-3",
+          "title": "Read the implementation notes"
+        }
+      ]
+    },
+    {
+      "id": "product",
+      "label": "Product",
+      "current": {
+        "id": "product-1",
+        "title": "Sketch a quiet focus screen",
+        "actionLabel": "Open item"
+      },
+      "upNext": [
+        {
+          "id": "product-2",
+          "title": "Review the prototype"
+        },
+        {
+          "id": "product-3",
+          "title": "Write down the next experiment"
+        }
+      ]
+    },
+    {
+      "id": "learning",
+      "label": "Learning",
+      "current": {
+        "id": "learning-1",
+        "title": "Complete one learning exercise",
+        "actionLabel": "Open item"
+      },
+      "upNext": [
+        {
+          "id": "learning-2",
+          "title": "Review yesterday\u2019s notes"
+        },
+        {
+          "id": "learning-3",
+          "title": "Choose the next chapter"
+        }
+      ]
+    }
+  ]
+}

@@ -192,6 +192,24 @@ async function testWorkspaceConfigCarriesDomainAndUi(): Promise<void> {
           sourceFolders: [{ from: "kb" }, { from: "notes", to: "kb" }],
           rootFiles: ["readme.md"],
           defaultActiveTrack: "sap",
+          focusAreas: [
+            {
+              id: "work",
+              label: "Work",
+              icon: "briefcase",
+              projectIds: ["delivery-plan"],
+              documentPaths: ["kb/plans/delivery-outline.md"],
+              focusTasks: [{ id: "review-plan", title: "Review the delivery plan" }],
+              focusRecordIds: [
+                "project:delivery-plan",
+                "document:kb/plans/delivery-outline.md",
+                "task:review-plan",
+                "project:other-project",
+              ],
+            },
+            { id: "not valid", label: "Ignored" },
+          ],
+          defaultFocusAreaId: "work",
         },
       }),
     );
@@ -205,6 +223,22 @@ async function testWorkspaceConfigCarriesDomainAndUi(): Promise<void> {
     ]);
     assert.deepEqual(workspace.ui.rootFiles, ["readme.md"]);
     assert.equal(workspace.ui.defaultActiveTrack, "sap");
+    assert.deepEqual(workspace.ui.focusAreas, [
+      {
+        id: "work",
+        label: "Work",
+        icon: "briefcase",
+        projectIds: ["delivery-plan"],
+        documentPaths: ["kb/plans/delivery-outline.md"],
+        focusTasks: [{ id: "review-plan", title: "Review the delivery plan" }],
+        focusRecordIds: [
+          "project:delivery-plan",
+          "document:kb/plans/delivery-outline.md",
+          "task:review-plan",
+        ],
+      },
+    ]);
+    assert.equal(workspace.ui.defaultFocusAreaId, "work");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

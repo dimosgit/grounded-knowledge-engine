@@ -5,15 +5,39 @@ import {
   type OperatorInboxFilters,
 } from "../domain/operator-inbox";
 
+export interface AppRoute {
+  mode: string | null;
+  path: string | null;
+  areaId?: string;
+  inboxKind?: OperatorInboxFilters["kind"];
+  inboxPriority?: OperatorInboxFilters["priority"];
+  inboxProjectId?: string;
+  attentionFilter?: string;
+  projectId?: string;
+  projectSection?: string;
+  decisionFilter?: string;
+  decisionId?: string;
+  focusPath?: string;
+}
+
 export function normalizePathname(pathname) {
   if (!pathname) return "/";
   if (pathname === "/") return "/";
   return pathname.replace(/\/+$/, "");
 }
 
-export function getHashRoute() {
+export function getHashRoute(): AppRoute {
   const hash = window.location.hash;
   const hashPath = normalizePathname(hash.slice(1).split("?")[0] || "/");
+  if (hashPath === "/areas") {
+    return { mode: "areas", path: null };
+  }
+  if (hash.startsWith("#/focus/")) {
+    return getAreaRoute(hash, "#/focus/", "focus");
+  }
+  if (hash.startsWith("#/explore/")) {
+    return getAreaRoute(hash, "#/explore/", "explore");
+  }
   if (hashPath === "/hub") {
     return { mode: "hub", path: null };
   }
@@ -100,13 +124,23 @@ export function getHashRoute() {
   }
 }
 
-export function getAppRoute() {
+export function getAppRoute(): AppRoute {
   const hashRoute = getHashRoute();
   if (hashRoute.mode) {
     return hashRoute;
   }
 
   return { mode: null, path: null };
+}
+
+function getAreaRoute(hash, prefix, mode): AppRoute {
+  try {
+    const areaId = decodeURIComponent(hash.slice(prefix.length).split("?")[0]).trim().toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(areaId)) return { mode: null, path: null };
+    return { mode, areaId, path: null };
+  } catch {
+    return { mode: null, path: null };
+  }
 }
 
 export function getHashPath() {
@@ -120,6 +154,18 @@ export function setHashPath(path) {
 
 export function setHashHub() {
   window.location.hash = "/hub";
+}
+
+export function setHashAreas() {
+  window.location.hash = "/areas";
+}
+
+export function setHashFocus(areaId) {
+  window.location.hash = `/focus/${encodeURIComponent(areaId)}`;
+}
+
+export function setHashAreaExplore(areaId) {
+  window.location.hash = `/explore/${encodeURIComponent(areaId)}`;
 }
 
 export function setHashAttention(filters: OperatorInboxFilters) {

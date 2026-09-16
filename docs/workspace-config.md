@@ -98,11 +98,62 @@ profile's fingerprint participates in cache keys and index manifest hashes).
 
 ## `ui` — cockpit viewer block
 
-| Field                | Purpose                                                                                                           |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `sourceFolders`      | `{ from, to? }[]` — folders synced into the viewer's content tree (overridable with `KB_PREVIEW_SOURCE_FOLDERS`). |
-| `rootFiles`          | Repo-root standalone files (e.g. `readme.md`) synced alongside (`KB_PREVIEW_ROOT_FILES` overrides).               |
-| `defaultActiveTrack` | Initial track filter in the viewer (default `all`).                                                               |
+| Field                | Purpose                                                                                                                |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `sourceFolders`      | `{ from, to? }[]` — folders synced into the viewer's content tree (overridable with `KB_PREVIEW_SOURCE_FOLDERS`).      |
+| `rootFiles`          | Repo-root standalone files (e.g. `readme.md`) synced alongside (`KB_PREVIEW_ROOT_FILES` overrides).                    |
+| `defaultActiveTrack` | Initial track filter in the viewer (default `all`).                                                                    |
+| `focusAreas`         | Explicit local focus areas for the quiet Cockpit flow. Records appear only when listed by project ID or document path. |
+| `defaultFocusAreaId` | Optional initial focus area. It must match one configured `focusAreas[].id`.                                           |
+
+Each focus area has a stable `id`, `label`, optional `description`, an optional
+`icon` (`briefcase`, `sparkles`, or `graduation-cap`), `projectIds`,
+`documentPaths`, and an optional ordered `focusRecordIds` list. Focus record
+IDs use `project:<project-id>` or `document:<workspace-relative-markdown-path>`.
+The Cockpit does not infer area membership from a title, tag, workspace, or
+track.
+
+Keep this configuration local whenever labels or membership are private. The
+Vite build inlines the whole `focusAreas` block into the client bundle as
+`__KB_FOCUS_AREAS__`, so every label, description, project ID, and document path
+is readable in plain text in any build output you publish, deploy, or share.
+`.gke/` and `apps/cockpit/dist/` are gitignored, so nothing reaches the
+repository on its own — but a Cockpit built against a private workspace carries
+that workspace's area names with it. Build public artifacts from a workspace
+whose area labels are safe to disclose.
+
+```json
+{
+  "ui": {
+    "focusAreas": [
+      {
+        "id": "delivery",
+        "label": "Delivery",
+        "description": "Commitments, milestones, and operational outcomes.",
+        "icon": "briefcase",
+        "projectIds": ["delivery-plan"],
+        "documentPaths": ["kb/plans/delivery-outline.md"],
+        "focusRecordIds": ["project:delivery-plan", "document:kb/plans/delivery-outline.md"]
+      },
+      {
+        "id": "product",
+        "label": "Product",
+        "description": "Product initiatives, experiments, and research.",
+        "icon": "sparkles",
+        "projectIds": ["atlas-rollout"]
+      },
+      {
+        "id": "learning",
+        "label": "Learning",
+        "description": "Structured study and knowledge development.",
+        "icon": "graduation-cap",
+        "documentPaths": ["kb/topics/retrieval-basics.md"]
+      }
+    ],
+    "defaultFocusAreaId": "delivery"
+  }
+}
+```
 
 ## Example: a specialized workspace
 
