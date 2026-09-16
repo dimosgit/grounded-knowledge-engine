@@ -16,13 +16,30 @@ export function useRouteSync({
   setInboxKind,
   setInboxPriority,
   setInboxProjectId,
+  setSelectedAreaId,
   setViewMode,
+  areaIds = [],
 }) {
   useEffect(() => {
     function syncWithLocation() {
       const route = getAppRoute();
       if (route.mode === "hub") {
         setViewMode("hub");
+        return;
+      }
+      if (route.mode === "areas") {
+        setSelectedAreaId("");
+        setViewMode("areas");
+        return;
+      }
+      if (route.mode === "focus" || route.mode === "explore") {
+        if (!areaIds.includes(route.areaId)) {
+          setSelectedAreaId("");
+          setViewMode("areas");
+          return;
+        }
+        setSelectedAreaId(route.areaId);
+        setViewMode(route.mode);
         return;
       }
       if (route.mode === "attention") {
@@ -93,6 +110,8 @@ export function useRouteSync({
     setInboxKind,
     setInboxPriority,
     setInboxProjectId,
+    setSelectedAreaId,
     setViewMode,
+    areaIds,
   ]);
 }

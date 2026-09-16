@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   ShieldX,
+  Target,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -26,9 +27,11 @@ import type { OperatorAttentionBadge } from "../domain/operator-inbox";
 import type { WorkspaceDisplay, WorkspaceTone } from "../domain/workspace-display";
 import { useOperatorAttentionValue } from "../hooks/useOperatorAttention";
 import { useWorkspaceDisplayValue } from "../hooks/useWorkspaceDisplay";
+import { useFocusNavigationValue } from "../hooks/useFocusNavigation";
 import { useModalSurface } from "../hooks/useModalSurface";
 import { OperatorActions } from "./OperatorActions";
 import { PublicOperatorActions } from "./PublicOperatorActions";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 
 export function OperatorFrame({
   activeView,
@@ -48,6 +51,7 @@ export function OperatorFrame({
   const shouldReduceMotion = useReducedMotion();
   const workspace = useWorkspaceDisplayValue();
   const attention = useOperatorAttentionValue();
+  const focusNavigation = useFocusNavigationValue();
   const mobileNavModalRef = useModalSurface<HTMLDivElement>({
     isOpen: isMobileNavOpen,
     onClose: () => setIsMobileNavOpen(false),
@@ -77,6 +81,21 @@ export function OperatorFrame({
     badge?: OperatorAttentionBadge;
     onClick?: () => void;
   }> = [
+    // Focus sits in the same list as everything else on purpose. A second
+    // navigation model stacked above this one was what made the sidebar feel
+    // like two sidebars.
+    ...(focusNavigation
+      ? [
+          {
+            key: "focus",
+            label: focusNavigation.currentArea?.label ?? "Focus area",
+            icon: Target,
+            onClick: focusNavigation.currentArea
+              ? focusNavigation.onOpenCurrent
+              : focusNavigation.onChooseArea,
+          },
+        ]
+      : []),
     { key: "hub", label: "Mission Control", icon: LayoutDashboard, onClick: onHub },
     {
       key: "attention",
@@ -175,6 +194,10 @@ export function OperatorFrame({
               </button>
 
               <WorkspaceStatus workspace={workspace} />
+
+              <div className="mb-6 px-3">
+                <ThemeSwitcher />
+              </div>
 
               <nav className="flex flex-1 flex-col gap-1" aria-label="Mobile operator views">
                 {navItems.map((item) => {
@@ -315,6 +338,9 @@ export function OperatorFrame({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3 text-primary">
+            <div className="hidden md:block">
+              <ThemeSwitcher compact />
+            </div>
             <div className="hidden items-center gap-2 rounded-full border border-status-done/30 bg-status-done/10 px-3 py-1.5 text-metadata font-semibold text-status-done lg:flex">
               <ShieldCheck size={14} />
               Local engine

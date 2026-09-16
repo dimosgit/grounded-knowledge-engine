@@ -1,0 +1,234 @@
+@font-face {
+  font-family: "GKE Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/geist-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "GKE Inter";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("/fonts/inter-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "GKE Newsreader";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/newsreader-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "GKE Newsreader";
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/newsreader-latin-italic.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "GKE Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "GKE JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+}
+
+:root,
+html[data-theme="minimal"] {
+  color-scheme: dark;
+  --color-background: 6 7 10;
+  --color-surface: 18 20 26;
+  --color-surface-main: 6 7 10;
+  --color-surface-sidebar: 13 15 20;
+  --color-surface-container-lowest: 3 4 6;
+  --color-surface-container-low: 23 25 32;
+  --color-surface-container: 29 32 40;
+  --color-surface-container-high: 38 42 52;
+  --color-surface-container-highest: 52 56 68;
+  --color-surface-variant: 52 56 68;
+  --color-on-background: 244 244 245;
+  --color-on-surface: 244 244 245;
+  --color-on-surface-variant: 169 173 183;
+  --color-primary: 196 201 255;
+  --color-primary-container: 59 68 140;
+  --color-on-primary: 10 11 16;
+  --color-on-primary-container: 244 244 255;
+  --color-secondary: 187 190 203;
+  --color-secondary-container: 45 48 59;
+  /* Decorative rules and dividers only — carries no meaning on its own. */
+  --color-border-subtle: 44 47 56;
+  --color-outline: 156 160 171;
+  /* The control border. Must clear 3:1 on every surface (WCAG 1.4.11). */
+  --color-outline-variant: 116 121 134;
+  --color-status-blocked: 248 113 113;
+  --color-status-waiting: 251 191 36;
+  --color-status-done: 52 211 153;
+  --color-track-demo: 56 189 248;
+  --color-track-ai: 167 139 250;
+  --color-track-biz: 244 114 182;
+  --theme-body-font: "GKE Inter", system-ui, sans-serif;
+  --theme-display-font: "GKE Geist", "GKE Inter", system-ui, sans-serif;
+  --theme-mono-font: "GKE JetBrains Mono", ui-monospace, monospace;
+  --theme-card-radius: 1rem;
+  --theme-control-radius: 0.75rem;
+  --theme-shell-radius: 1.5rem;
+  /*
+   * A drop shadow does almost nothing against a near-black page. Dark elevation
+   * reads from a light top edge instead, so the highlight carries the lift and
+   * the shadow only anchors overlays.
+   */
+  --theme-elevation-highlight: inset 0 1px 0 rgb(255 255 255 / 0.055);
+  --theme-shadow: 0 16px 44px rgb(0 0 0 / 0.55);
+  --bg: rgb(var(--color-background));
+  --panel: rgb(var(--color-surface-container));
+  --panel-soft: rgb(var(--color-surface-container-low));
+  --ink: rgb(var(--color-on-surface));
+  --muted: rgb(var(--color-on-surface-variant));
+  --line: rgb(var(--color-border-subtle));
+  --brand: rgb(var(--color-primary));
+  --brand-soft: rgb(var(--color-primary) / 0.13);
+  --shadow: var(--theme-shadow);
+  --shadow-soft: 0 10px 30px rgb(0 0 0 / 0.4);
+}
+
+html[data-theme="warm"] {
+  color-scheme: light;
+  --color-background: 248 245 239;
+  --color-surface: 255 253 249;
+  --color-surface-main: 248 245 239;
+  --color-surface-sidebar: 244 240 232;
+  --color-surface-container-lowest: 255 255 253;
+  --color-surface-container-low: 250 246 239;
+  --color-surface-container: 244 239 231;
+  --color-surface-container-high: 236 229 219;
+  --color-surface-container-highest: 224 215 203;
+  --color-surface-variant: 224 215 203;
+  --color-on-background: 26 29 32;
+  --color-on-surface: 26 29 32;
+  --color-on-surface-variant: 90 96 104;
+  --color-primary: 62 84 70;
+  --color-primary-container: 232 239 234;
+  --color-on-primary: 255 255 255;
+  --color-on-primary-container: 50 69 57;
+  --color-secondary: 90 96 104;
+  --color-secondary-container: 236 229 219;
+  /* Decorative rules and dividers only — carries no meaning on its own. */
+  --color-border-subtle: 226 218 207;
+  --color-outline: 125 130 135;
+  /* The control border. Must clear 3:1 on every surface (WCAG 1.4.11). */
+  --color-outline-variant: 136 127 116;
+  --color-status-blocked: 160 80 65;
+  --color-status-waiting: 138 82 18;
+  /* Distinct from the sage primary: in warm, hue must still encode state. */
+  --color-status-done: 17 102 94;
+  --color-track-demo: 42 115 125;
+  --color-track-ai: 114 83 145;
+  /* Separated from the status-blocked terracotta. */
+  --color-track-biz: 158 66 124;
+  --theme-body-font: "GKE Plus Jakarta Sans", "GKE Inter", system-ui, sans-serif;
+  --theme-display-font: "GKE Newsreader", Georgia, serif;
+  --theme-mono-font: "GKE JetBrains Mono", ui-monospace, monospace;
+  --theme-card-radius: 0.375rem;
+  --theme-control-radius: 0.25rem;
+  --theme-shell-radius: 0.25rem;
+  /* Paper lifts with a real shadow rather than a top highlight. */
+  --theme-elevation-highlight: 0 0 0 0 rgb(0 0 0 / 0);
+  --theme-shadow: 0 1px 2px rgb(61 52 40 / 0.07), 0 10px 26px rgb(61 52 40 / 0.1);
+  --bg: rgb(var(--color-background));
+  --panel: rgb(var(--color-surface));
+  --panel-soft: rgb(var(--color-surface-container-low));
+  --ink: rgb(var(--color-on-surface));
+  --muted: rgb(var(--color-on-surface-variant));
+  --line: rgb(var(--color-border-subtle));
+  --brand: rgb(var(--color-primary));
+  --brand-soft: rgb(var(--color-primary) / 0.12);
+  --shadow: var(--theme-shadow);
+  --shadow-soft: 0 1px 3px rgb(61 52 40 / 0.08);
+}
+
+html[data-theme] body {
+  font-family: var(--theme-body-font);
+  color: var(--ink);
+  background: var(--bg);
+}
+
+html[data-theme] .font-display {
+  font-family: var(--theme-display-font);
+}
+
+html[data-theme] .font-mono {
+  font-family: var(--theme-mono-font);
+}
+
+.theme-switcher__toggle {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid rgb(var(--color-outline-variant));
+  border-radius: var(--theme-control-radius);
+  background: rgb(var(--color-surface-container));
+  color: rgb(var(--color-on-surface-variant));
+  padding: 0 0.7rem;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.theme-switcher__toggle:hover {
+  border-color: rgb(var(--color-primary) / 0.65);
+  background: rgb(var(--color-primary) / 0.1);
+  color: rgb(var(--color-on-surface));
+}
+
+.theme-switcher__toggle:focus-visible {
+  outline: 2px solid rgb(var(--color-primary));
+  outline-offset: 3px;
+}
+
+.theme-switcher__toggle--compact {
+  width: 2.5rem;
+  justify-content: center;
+  padding: 0;
+}
+
+.theme-switcher__toggle--compact .theme-switcher__toggle-label {
+  display: none;
+}
+
+/*
+ * Elevation composes both tokens on purpose. On dark the shadow is nearly
+ * invisible and the inset highlight does the lifting; on light the highlight is
+ * a no-op and the shadow does. Each theme sets the other to nothing.
+ */
+.theme-card-elevated {
+  box-shadow: var(--theme-elevation-highlight), var(--theme-shadow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

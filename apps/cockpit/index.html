@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="minimal">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,6 +9,17 @@
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Operator Cockpit</title>
+    <script>
+      try {
+        const theme = localStorage.getItem("gke.cockpit.theme");
+        if (theme === "minimal" || theme === "warm") {
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme === "warm" ? "light" : "dark";
+        }
+      } catch {
+        // The default Minimalist theme remains available when storage is blocked.
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

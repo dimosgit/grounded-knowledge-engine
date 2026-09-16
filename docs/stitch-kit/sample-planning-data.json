@@ -1,0 +1,84 @@
+{
+  "fictional": true,
+  "schemaPurpose": "Design fixture only; not an implemented API contract",
+  "week": {
+    "start": "2026-09-07",
+    "end": "2026-09-13",
+    "availableMinutes": 1200,
+    "reservedMinutes": 240,
+    "plannableMinutes": 960,
+    "committedMinutes": 720,
+    "remainingMinutes": 240
+  },
+  "projects": [
+    {
+      "id": "atlas",
+      "title": "Atlas rollout"
+    },
+    {
+      "id": "beacon",
+      "title": "Beacon research"
+    }
+  ],
+  "commitments": [
+    {
+      "id": "AT-1",
+      "projectId": "atlas",
+      "title": "Review rollback checklist",
+      "originalEstimateMinutes": 180,
+      "actualMinutes": 240,
+      "endOfWeekStatus": "completed"
+    },
+    {
+      "id": "AT-2",
+      "projectId": "atlas",
+      "title": "Validate pilot readiness",
+      "originalEstimateMinutes": 240,
+      "actualMinutes": 300,
+      "endOfWeekStatus": "completed"
+    },
+    {
+      "id": "BC-1",
+      "projectId": "beacon",
+      "title": "Summarize source evidence",
+      "originalEstimateMinutes": 120,
+      "actualMinutes": 180,
+      "endOfWeekStatus": "completed"
+    },
+    {
+      "id": "BC-2",
+      "projectId": "beacon",
+      "title": "Review remaining sources",
+      "originalEstimateMinutes": 120,
+      "actualMinutes": null,
+      "endOfWeekStatus": "rescheduled"
+    },
+    {
+      "id": "AT-3",
+      "projectId": "atlas",
+      "title": "Confirm next test window",
+      "originalEstimateMinutes": 60,
+      "actualMinutes": null,
+      "endOfWeekStatus": "blocked"
+    }
+  ],
+  "dailyOvercommitment": {
+    "date": "2026-09-08",
+    "availableMinutes": 300,
+    "commitmentIds": ["AT-1", "AT-2"],
+    "plannedMinutes": 420,
+    "overByMinutes": 120
+  },
+  "retrospective": {
+    "completedCount": 3,
+    "unfinishedCount": 2,
+    "completedEstimateMinutes": 540,
+    "actualLoggedMinutes": 720,
+    "interruption": "Pilot investigation took longer than expected; source review was rescheduled.",
+    "adjustment": "Reserve an additional hour for rollout investigation before committing research work."
+  },
+  "area": {
+    "id": "product",
+    "label": "Product"
+  }
+}
