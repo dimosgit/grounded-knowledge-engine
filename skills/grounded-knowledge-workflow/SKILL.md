@@ -15,11 +15,11 @@ retrieval, project scope, citations, and writes.
   `kb.answer_and_capture` exactly once with `responseMode: auto` and
   `responseFormat: compact`, and `captureStrategy: auto`.
 - Do not call `kb.search` or `kb.get_record` before it. The answer tool performs
-  its own retrieval and grounding. Automatic retention is read-only.
-- After a successful call, return the answer, citations, capture status,
-  `tokenUsage`, and `timings` immediately.
-- No note or review proposal is created by this fast path. Continue into
-  maintenance only when the user explicitly asks for curation or retention.
+  its own retrieval and grounding. Without a `noteBody` finding it never writes.
+- Return the answer, citations, capture status, `tokenUsage`, and `timings`.
+  When the KB lacked the answer and the result is durable, first apply
+  "Retain automatically, update first" below. Do no other maintenance unless
+  asked.
 
 ## Choose the operation
 
@@ -87,20 +87,36 @@ npm run setup:mcp -- --list-workspaces
 Named vaults default to writes disabled. Use `--writes` only when the selected
 workspace configuration explicitly allows writes.
 
-## Retain deliberately
+## Retain automatically, update first
 
-- Capture only durable, reusable knowledge: decisions, verified explanations,
-  project facts, unresolved questions, or procedures worth recalling later.
-- Avoid capturing transient chat, speculation, secrets, or duplicated material.
-- Keep `captureStrategy: auto` for ordinary Q&A; it never writes, even when
-  workspace writes are enabled.
-- Use `captureStrategy: note` or `captureStrategy: open_question` only when the
-  user explicitly asks to retain knowledge. Supply a deliberate title and
-  routing context rather than turning the raw question into a topic name.
-- For explicit retention, preview consequential or unclear writes with `dryRun`
-  before persisting.
-- Tell the user what was captured and where. Never imply a write occurred if it
-  was skipped or rejected.
+In a writable workspace, capture KB gaps without a separate ask. After
+answering, retain a finding only when the KB lacked, was stale about, or
+contradicted a result established through research, repository inspection, or
+facts the user stated. The result must be durable and reusable: a verified
+explanation, correction, decision, project fact, or procedure. Do not capture
+transient chat, speculation, secrets, credentials, or knowledge already present.
+
+1. Make one retention call to `kb.answer_and_capture` with `noteBody` set to a
+   concise finding and `captureStrategy: auto`. Add `projectId` for a project
+   fact or `notePath` when the owning topic or term is known. Use a targeted
+   `kb.search` after the answer if needed to find that home.
+2. The server updates the project record's `Last meaningful change` or the
+   matching topic or term. It creates a note only when no home exists. Repeated
+   content returns `unchanged`; do not create a parallel note.
+3. If capture is `skipped` or `failed`, or a correction requires rewriting
+   existing content, locate the home before an authorized manual edit. Read the
+   named project's canonical record, or search the relevant track and matching
+   Markdown files for the subject. Update the existing section, checklist,
+   table, or statement in place. For a project, bump `updated:` and add a dated
+   `Last meaningful change` entry. Create a new topic or term only when no
+   plausible record covers the subject. Keep the edit targeted. A workspace
+   configured as read-only remains read-only; report `no capture` there.
+
+Use `captureStrategy: open_question` for a durable unresolved gap after checking
+for an existing question. Reserve `captureStrategy: note` for an explicitly
+requested new note with a deliberate title and routing context. Report one line
+at the end: `KB: updated <path>`, `KB: created <path>`, or
+`KB: no capture (<reason>)`. Never claim a write that did not happen.
 
 ## Administer projects through the CLI
 

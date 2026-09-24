@@ -90,6 +90,13 @@ export interface UpdateProjectOptions extends ProjectServiceOptions {
   dryRun?: boolean;
 }
 
+export interface RecordProjectChangeOptions extends ProjectServiceOptions {
+  projectId: string;
+  change: string;
+  date?: string;
+  dryRun?: boolean;
+}
+
 export interface UpdatedProject {
   projectId: string;
   path: string;
@@ -389,6 +396,74 @@ async function updateProjectUnlocked(options: UpdateProjectOptions): Promise<Upd
     changed,
     dryRun: Boolean(options.dryRun),
   };
+}
+
+/**
+ * Record one dated entry at the top of the project's Last meaningful change
+ * section and bump `updated:`. The template placeholder is replaced, and a
+ * change already present in the record is a no-op.
+ */
+export async function recordProjectChange(
+  options: RecordProjectChangeOptions,
+): Promise<UpdatedProject> {
+  return withProjectMutation(options, async () => {
+    const repoRoot = path.resolve(options.repoRoot || process.cwd());
+    const loaded = await getProject(options.projectId, {
+      repoRoot,
+      scanRoots: options.scanRoots,
+      workspace: options.workspace,
+    });
+    const change = options.change.trim();
+    if (!change) throw new Error("Missing project change text.");
+    const date = validateDateInput(options.date || todayIso(), "date");
+    const unchanged = {
+      projectId: loaded.parsed.manifest.projectId,
+      path: loaded.path,
+      content: loaded.raw,
+      changed: false,
+      dryRun: Boolean(options.dryRun),
+    };
+    if (collapseWhitespace(loaded.raw).includes(collapseWhitespace(change))) return unchanged;
+
+    const existing = readMarkdownSection(loaded.raw, "last-meaningful-change")
+      .split(/\n\s*\n/)
+      .map((paragraph) => paragraph.trim())
+      .filter(
+        (paragraph) =>
+          paragraph &&
+          !/^(Record the latest significant change\.|None recorded\.)$/i.test(paragraph),
+      )
+      .join("\n\n");
+    const entry = `${date} — ${change}`;
+    return updateProjectUnlocked({
+      repoRoot,
+      scanRoots: options.scanRoots,
+      workspace: options.workspace,
+      projectId: options.projectId,
+      updated: date,
+      sections: {
+        "last-meaningful-change": existing ? `${entry}\n\n${existing}` : entry,
+      },
+      dryRun: options.dryRun,
+    });
+  });
+}
+
+function readMarkdownSection(raw: string, key: ProjectSectionKey): string {
+  const aliases = sectionAliases(key);
+  const lines = raw.split(/\r?\n/);
+  const start = lines.findIndex((line) => {
+    const match = line.match(/^##\s+(.+?)\s*$/);
+    return Boolean(match && aliases.has(match[1].trim().toLowerCase()));
+  });
+  if (start < 0) return "";
+  let end = start + 1;
+  while (end < lines.length && !/^##\s+/.test(lines[end])) end += 1;
+  return lines.slice(start + 1, end).join("\n");
+}
+
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 export async function addProjectTask(options: AddProjectTaskOptions): Promise<AddedProjectTask> {
