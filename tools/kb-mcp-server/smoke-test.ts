@@ -48,6 +48,47 @@ tags: demo, capture, decision-log
   "utf8",
 );
 
+// Automatic retention updates project records in place; seed one writable
+// synthetic project so the smoke test never touches demo or live records.
+await fs.mkdir(path.join(smokeRepoRoot, "kb", "projects", "auto-retention"), { recursive: true });
+await fs.writeFile(
+  path.join(smokeRepoRoot, "kb", "projects", "auto-retention", "project.md"),
+  `---
+schema_version: 1
+record_type: project
+workspace_id: demo
+project_id: auto-retention
+title: Auto Retention Smoke
+status: active
+lifecycle: active
+owner: mcp-smoke
+track: demo
+started_at: 2026-06-10
+updated: 2026-06-23
+tags: demo, capture
+---
+
+# Auto Retention Smoke
+
+## Outcome
+
+Prove that automatic retention updates the owning project record.
+
+## Last meaningful change
+
+The synthetic project record was seeded by the MCP smoke test.
+
+## Next actions
+
+1. Retain one finding through kb.answer_and_capture.
+`,
+  "utf8",
+);
+
+function getTodaySmokeDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 interface JsonRpcResponse {
   id?: number;
   result?: any;
@@ -554,12 +595,102 @@ try {
     },
   });
   assert.equal(automaticNoCapture.structuredContent?.answer?.abstained, true);
-  assert.equal(automaticNoCapture.structuredContent?.strategy, "none");
+  assert.equal(automaticNoCapture.structuredContent?.strategy, "auto");
   assert.equal(automaticNoCapture.structuredContent?.capture?.action, "skipped");
   assert.match(
     automaticNoCapture.structuredContent?.capture?.reason || "",
-    /automatic retention is read-only/i,
+    /KB lacks this answer/i,
   );
+
+  // Automatic retention is update-first: a durable finding lands in the
+  // owning record, repeats are idempotent, and no new file is created.
+  const projectRecord = "kb/projects/auto-retention/project.md";
+  const projectFinding = "Auto retention smoke finding AUTO_PROJECT_SMOKE was confirmed.";
+  const autoProjectArgs = {
+    question: "What changed in the auto retention smoke project?",
+    mode: "generic",
+    strict: false,
+    captureStrategy: "auto",
+    projectId: "auto-retention",
+    noteBody: projectFinding,
+  };
+  const autoProject = await request("tools/call", {
+    name: "kb.answer_and_capture",
+    arguments: autoProjectArgs,
+  });
+  assert.equal(autoProject.structuredContent?.strategy, "auto");
+  assert.equal(
+    autoProject.structuredContent?.capture?.action,
+    "updated",
+    JSON.stringify(autoProject.structuredContent?.capture),
+  );
+  assert.equal(autoProject.structuredContent?.capture?.home, "project");
+  assert.equal(autoProject.structuredContent?.capture?.path, projectRecord);
+  const projectRaw = await fs.readFile(path.join(smokeRepoRoot, projectRecord), "utf8");
+  const lastChange = projectRaw.split("## Last meaningful change")[1]?.split("\n## ")[0] || "";
+  assert.ok(lastChange.trim().startsWith(`${getTodaySmokeDate()} — ${projectFinding}`));
+  assert.match(lastChange, /seeded by the MCP smoke test/);
+  assert.match(projectRaw, new RegExp(`^updated: ${getTodaySmokeDate()}$`, "m"));
+  const autoProjectRepeat = await request("tools/call", {
+    name: "kb.answer_and_capture",
+    arguments: autoProjectArgs,
+  });
+  assert.equal(autoProjectRepeat.structuredContent?.capture?.action, "unchanged");
+  const projectRawAfterRepeat = await fs.readFile(path.join(smokeRepoRoot, projectRecord), "utf8");
+  assert.equal(projectRawAfterRepeat.split(projectFinding).length - 1, 1);
+
+  const topicTarget = "kb/topics/mcp-primitive-decision.md";
+  const topicSeed = await fs.readFile(path.join(smokeRepoRoot, topicTarget), "utf8");
+  const topicsBefore = (await fs.readdir(path.join(smokeRepoRoot, "kb", "topics"))).sort();
+  const topicFinding = "Auto retention appended AUTO_TOPIC_SMOKE to the existing decision note.";
+  const autoTopicArgs = {
+    question: "What decision did we make for exposing grounded search and capture in MCP?",
+    mode: "generic",
+    strict: false,
+    captureStrategy: "auto",
+    notePath: topicTarget,
+    noteBody: topicFinding,
+  };
+  const autoTopic = await request("tools/call", {
+    name: "kb.answer_and_capture",
+    arguments: autoTopicArgs,
+  });
+  assert.equal(autoTopic.structuredContent?.capture?.action, "updated");
+  assert.equal(autoTopic.structuredContent?.capture?.home, "explicit-note");
+  const autoTopicRepeat = await request("tools/call", {
+    name: "kb.answer_and_capture",
+    arguments: autoTopicArgs,
+  });
+  assert.equal(autoTopicRepeat.structuredContent?.capture?.action, "unchanged");
+  const topicRaw = await fs.readFile(path.join(smokeRepoRoot, topicTarget), "utf8");
+  assert.equal(topicRaw.split(topicFinding).length - 1, 1);
+  assert.equal(topicRaw.match(/^---$/gm)?.length, 2, "an update must not add frontmatter");
+  assert.match(topicRaw, new RegExp(`^updated: ${getTodaySmokeDate()}$`, "m"));
+  assert.deepEqual(
+    (await fs.readdir(path.join(smokeRepoRoot, "kb", "topics"))).sort(),
+    topicsBefore,
+  );
+  const sameSubjectFinding =
+    "Auto retention matched AUTO_SAME_SUBJECT_SMOKE by title, not by path.";
+  const autoSameSubject = await request("tools/call", {
+    name: "kb.answer_and_capture",
+    arguments: {
+      question: "How are grounded search and capture exposed in MCP?",
+      mode: "generic",
+      strict: false,
+      captureStrategy: "auto",
+      noteTitle: "MCP Primitive Decision",
+      noteBody: sameSubjectFinding,
+    },
+  });
+  assert.equal(autoSameSubject.structuredContent?.capture?.action, "updated");
+  assert.equal(autoSameSubject.structuredContent?.capture?.path, topicTarget);
+  assert.deepEqual(
+    (await fs.readdir(path.join(smokeRepoRoot, "kb", "topics"))).sort(),
+    topicsBefore,
+  );
+  // Restore the seeded note so the review-queue flow below starts from a known state.
+  await fs.writeFile(path.join(smokeRepoRoot, topicTarget), topicSeed, "utf8");
 
   const abstainedDuplicate = await request("tools/call", {
     name: "kb.answer_and_capture",

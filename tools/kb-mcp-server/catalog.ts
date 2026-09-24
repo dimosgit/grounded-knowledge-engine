@@ -460,8 +460,8 @@ function answerAndCaptureTool(options: CatalogOptions): ToolDefinition {
     name: "kb.answer_and_capture",
     title: "Answer From Grounded Knowledge",
     description: options.writesEnabled
-      ? "Primary grounded Q&A tool. Call directly without pre-search; automatic retention is read-only, while explicit note/open-question strategies can retain user-requested knowledge."
-      : "Primary grounded Q&A tool. Call directly without pre-search; automatic retention is read-only, and explicit retention is unavailable because writes are disabled.",
+      ? "Primary grounded Q&A tool. Call directly without pre-search. captureStrategy=auto with noteBody retains a durable finding update-first: it updates the owning project or note and creates one only when no home exists."
+      : "Primary grounded Q&A tool. Call directly without pre-search; retention is unavailable because writes are disabled.",
     annotations: options.writesEnabled ? annotations.additiveWrite : annotations.read,
     inputSchema: {
       type: "object",
@@ -488,7 +488,7 @@ function answerAndCaptureTool(options: CatalogOptions): ToolDefinition {
           type: "string",
           enum: ["auto", "note", "open_question", "none"],
           description:
-            "auto is read-only; use note or open_question only for explicit user-requested retention",
+            "auto: skip without noteBody; with noteBody update the owning record first, create only if none",
         },
         noteKind: { type: "string", enum: ["topic", "term"] },
         notePath: { type: "string" },

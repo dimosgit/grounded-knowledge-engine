@@ -490,6 +490,92 @@ export async function hashCaptureTarget(
   return (await exists(absPath)) ? sha256File(absPath) : null;
 }
 
+export interface AppendCaptureUpdateOptions {
+  repoRoot: string;
+  path: string;
+  heading: string;
+  body: string;
+  updated?: string;
+  dryRun?: boolean;
+  workspace?: WorkspaceContext;
+  refresh?: () => Promise<void>;
+}
+
+export interface AppendCaptureUpdateResult {
+  action: "updated" | "unchanged";
+  path: string;
+  dryRun: boolean;
+  contentHash: string;
+}
+
+/**
+ * Update an existing topic or term in place: add one dated section and bump
+ * `updated:` without adding a second frontmatter block. Repeating the same
+ * body is a no-op, so an agent cannot duplicate knowledge by retrying.
+ */
+export async function appendCaptureUpdate(
+  options: AppendCaptureUpdateOptions,
+): Promise<AppendCaptureUpdateResult> {
+  const repoRoot = path.resolve(options.repoRoot);
+  const relPath = sanitizeRelativePath(options.path);
+  if (!/^kb\/(topics|terms)\/.+\.md$/.test(relPath)) {
+    throw new Error("In-place capture updates target kb/topics/ or kb/terms/ Markdown files.");
+  }
+  const body = options.body.trim();
+  if (!body) throw new Error("Missing body for capture update.");
+  const absTarget = await resolveSafeWorkspacePath(repoRoot, relPath, false, options.workspace);
+  if (!(await exists(absTarget))) {
+    throw new CaptureConflictError(`Capture update target does not exist: ${relPath}`);
+  }
+  const currentBytes = await fs.readFile(absTarget);
+  const current = currentBytes.toString("utf8");
+  if (normalizeForSimilarity(current).includes(normalizeForSimilarity(body))) {
+    return {
+      action: "unchanged",
+      path: relPath,
+      dryRun: Boolean(options.dryRun),
+      contentHash: sha256(currentBytes),
+    };
+  }
+  const updated = /^\d{4}-\d{2}-\d{2}$/.test(options.updated || "")
+    ? (options.updated as string)
+    : new Date().toISOString().slice(0, 10);
+  const heading = singleLineHeading(options.heading) || "Update";
+  const next = ensureTrailingNewline(
+    `${bumpFrontmatterUpdated(current, updated).trimEnd()}\n\n## ${heading} (${updated})\n\n${body}\n`,
+  );
+  const result: AppendCaptureUpdateResult = {
+    action: "updated",
+    path: relPath,
+    dryRun: Boolean(options.dryRun),
+    contentHash: sha256(next),
+  };
+  if (options.dryRun) return result;
+  if ((await sha256File(absTarget)) !== sha256(currentBytes)) {
+    throw new CaptureConflictError(`Capture target changed during update: ${relPath}`);
+  }
+  await atomicWrite(repoRoot, absTarget, next, false, options.workspace);
+  if (options.refresh) await options.refresh();
+  return result;
+}
+
+function bumpFrontmatterUpdated(raw: string, updated: string): string {
+  if (!raw.startsWith("---\n")) return raw;
+  const end = raw.indexOf("\n---", 4);
+  if (end < 0) return raw;
+  const frontmatter = raw.slice(0, end);
+  if (!/^updated:/m.test(frontmatter)) return raw;
+  return `${frontmatter.replace(/^updated:.*$/m, `updated: ${updated}`)}${raw.slice(end)}`;
+}
+
+function singleLineHeading(value: string): string {
+  return value
+    .replace(/\s+/g, " ")
+    .replace(/^#+\s*/, "")
+    .trim()
+    .slice(0, 120);
+}
+
 export function renderCaptureNote(
   note: ProposedCaptureNote,
   domain: DomainProfile = DEFAULT_DOMAIN_PROFILE,

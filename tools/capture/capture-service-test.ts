@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { loadWorkspaceContext } from "../workspaces/config.js";
 import {
   CaptureConflictError,
+  appendCaptureUpdate,
   applyCaptureProposal,
   applyUnreviewedCapture,
   getCaptureProposal,
@@ -577,6 +578,65 @@ async function testSymlinkEscapesAreRejected(): Promise<void> {
   }
 }
 
+async function testInPlaceUpdateIsIdempotentAndKeepsOneFrontmatter(): Promise<void> {
+  await withWorkspace(async (repoRoot) => {
+    const target = "kb/topics/publisher-outreach.md";
+    const original =
+      "---\nmodule: business\nstatus: canonical\nupdated: 2026-09-01\n---\n# Publisher Outreach\n\nSeven publishers were contacted.\n";
+    await write(repoRoot, target, original);
+    const finding = "Six of seven publishers are confirmed on YouTube Playables.";
+
+    const planned = await appendCaptureUpdate({
+      repoRoot,
+      path: target,
+      heading: "Playables verification",
+      body: finding,
+      updated: "2026-09-23",
+      dryRun: true,
+    });
+    assert.equal(planned.action, "updated");
+    assert.equal(await fs.readFile(path.join(repoRoot, target), "utf8"), original);
+
+    const applied = await appendCaptureUpdate({
+      repoRoot,
+      path: target,
+      heading: "Playables verification",
+      body: finding,
+      updated: "2026-09-23",
+    });
+    assert.equal(applied.action, "updated");
+    const updated = await fs.readFile(path.join(repoRoot, target), "utf8");
+    assert.equal(updated.match(/^---$/gm)?.length, 2);
+    assert.match(updated, /^updated: 2026-09-23$/m);
+    assert.match(updated, /\n## Playables verification \(2026-09-23\)\n\nSix of seven/);
+    assert.match(updated, /Seven publishers were contacted\./);
+
+    const repeated = await appendCaptureUpdate({
+      repoRoot,
+      path: target,
+      heading: "Playables verification",
+      body: `  ${finding}\n`,
+      updated: "2026-09-24",
+    });
+    assert.equal(repeated.action, "unchanged");
+    assert.equal(await fs.readFile(path.join(repoRoot, target), "utf8"), updated);
+
+    await assert.rejects(
+      appendCaptureUpdate({ repoRoot, path: "kb/topics/missing.md", heading: "x", body: finding }),
+      CaptureConflictError,
+    );
+    await assert.rejects(
+      appendCaptureUpdate({
+        repoRoot,
+        path: "kb/projects/x/project.md",
+        heading: "x",
+        body: finding,
+      }),
+      /kb\/topics\/ or kb\/terms\//,
+    );
+  });
+}
+
 const tests = [
   testFuzzyCandidateIsAdvisoryAndRejectIsNonMutating,
   testExactUnreviewedCreate,
@@ -584,6 +644,7 @@ const tests = [
   testReplaceWithMatchingHash,
   testStaleHashLeavesCanonicalContentUntouched,
   testExplicitAppendIsDeterministic,
+  testInPlaceUpdateIsIdempotentAndKeepsOneFrontmatter,
   testDryRunPreservesTargetAndProposal,
   testConcurrentApplyAllowsOneCanonicalMutation,
   testCaptureCliListShowApplyAndReject,

@@ -406,7 +406,7 @@ async function handleRequest(method: string, params: JsonObject): Promise<any> {
         protocolVersion: negotiateProtocolVersion(params?.protocolVersion),
         capabilities: { tools: {}, resources: {} },
         serverInfo: SERVER_INFO,
-        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). For ordinary grounded Q&A, call kb.answer_and_capture exactly once with responseMode=auto, responseFormat=compact, and captureStrategy=auto. Automatic retention is read-only: it does not create Markdown, open questions, or review proposals. Do not call kb.search or kb.get_record first. After a successful call, return its answer, citations, capture status, tokenUsage, and timings immediately. Use captureStrategy=note or captureStrategy=open_question only when the user explicitly asks to retain knowledge, and provide a deliberate title/routing context. Do not inspect or manually edit KB/navigation/digest files or run broad checks unless the user explicitly asks for maintenance. Use kb.search only for evidence-only requests, kb.get_record only for an explicitly requested record, and kb.resume_project for a named project. Writes are ${DEFAULT_ENABLE_WRITES ? "available for explicit retention" : "disabled"}.`,
+        instructions: `GKE local knowledge server (${DEFAULT_MCP_PROFILE} profile). For grounded Q&A, call kb.answer_and_capture exactly once with responseMode=auto, responseFormat=compact, and captureStrategy=auto; do not call kb.search or kb.get_record first. Return its answer, citations, capture status, tokenUsage, and timings immediately. Retention is automatic and update-first; do not ask the user for permission. When the KB lacked or contradicted the answer and you then established a durable result (research, repository inspection, user-stated facts), make one retention call to kb.answer_and_capture with captureStrategy=auto and noteBody set to the concise finding, plus projectId when it concerns a project. The server updates the owning record: the project's Last meaningful change, or the matching topic or term. It creates a note only when no home exists. Use captureStrategy=open_question when a durable gap stays unresolved. Never retain secrets, credentials, or transient chat. Report the capture action in one line. Do not hand-edit navigation or digest files unless asked. Use kb.search only for evidence-only requests, kb.get_record only for an explicitly requested record, and kb.resume_project for a named project. Writes are ${DEFAULT_ENABLE_WRITES ? "enabled" : "disabled"}.`,
       };
     case "ping":
       return {};
@@ -715,15 +715,22 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
 
   const captureStrategyRaw = normalizeScalar(args?.captureStrategy).toLowerCase() || "auto";
   const responseMode = normalizeResponseMode(args?.responseMode);
-  let strategy = captureStrategyRaw;
+  const strategy = captureStrategyRaw;
   const fastPathSkipEligible = Boolean(answer?.fastPath?.used && answer?.fastPath?.alreadyCaptured);
-  if (captureStrategyRaw === "auto") {
-    strategy = "none";
-  }
-
   let capture: any;
   let captureMs = 0;
-  if (strategy === "note") {
+  if (strategy === "auto") {
+    const captureStartedAt = performance.now();
+    capture = await autoCaptureFinding(args, answer, { dryRun, fastPathSkipEligible }).catch(
+      (error: unknown) => ({
+        action: "failed",
+        dryRun,
+        path: "(none)",
+        reason: `Automatic retention failed: ${error instanceof Error ? error.message : String(error)}`,
+      }),
+    );
+    captureMs = roundMs(performance.now() - captureStartedAt);
+  } else if (strategy === "note") {
     const captureStartedAt = performance.now();
     const noteKind = normalizeScalar(args?.noteKind).toLowerCase() || "topic";
     const requestedModule = normalizeScalar(args?.module);
@@ -796,13 +803,7 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
       action: "skipped",
       dryRun,
       path: "(none)",
-      reason: fastPathSkipEligible
-        ? "Existing curated term note was reused via fast path."
-        : captureStrategyRaw === "auto"
-          ? DEFAULT_ENABLE_WRITES
-            ? "Automatic retention is read-only. Use captureStrategy=note or open_question only when the user explicitly asks to retain knowledge."
-            : "Automatic retention is read-only, and writes are disabled for this workspace."
-          : "Capture disabled by caller (captureStrategy=none).",
+      reason: "Capture disabled by caller (captureStrategy=none).",
     };
     captureMs = 0;
   } else {
@@ -863,6 +864,125 @@ async function handleKbAnswerAndCapture(args: JsonObject): Promise<ToolPayload> 
       dryRun,
     },
   };
+}
+
+/**
+ * Automatic, update-first retention. Without a finding there is nothing new
+ * to retain. With one, the server updates the record that already owns the
+ * subject (project record, explicit note, same-slug or duplicate note) and
+ * creates a new note only when no home exists.
+ */
+async function autoCaptureFinding(
+  args: JsonObject,
+  answer: any,
+  options: { dryRun: boolean; fastPathSkipEligible: boolean },
+): Promise<any> {
+  const { dryRun } = options;
+  const finding = typeof args?.noteBody === "string" ? args.noteBody.trim() : "";
+  const skipped = (reason: string) => ({ action: "skipped", dryRun, path: "(none)", reason });
+  if (options.fastPathSkipEligible && !finding) {
+    return skipped("Existing curated term note was reused via fast path.");
+  }
+  if (!DEFAULT_ENABLE_WRITES && !dryRun) {
+    return skipped("Writes are disabled for this workspace; nothing was retained.");
+  }
+  if (!finding) {
+    return skipped(
+      answer?.abstained
+        ? "The KB lacks this answer. After establishing a durable answer, call again with captureStrategy=auto and noteBody (plus projectId for a project fact). Use open_question if it stays unresolved."
+        : "The KB already covers this; nothing new to retain.",
+    );
+  }
+
+  const notePath = normalizeScalar(args?.notePath);
+  // When the KB partly answered, its top citation is the natural home.
+  const citedPath = answer?.abstained
+    ? ""
+    : normalizeScalar(Array.isArray(answer?.citations) ? answer.citations[0]?.path : "");
+  const explicitProjectId = normalizeScalar(args?.projectId);
+  const projectId =
+    explicitProjectId ||
+    inferEvidenceProjectId(notePath) ||
+    (notePath ? "" : inferEvidenceProjectId(citedPath));
+  const today = getTodayIsoDate();
+  if (projectId) {
+    const recorded = await projectService
+      .recordChange({ projectId, change: finding, date: today, dryRun })
+      .catch((error) => {
+        // An inferred folder that is not a project record falls through to notes.
+        if (explicitProjectId) throw error;
+        return null;
+      });
+    if (recorded) {
+      if (recorded.changed && !dryRun) await scheduleDocumentRefresh();
+      return {
+        action: recorded.changed ? "updated" : "unchanged",
+        home: "project",
+        path: recorded.path,
+        projectId: recorded.projectId,
+        section: "Last meaningful change",
+        dryRun,
+      };
+    }
+  }
+
+  const kind = normalizeScalar(args?.noteKind).toLowerCase() === "term" ? "term" : "topic";
+  const title = normalizeScalar(args?.noteTitle) || inferNoteTitle(args?.question, kind);
+  const updateExisting = async (target: string, home: string) => {
+    const result = await captureService.appendUpdate({
+      path: target,
+      heading: title,
+      body: finding,
+      updated: today,
+      dryRun,
+    });
+    return { action: result.action, home, path: result.path, dryRun };
+  };
+  if (notePath && (await captureService.targetHash(notePath))) {
+    return updateExisting(notePath, "explicit-note");
+  }
+
+  const note = await upsertKbNote({
+    kind,
+    title,
+    body: finding,
+    path: notePath,
+    module: normalizeScalar(args?.module),
+    track: normalizeScalar(args?.track),
+    type: normalizeScalar(args?.noteType) || "concept",
+    status: normalizeScalar(args?.noteStatus) || "draft",
+    tags:
+      normalizeTags(args?.noteTags) ||
+      inferDefaultTags(
+        args?.mode,
+        normalizeScalar(args?.module) || inferPrimaryModule(args?.question, args?.mode),
+      ),
+    owner: normalizeScalar(args?.noteOwner) || "kb-mcp-server",
+    updated: today,
+    sourceOperation: "answer",
+    evidenceCitations: Array.isArray(answer?.citations) ? answer.citations : [],
+    evidenceRoutes: Array.isArray(answer?.evidence)
+      ? (answer.evidence as SearchHit[]).map((item) => ({
+          path: normalizeScalar(item?.path),
+          track: normalizeScalar(item?.track),
+          module: normalizeScalar(item?.module),
+          projectId: inferEvidenceProjectId(item?.path),
+          score: Number(item?.score),
+        }))
+      : [],
+    groundedConfidence:
+      answer?.confidence && typeof answer.confidence === "object" ? answer.confidence : null,
+    planOnly: true,
+    dryRun,
+  });
+  if (note.existsBefore) return updateExisting(note.path, "same-subject-note");
+  if (note.duplicateCandidates?.length) {
+    return updateExisting(note.duplicateCandidates[0].path, "matching-note");
+  }
+  if (!notePath && /^kb\/(topics|terms)\/.+\.md$/.test(citedPath)) {
+    return updateExisting(citedPath, "cited-note");
+  }
+  return { ...(await note.commit()), home: "new-note" };
 }
 
 async function buildGroundedAnswerPayload(args: JsonObject): Promise<ToolPayload> {
@@ -1042,6 +1162,30 @@ async function upsertKbNote(options: JsonObject): Promise<any> {
   if (requestedBaseContentHash && requestedBaseContentHash !== plan.proposal.baseContentHash) {
     throw new Error(`Capture target changed before planning: ${plan.proposal.proposedNote.path}`);
   }
+  const commit = () => commitKbNotePlan(plan, { kind, title, dryRun, sourceOperation, options });
+  if (options?.planOnly) {
+    return {
+      path: plan.proposal.proposedNote.path,
+      existsBefore: plan.targetExists,
+      duplicateCandidates: plan.proposal.duplicateCandidates,
+      commit,
+    };
+  }
+  return commit();
+}
+
+async function commitKbNotePlan(
+  plan: Awaited<ReturnType<typeof captureService.plan>>,
+  context: {
+    kind: string;
+    title: string;
+    dryRun: boolean;
+    sourceOperation: CaptureSourceOperation;
+    options: JsonObject;
+  },
+): Promise<any> {
+  const { kind, title, dryRun, sourceOperation, options } = context;
+  const normalizedTags = normalizeTags(options?.tags);
   const unchanged =
     sourceOperation === "ingest" &&
     plan.targetExists &&

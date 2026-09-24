@@ -29,11 +29,23 @@ The `full` profile additionally exposes:
   questions use the shared atomic mutation service, so exact normalized
   duplicates return `unchanged` instead of adding another entry.
 
-Automatic retention through `kb.answer_and_capture` is read-only regardless of
-whether writes are enabled. It creates no Markdown, open question, or review
-proposal. Explicit `captureStrategy=note` and `captureStrategy=open_question`
-remain available when writes are enabled and the user deliberately requests
-retention. When writes are disabled, mutation tools are omitted from discovery.
+Automatic retention through `kb.answer_and_capture` is update-first. Without
+`noteBody`, `captureStrategy=auto` never writes. With `noteBody` it resolves one
+home in this order and appends the finding there:
+
+1. The project record named by `projectId` (or implied by `notePath` or the top
+   citation): a dated, newest-first entry in `Last meaningful change`, with
+   `updated` bumped.
+2. An existing `notePath`, the same-slug note, a fuzzy duplicate candidate, or
+   the cited topic or term: a dated section appended in place.
+3. Only when none exists: a new note, or a review proposal when routing is
+   ambiguous.
+
+Content already present returns `unchanged`, so retries never duplicate. A
+failed retention is reported as `capture.action=failed` and never breaks the
+answer. `captureStrategy=note` and `captureStrategy=open_question` stay
+available for deliberate captures. When writes are disabled, retention is
+skipped and mutation tools are omitted from discovery.
 
 ## Run and configure
 
@@ -248,8 +260,8 @@ writes even if `KB_MCP_ENABLE_WRITES=true`.
 - Real writes require `KB_MCP_ENABLE_WRITES=true`; `dryRun=true` remains
   available for write previews.
 - `kb.answer_grounded` is evidence-gated and can abstain.
-- `kb.answer_and_capture` answers read-only by default; note and open-question
-  retention require an explicit capture strategy.
+- `kb.answer_and_capture` writes only when given a finding (`noteBody`), and
+  then updates the owning record before it considers creating one.
 - Grounded answers report an estimated visible-text token footprint split across
   the request, retrieved evidence, and answer. This is not a provider-billed
   total and excludes hidden agent context.

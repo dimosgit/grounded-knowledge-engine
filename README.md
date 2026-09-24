@@ -89,8 +89,12 @@ The default `core` profile deliberately exposes four semantic tools:
   policy.
 - `kb.resume_project` — resume one explicitly identified project.
 
-Automatic retention is read-only. Canonical writes require an explicit capture
-strategy, a writable workspace, and the capture safety checks. The `full`
+Retention is automatic and update-first. When an agent establishes a durable
+finding the KB lacked, it passes the finding as `noteBody` with
+`captureStrategy=auto`. The server appends it to the owning record: a project's
+`Last meaningful change`, or the matching topic or term note. It creates a new
+note only when no home exists. Repeats are idempotent, and all writes need a
+writable workspace and pass the capture safety checks. The `full`
 profile adds advanced retrieval, refresh, decision operations, and explicit
 write tools without changing the Markdown source of truth.
 

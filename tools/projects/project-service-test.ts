@@ -11,6 +11,7 @@ import {
   getProject,
   linkProjectSource,
   listProjects,
+  recordProjectChange,
   updateProject,
   validateAllProjects,
   validateProject,
@@ -545,6 +546,68 @@ Duplicate.
     );
   } finally {
     await fs.rm(cliRoot, { recursive: true, force: true });
+  }
+
+  const retentionRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-project-retention-"));
+  try {
+    const retention = await createProject({
+      repoRoot: retentionRoot,
+      projectId: "retention-pilot",
+      title: "Retention Pilot",
+      owner: "tester",
+    });
+    const retentionPath = path.join(retentionRoot, retention.path);
+    const change = "Publisher replies are tracked in the outreach record.";
+    const planned = await recordProjectChange({
+      repoRoot: retentionRoot,
+      projectId: "retention-pilot",
+      change,
+      date: "2026-09-20",
+      dryRun: true,
+    });
+    assert.equal(planned.changed, true);
+    assert.doesNotMatch(await fs.readFile(retentionPath, "utf8"), /Publisher replies/);
+
+    const first = await recordProjectChange({
+      repoRoot: retentionRoot,
+      projectId: "retention-pilot",
+      change,
+      date: "2026-09-20",
+    });
+    assert.equal(first.changed, true);
+    const second = await recordProjectChange({
+      repoRoot: retentionRoot,
+      projectId: "retention-pilot",
+      change: "The review build was renamed.",
+      date: "2026-09-21",
+    });
+    assert.equal(second.changed, true);
+    const repeat = await recordProjectChange({
+      repoRoot: retentionRoot,
+      projectId: "retention-pilot",
+      change: `  ${change.replace(" ", "\n")} `,
+      date: "2026-09-22",
+    });
+    assert.equal(repeat.changed, false);
+
+    const retained = await fs.readFile(retentionPath, "utf8");
+    const section = retained.split("## Last meaningful change")[1].split("\n## ")[0].trim();
+    assert.equal(
+      section,
+      `2026-09-21 — The review build was renamed.\n\n2026-09-20 — ${change}`,
+      "newest change first, placeholder removed",
+    );
+    assert.match(retained, /^updated: 2026-09-21$/m);
+    assert.equal(retained.split("## Last meaningful change").length, 2);
+    assert.equal(
+      (await validateProject("retention-pilot", { repoRoot: retentionRoot })).valid,
+      true,
+    );
+    await assert.rejects(
+      recordProjectChange({ repoRoot: retentionRoot, projectId: "missing", change }),
+    );
+  } finally {
+    await fs.rm(retentionRoot, { recursive: true, force: true });
   }
 
   console.log("Project service and CLI tests passed.");

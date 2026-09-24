@@ -5,9 +5,11 @@ import {
 } from "../grounding/grounding-application-service.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
 import {
+  appendCaptureUpdate,
   applyCaptureProposal,
   applyUnreviewedCapture,
   getCaptureProposal,
+  hashCaptureTarget,
   isCaptureProposalUnchanged,
   listCaptureProposalSummaries,
   listCaptureProposals,
@@ -21,6 +23,7 @@ import {
   type CaptureGroundedAnswerOptions,
   type CaptureGroundedAnswerResult,
 } from "./grounded-capture-service.js";
+import type { AppendCaptureUpdateOptions, AppendCaptureUpdateResult } from "./capture-service.js";
 import type {
   ApplyCaptureProposalOptions,
   ApplyCaptureProposalResult,
@@ -34,6 +37,10 @@ import type {
 export type CapturePlanInput = Omit<PlanCaptureInput, "repoRoot" | "workspace">;
 export type CaptureApplyInput = Omit<
   ApplyCaptureProposalOptions,
+  "repoRoot" | "workspace" | "refresh"
+>;
+export type CaptureUpdateInput = Omit<
+  AppendCaptureUpdateOptions,
   "repoRoot" | "workspace" | "refresh"
 >;
 export type GroundedCaptureInput = Omit<
@@ -119,6 +126,19 @@ export class CaptureApplicationService {
       workspace: this.workspace,
       refresh: this.refresh,
     });
+  }
+
+  async appendUpdate(input: CaptureUpdateInput): Promise<AppendCaptureUpdateResult> {
+    return appendCaptureUpdate({
+      ...input,
+      repoRoot: this.repoRoot,
+      workspace: this.workspace,
+      refresh: this.refresh,
+    });
+  }
+
+  async targetHash(relPath: string): Promise<string | null> {
+    return hashCaptureTarget(this.repoRoot, relPath, this.workspace);
   }
 
   async isUnchanged(proposal: CaptureProposal): Promise<boolean> {

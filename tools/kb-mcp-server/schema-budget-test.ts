@@ -124,6 +124,8 @@ async function assertProtocolVersion(version: string): Promise<void> {
     assert.match(initialized.instructions, /call kb\.answer_and_capture exactly once/i);
     assert.match(initialized.instructions, /do not call kb\.search or kb\.get_record first/i);
     assert.match(initialized.instructions, /tokenUsage, and timings immediately/i);
+    assert.match(initialized.instructions, /retention is automatic and update-first/i);
+    assert.match(initialized.instructions, /creates a note only when no home exists/i);
     client.notify("notifications/initialized", {});
 
     const listed = await client.request("tools/list", {});
@@ -144,7 +146,7 @@ async function assertProtocolVersion(version: string): Promise<void> {
       captureStrategy: "auto",
     });
     assert.equal(answered.isError, undefined);
-    assert.equal(answered.structuredContent?.strategy, "none");
+    assert.equal(answered.structuredContent?.strategy, "auto");
     assert.equal(answered.structuredContent?.answer?.tokenUsage?.kind, "estimate");
     assert.ok(answered.structuredContent?.answer?.tokenUsage?.totalTokens > 0);
     assert.match(answered.content?.[0]?.text || "", /Token usage: ~\d+ visible tokens/);

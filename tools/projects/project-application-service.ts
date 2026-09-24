@@ -20,6 +20,7 @@ import {
   getProject,
   linkProjectSource,
   listProjects,
+  recordProjectChange,
   updateProject,
   validateAllProjects,
   validateProject,
@@ -30,6 +31,7 @@ import {
   type LinkProjectSourceOptions,
   type LoadedProject,
   type ProjectServiceOptions,
+  type RecordProjectChangeOptions,
   type UpdatedProject,
   type UpdateProjectOptions,
 } from "./project-service.js";
@@ -44,6 +46,7 @@ type ProjectContextKeys = keyof ProjectServiceOptions;
 
 export type CreateProjectInput = Omit<CreateProjectOptions, ProjectContextKeys>;
 export type UpdateProjectInput = Omit<UpdateProjectOptions, ProjectContextKeys>;
+export type RecordProjectChangeInput = Omit<RecordProjectChangeOptions, ProjectContextKeys>;
 export type CompleteProjectTaskInput = Omit<CompleteProjectTaskOptions, ProjectContextKeys>;
 export type ProjectLifecycleInput = Omit<ProjectLifecycleOptions, ProjectContextKeys>;
 export type AddProjectTaskInput = Omit<AddProjectTaskOptions, ProjectContextKeys>;
@@ -97,6 +100,12 @@ export class ProjectApplicationService {
 
   async update(input: UpdateProjectInput): Promise<UpdatedProject> {
     const result = await updateProject({ ...input, ...this.context() });
+    await this.refreshAfterMutation(result.dryRun, result.changed);
+    return result;
+  }
+
+  async recordChange(input: RecordProjectChangeInput): Promise<UpdatedProject> {
+    const result = await recordProjectChange({ ...input, ...this.context() });
     await this.refreshAfterMutation(result.dryRun, result.changed);
     return result;
   }
