@@ -54,6 +54,12 @@ jobs:
       - name: Complete engine verification
         run: npm run test:gke
 
+      - name: Workflow pilot verification
+        run: npm run test:workflow-pilot
+
+      - name: Workflow pilot lint
+        run: npx eslint 'scripts/workflow-pilot/**/*.mjs'
+
       - name: Sanitization gate (strings + filenames + gitleaks)
         # CI has no access to the maintainer's machine-local blocked-term
         # overlay, so it runs the published pattern tier only. The full gate is

@@ -158,6 +158,7 @@ See the [Cockpit guide](apps/cockpit/README.md) or open the
 - [MCP server reference](tools/kb-mcp-server/README.md)
 - [Document ingestion reference](tools/ingest/README.md)
 - [GitHub Copilot integration](docs/integrations/github-copilot.md)
+- [Complex task workflows](docs/agent-workflows.md)
 
 ## Development
 

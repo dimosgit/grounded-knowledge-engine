@@ -1,0 +1,37 @@
+name: Auto tag
+
+# Creates vX.Y.Z when a push to main lands a package.json version that has no
+# tag yet. Existing tags are never moved.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag the package version
+        run: |
+          set -euo pipefail
+          tag="v$(jq -r '.version' package.json)"
+          if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+            echo "$tag already exists."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "$tag"
+          echo "Created $tag."

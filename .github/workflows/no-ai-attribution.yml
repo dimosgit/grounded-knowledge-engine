@@ -1,0 +1,105 @@
+name: No AI attribution
+
+# Enforces the "Authorship and attribution" rule in AGENTS.md. A merged AI
+# credit reaches GitHub's contributor graph through refs/pull/N/head, which
+# GitHub never deletes, so the only fix is refusing it before merge.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # This name is the status-check context branch rules require.
+    name: No AI attribution
+    runs-on: ubuntu-latest
+    env:
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+      PUSH_BEFORE: ${{ github.event.before }}
+      PUSH_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Every commit in the range lands in history on merge, not just the tip.
+          fetch-depth: 0
+
+      - name: Reject AI attribution in commits
+        run: |
+          set -euo pipefail
+          if [ -n "$PR_BASE" ] && [ -n "$PR_HEAD" ]; then
+            revs=$(git rev-list "$PR_BASE..$PR_HEAD")
+          elif git rev-parse --verify --quiet "$PUSH_BEFORE^{commit}" >/dev/null; then
+            revs=$(git rev-list "$PUSH_BEFORE..$PUSH_SHA")
+          else
+            revs="$PUSH_SHA"
+          fi
+
+          # Anchored: a real trailer or footer starts its own line, so prose that
+          # merely names one (like this workflow's own commit) is not blocked.
+          TRAILER='^[[:space:]]*(co-authored-by|signed-off-by):[[:space:]]*.*(claude|copilot|chatgpt|gpt-[0-9]|gemini|cursor|devin|codex|anthropic|openai)'
+          FOOTER='^[[:space:]]*(🤖[[:space:]]*)?generated (with|by) \[?(claude|copilot|chatgpt|gemini|cursor|devin|codex)'
+          IDENTITY='copilot|copilot-swe-agent|noreply@anthropic\.com|claude\[bot\]|codex\[bot\]'
+
+          failed=0
+          for sha in $revs; do
+            who=$(git log -1 --format='%an%n%ae%n%cn%n%ce' "$sha")
+            body=$(git log -1 --format='%B' "$sha")
+            hit=""
+            echo "$who" | grep -qiE "$IDENTITY" && hit="authored or committed by a bot"
+            echo "$body" | grep -qiE "$TRAILER" && hit="carries an AI co-author trailer"
+            echo "$body" | grep -qiE "$FOOTER" && hit="carries an AI generation footer"
+            if [ -n "$hit" ]; then
+              echo "::error::$(git log -1 --format='%h %s' "$sha") — $hit"
+              failed=1
+            fi
+          done
+
+          if [ "$failed" = 1 ]; then
+            echo "Reword the listed commits before merging (see AGENTS.md, Authorship and attribution)."
+            exit 1
+          fi
+          echo "No AI attribution in commits."
+
+      - name: Reject AI attribution in the pull request
+        if: github.event_name == 'pull_request'
+        env:
+          # Untrusted text: passed through env, never interpolated into the script.
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          FOOTER='^[[:space:]]*[-*>]?[[:space:]]*(🤖[[:space:]]*)?generated (with|by) \[?(claude|copilot|chatgpt|gemini|cursor|devin|codex)'
+          TRAILER='^[[:space:]]*co-authored-by:[[:space:]]*.*(claude|copilot|chatgpt|gpt-[0-9]|gemini|cursor|devin|codex|anthropic|openai)'
+          if printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -qiE "$FOOTER|$TRAILER"; then
+            echo "::error::The pull request title or body credits an AI."
+            printf '%s\n%s\n' "$PR_TITLE" "$PR_BODY" | grep -inE "$FOOTER|$TRAILER" | sed 's/^/    /'
+            exit 1
+          fi
+          echo "No AI attribution in the pull request."
+
+      - name: Reject AI bylines in added source lines
+        run: |
+          set -euo pipefail
+          if [ -n "$PR_BASE" ] && [ -n "$PR_HEAD" ]; then
+            from="$PR_BASE"; to="$PR_HEAD"
+          elif git rev-parse --verify --quiet "$PUSH_BEFORE^{commit}" >/dev/null; then
+            from="$PUSH_BEFORE"; to="$PUSH_SHA"
+          else
+            from=$(git rev-parse --verify --quiet "$PUSH_SHA^" || git hash-object -t tree /dev/null); to="$PUSH_SHA"
+          fi
+
+          # Only added comment-shaped lines that claim authorship. This file is
+          # excluded because it necessarily contains every string it bans.
+          BYLINE='^\+.*(//|#|/\*|\*|<!--|--)[[:space:]]*.*((ai|machine)[- ]generated|(generated|written|authored|created|added|produced) (by|with) (an? )?(ai|llm|assistant|claude|copilot|chatgpt|gpt-[0-9]|gemini|cursor|devin|codex|anthropic))'
+          hits=$(git diff --unified=0 "$from" "$to" -- . ':(exclude).github/workflows/no-ai-attribution.yml' | grep -inE "$BYLINE" || true)
+          if [ -n "$hits" ]; then
+            echo "::error::An added line marks the source as AI-written."
+            echo "$hits" | sed 's/^/    /'
+            exit 1
+          fi
+          echo "No AI bylines in added source lines."

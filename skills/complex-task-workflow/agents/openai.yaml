@@ -1,0 +1,7 @@
+interface:
+  display_name: "Complex Task Workflow"
+  short_description: "Route substantial work with lower overhead"
+  default_prompt: "Use $complex-task-workflow for this substantial task, minimizing total context and delegating only work that repays agent startup."
+
+policy:
+  allow_implicit_invocation: false

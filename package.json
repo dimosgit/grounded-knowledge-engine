@@ -66,6 +66,7 @@
     "test:ingest:unit": "tsx tools/ingest/unit-test.ts",
     "test:ingest": "tsx tools/ingest/ingest-integration-test.ts && tsx tools/ingest/source-aware-integration-test.ts",
     "test:gke": "npm run test:layers && npm run test:contracts && npm run test:contracts:integration && npm run test:mcp:catalog && npm run test:mcp:setup && npm run test:package && npm run test:mcp:transport && npm run test:mcp:http && npm run test:workspaces && npm run test:domain && npm run test:workspaces:mcp && npm run test:projects && npm run test:project-service && npm run test:checkpoints && npm run test:decisions && npm run test:project-review && npm run test:document-core && npm run test:document-snapshot && npm run test:answer-service && npm run test:grounding-service && npm run test:questions && npm run test:capture && npm run test:workspace-export && npm run smoke:mcp && npm run test:loop && npm run test:ingest:unit && npm run test:ingest && npm run test:retrieval",
+    "test:workflow-pilot": "node --test scripts/workflow-pilot/pilot.test.mjs",
     "project": "tsx tools/projects/cli.ts",
     "decisions": "tsx tools/decisions/cli.ts",
     "layers": "node scripts/layers.mjs",

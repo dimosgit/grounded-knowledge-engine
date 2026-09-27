@@ -42,6 +42,20 @@ file with overlapping rules.
   the next step needs authority beyond the request. Report evidence honestly;
   never claim an unrun or failed gate passed.
 
+## Token-first execution routing
+
+For one clear implementation path, stay in the current agent, do not load the
+optional complex-task workflow, read only the necessary files, batch related
+inspection, and stop after the smallest meaningful check passes. When the request
+already names the writable files and acceptance command, inspect those files in one
+batch, implement once, run that command, and stop if it passes; add exploratory
+checks only when a requirement remains unresolved. Skip version-control commands
+when the assigned working directory is not a repository. Load
+`.agents/skills/complex-task-workflow/SKILL.md` only when work has at least two
+disjoint deliverables that would each take substantial implementation effort, or
+when the user explicitly prioritizes parallel elapsed time. Treat model changes and
+new agents as overhead that must replace more context or work than they add.
+
 ## Authorship and attribution
 
 AI assistants are tools, not repository contributors. Never use an AI product,

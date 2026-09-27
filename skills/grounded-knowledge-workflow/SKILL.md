@@ -21,6 +21,19 @@ retrieval, project scope, citations, and writes.
   "Retain automatically, update first" below. Do no other maintenance unless
   asked.
 
+## Coordinate complex implementation separately
+
+In a source checkout, only substantial implementation work with independent
+workstreams or a named high-risk decision can use the optional
+`skills/complex-task-workflow/SKILL.md` for token-first routing and bounded native
+workers. Do not load it for routine or sequential work. Check that the file exists:
+the published package does not include this optional skill. If it is absent,
+continue using the active client's normal implementation workflow without
+installing anything or treating the missing skill as a blocker.
+
+This skill continues to own local grounding, explicit project resume, and
+authorized durable capture.
+
 ## Choose the operation
 
 1. For a named project or “continue where I stopped,” call
