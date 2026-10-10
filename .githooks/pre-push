@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs the CI gates for changed paths before pushing (see scripts/verify-local.mjs).
+exec node "$(git rev-parse --show-toplevel)/scripts/verify-local.mjs"

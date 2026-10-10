@@ -125,6 +125,13 @@ Do not run `test` and `build` in parallel — both sync Markdown into
 
 ## CI gates that bite
 
+- **Run `npm run verify` before every commit and push.** It mirrors
+  `.github/workflows/ci.yml` for the changed paths and always runs the full
+  scrub gate; `--all` runs every gate and `--list` prints the plan. Do not
+  commit or push on a failure, and do not bypass the pre-push hook with
+  `--no-verify`. Enable the hook once per clone with `npm run hooks:install`.
+  When CI gains a gate, add it to `scripts/verify-local.mjs` in the same
+  change.
 - **Prettier is a CI gate**, including root-level `*.md`. Run `npm run format`
   (root) or `npm run format` (cockpit) after editing.
 - **The scrub gate scans tracked files only** (`git grep`). A new file passes

@@ -74,6 +74,8 @@
     "ingest": "tsx tools/ingest/ingest.ts",
     "ingest:fixtures": "tsx tools/ingest/fixtures/make-fixtures.ts",
     "scrub": "bash scripts/scrub-gate.sh",
+    "verify": "node scripts/verify-local.mjs",
+    "hooks:install": "git config core.hooksPath .githooks",
     "lint": "eslint tools packages/contracts scripts/layers.mjs scripts/layers-test.mjs scripts/import-boundaries.mjs scripts/import-boundaries-test.mjs scripts/contracts-isolation-test.mjs",
     "format": "prettier --write \"tools/**/*.ts\" \"packages/contracts/**/*.{ts,json}\" \"scripts/**/*.{ts,mjs}\" \"*.{ts,json,md}\"",
     "format:check": "prettier --check \"tools/**/*.ts\" \"packages/contracts/**/*.{ts,json}\" \"scripts/**/*.{ts,mjs}\" \"*.{ts,json,md}\"",
