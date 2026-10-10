@@ -65,14 +65,10 @@ session.
 
 ## The core loop
 
-```mermaid
-flowchart LR
-    D[Markdown and documents] --> I[Disposable local index]
-    I --> A[Cited answer]
-    A --> C[Explicit capture]
-    C --> D
-    D --> R[Project resume and handoff]
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-overview-dark.svg">
+  <img alt="AI coding agents call one local MCP server. It answers from a disposable retrieval index, writes explicit captures back to canonical Markdown records, and resumes projects from them. Document ingestion adds new records; the optional Cockpit reads them." src="docs/architecture-overview.svg">
+</picture>
 
 1. Index or ingest local evidence.
 2. Answer from that evidence with citations.

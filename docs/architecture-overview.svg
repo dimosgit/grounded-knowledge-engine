@@ -1,0 +1,115 @@
+<svg viewBox="0 44 1120 690" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="gke-architecture-readme-title gke-architecture-readme-desc">
+  <title id="gke-architecture-readme-title">Grounded Knowledge Engine architecture</title>
+  <desc id="gke-architecture-readme-desc">AI coding agents call one local MCP server, which answers from a disposable retrieval index, writes explicit captures back to canonical Markdown records, and resumes projects from them; document ingestion adds new records and the optional Cockpit reads them.</desc>
+  <defs>
+  <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5a6068"/></marker>
+  <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#3e5446"/></marker>
+  <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#2a737d"/></marker>
+</defs>
+  <rect y="44" width="100%" height="100%" fill="#f8f5ef"/>
+  <text x="36" y="74" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" letter-spacing="0.18em">ARCHITECTURE · LOCAL-FIRST PROJECT MEMORY</text>
+  <text x="36" y="106" fill="#1a1d20" font-size="26" font-family="'Newsreader', Georgia, 'Times New Roman', serif">Markdown in, cited answers out, knowledge back to Markdown.</text>
+  <g transform="translate(0,84)">
+  <rect x="540" y="72" width="240" height="344" rx="8" fill="rgba(26,29,32,0.025)" stroke="rgba(26,29,32,0.16)" stroke-width="0.8" stroke-dasharray="4,3"/>
+  <rect x="556" y="66" width="81" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="564" y="75" fill="#6e6a63" font-size="7.5" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" letter-spacing="0.14em">ENGINE · tools/</text>
+  <rect x="840" y="72" width="240" height="344" rx="8" fill="rgba(26,29,32,0.025)" stroke="rgba(26,29,32,0.16)" stroke-width="0.8" stroke-dasharray="4,3"/>
+  <rect x="856" y="66" width="116" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="864" y="75" fill="#6e6a63" font-size="7.5" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" letter-spacing="0.14em">KNOWLEDGE · your folder</text>
+  <path d="M216,248 H292" fill="none" stroke="#2a737d" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+  <path d="M496,228 H512 Q520,228 520,220 V152 Q520,144 528,144 H560" fill="none" stroke="#5a6068" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M496,248 H560" fill="none" stroke="#5a6068" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M496,268 H512 Q520,268 520,276 V344 Q520,352 528,352 H560" fill="none" stroke="#5a6068" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M760,144 H860" fill="none" stroke="#5a6068" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M960,232 V184" fill="none" stroke="#5a6068" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M760,248 H860" fill="none" stroke="#3e5446" stroke-width="1.2" marker-end="url(#arrow-accent)"/>
+  <path d="M760,352 H860" fill="none" stroke="#5a6068" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M990,456 V384" fill="none" stroke="#5a6068" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M880,384 V492 Q880,500 872,500 H760" fill="none" stroke="#5a6068" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <rect x="236" y="228" width="37" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="254" y="237" fill="#6e6a63" font-size="8" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">STDIO</text>
+  <rect x="792" y="124" width="37" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="810" y="133" fill="#6e6a63" font-size="8" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">QUERY</text>
+  <rect x="968" y="202" width="47" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="974" y="211" fill="#6e6a63" font-size="8" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" letter-spacing="0.06em">REBUILD</text>
+  <rect x="779" y="228" width="62" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="810" y="237" fill="#6e6a63" font-size="8" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">WRITE BACK</text>
+  <rect x="794" y="332" width="32" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="810" y="341" fill="#6e6a63" font-size="8" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">READ</text>
+  <rect x="998" y="422" width="62" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="1004" y="431" fill="#6e6a63" font-size="8" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" letter-spacing="0.06em">NEW RECORD</text>
+  <rect x="788" y="480" width="57" height="12" rx="2" fill="#f8f5ef"/>
+  <text x="816" y="489" fill="#6e6a63" font-size="8" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.06em">READ-ONLY</text>
+  <rect x="36" y="196" width="180" height="104" rx="6" fill="#f8f5ef"/>
+  <rect x="36" y="196" width="180" height="104" rx="6" fill="#f8f5ef" stroke="rgba(26,29,32,0.55)" stroke-width="1"/>
+  <rect x="44" y="204" width="36" height="12" rx="2" fill="none" stroke="#5a6068" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="62.0" y="213" fill="#5a6068" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">CLIENT</text>
+  <text x="126" y="237" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">AI coding agents</text>
+  <text x="126" y="254" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">Claude Code · Codex</text>
+  <text x="126" y="268" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">Gemini CLI · Copilot</text>
+  <text x="126" y="282" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">any MCP client</text>
+  <rect x="292" y="188" width="204" height="120" rx="6" fill="#f8f5ef"/>
+  <rect x="292" y="188" width="204" height="120" rx="6" fill="#e8efea" stroke="#3e5446" stroke-width="1.4"/>
+  <rect x="300" y="196" width="27" height="12" rx="2" fill="none" stroke="#3e5446" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="313.7" y="205" fill="#3e5446" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">CORE</text>
+  <text x="394" y="230" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">Local MCP server</text>
+  <text x="394" y="247" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">4 core tools</text>
+  <text x="394" y="261" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">kb.search · kb.get_record</text>
+  <text x="394" y="275" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">answer_and_capture</text>
+  <text x="394" y="289" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">resume_project · gke://</text>
+  <rect x="560" y="104" width="200" height="80" rx="6" fill="#f8f5ef"/>
+  <rect x="560" y="104" width="200" height="80" rx="6" fill="#fffdf9" stroke="rgba(26,29,32,0.55)" stroke-width="1"/>
+  <rect x="568" y="112" width="45" height="12" rx="2" fill="none" stroke="#5a6068" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="590.4" y="121" fill="#5a6068" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">QUESTION</text>
+  <text x="660" y="147" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">Grounded answers</text>
+  <text x="660" y="164" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">search · cite · answer</text>
+  <rect x="560" y="208" width="200" height="80" rx="6" fill="#f8f5ef"/>
+  <rect x="560" y="208" width="200" height="80" rx="6" fill="#fffdf9" stroke="rgba(26,29,32,0.55)" stroke-width="1"/>
+  <rect x="568" y="216" width="40" height="12" rx="2" fill="none" stroke="#5a6068" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="588.2" y="225" fill="#5a6068" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">CAPTURE</text>
+  <text x="660" y="251" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">Explicit capture</text>
+  <text x="660" y="268" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">update-first · review queue</text>
+  <rect x="560" y="312" width="200" height="80" rx="6" fill="#f8f5ef"/>
+  <rect x="560" y="312" width="200" height="80" rx="6" fill="#fffdf9" stroke="rgba(26,29,32,0.55)" stroke-width="1"/>
+  <rect x="568" y="320" width="40" height="12" rx="2" fill="none" stroke="#5a6068" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="588.2" y="329" fill="#5a6068" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">PROJECT</text>
+  <text x="660" y="355" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">Project resume</text>
+  <text x="660" y="372" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">focus · decisions · next 3</text>
+  <rect x="860" y="104" width="200" height="80" rx="6" fill="#f8f5ef"/>
+  <rect x="860" y="104" width="200" height="80" rx="6" fill="#fffdf9" stroke="rgba(26,29,32,0.45)" stroke-width="1" stroke-dasharray="4,3"/>
+  <rect x="868" y="112" width="40" height="12" rx="2" fill="none" stroke="#5a6068" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="888.2" y="121" fill="#5a6068" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">DERIVED</text>
+  <text x="960" y="147" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">Retrieval index</text>
+  <text x="960" y="164" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">FTS5 · BM25 · disposable</text>
+  <rect x="860" y="232" width="200" height="152" rx="6" fill="#f8f5ef"/>
+  <rect x="860" y="232" width="200" height="152" rx="6" fill="#e8efea" stroke="#3e5446" stroke-width="1.4"/>
+  <rect x="868" y="240" width="49" height="12" rx="2" fill="none" stroke="#3e5446" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="892.5" y="249" fill="#3e5446" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">CANONICAL</text>
+  <text x="960" y="297" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">Markdown records</text>
+  <text x="960" y="314" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">canonical source of truth</text>
+  <text x="960" y="328" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">topics · projects · sources</text>
+  <text x="960" y="342" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">plain files you own</text>
+  <rect x="900" y="456" width="180" height="88" rx="6" fill="#f8f5ef"/>
+  <rect x="900" y="456" width="180" height="88" rx="6" fill="#fffdf9" stroke="rgba(26,29,32,0.55)" stroke-width="1"/>
+  <rect x="908" y="464" width="36" height="12" rx="2" fill="none" stroke="#5a6068" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="926.0" y="473" fill="#5a6068" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">INGEST</text>
+  <text x="990" y="496" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">Document ingestion</text>
+  <text x="990" y="513" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">PDF · DOCX · XLSX · PPTX</text>
+  <text x="990" y="527" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">detect → scrub → capture</text>
+  <rect x="560" y="464" width="200" height="72" rx="6" fill="#f8f5ef"/>
+  <rect x="560" y="464" width="200" height="72" rx="6" fill="#f8f5ef" stroke="rgba(26,29,32,0.40)" stroke-width="1" stroke-dasharray="4,3"/>
+  <rect x="568" y="472" width="45" height="12" rx="2" fill="none" stroke="#5a6068" stroke-opacity="0.5" stroke-width="0.8"/>
+  <text x="590.4" y="481" fill="#5a6068" font-size="7" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle" letter-spacing="0.08em">OPTIONAL</text>
+  <text x="660" y="503" fill="#1a1d20" font-size="13" font-weight="600" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif" text-anchor="middle">Cockpit</text>
+  <text x="660" y="520" fill="#5a6068" font-size="9" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" text-anchor="middle">library · board · graph</text>
+  <line x1="36" y1="576" x2="1084" y2="576" stroke="#e2dacf" stroke-width="0.8"/>
+  <text x="36" y="596" fill="#5a6068" font-size="8" font-family="'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace" letter-spacing="0.14em">LEGEND</text>
+  <rect x="112" y="588" width="18" height="11" rx="2" fill="#e8efea" stroke="#3e5446" stroke-width="1.2"/>
+  <text x="142" y="597" fill="#5a6068" font-size="9.5" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif">Focal: protocol edge and canonical data</text>
+  <rect x="385" y="588" width="18" height="11" rx="2" fill="#fffdf9" stroke="rgba(26,29,32,0.45)" stroke-dasharray="3,2"/>
+  <text x="415" y="597" fill="#5a6068" font-size="9.5" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif">Derived or optional: safe to delete</text>
+  <line x1="637" y1="594" x2="659" y2="594" stroke="#3e5446" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+  <text x="667" y="597" fill="#5a6068" font-size="9.5" font-family="'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif">Agent write path: explicit capture</text>
+  <text x="1084" y="622" fill="#6e6a63" font-size="11" font-style="italic" font-family="'Newsreader', Georgia, 'Times New Roman', serif" text-anchor="end">Everything runs locally. Delete the index and rebuild it; the Markdown is the memory.</text>
+  </g>
+</svg>
