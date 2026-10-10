@@ -18,21 +18,13 @@ https://github.com/user-attachments/assets/d00c977b-9538-4835-94d5-26350136eb34
 
 ## What GKE does
 
-- **Grounded answers:** BM25 or SQLite FTS5 retrieval with resolvable
-  file-and-line citations, confidence signals, and strict abstention.
-- **Durable capture:** clear new knowledge can be written immediately;
-  duplicates, ambiguous routing, and consequential changes enter a guarded
-  review queue.
-- **Project continuity:** cited resume capsules combine current focus, recent
-  changes, decisions, blockers, open questions, next actions, and checkpoints.
-- **Document ingestion:** PDF, DOCX, XLSX, PPTX, HTML, Markdown, text, and other
-  supported formats become traceable local source records.
-- **One local MCP server:** the same engine works with Claude Code, Codex,
-  Gemini CLI, GitHub Copilot, and other MCP-compatible clients.
+- **Grounded answers** with file-and-line citations and strict abstention.
+- **Durable capture** back into Markdown; risky changes enter a review queue.
+- **Project resume** as a cited briefing: focus, decisions, blockers, next steps.
+- **Document ingestion** for PDF, DOCX, XLSX, PPTX, HTML, and more.
+- **One local MCP server** for Claude Code, Codex, Gemini CLI, and Copilot.
 
-GKE is for long-running work where decisions, constraints, evidence, and
-handoffs must survive a fresh agent session. It is not a hosted chat-memory
-service, team wiki, Jira replacement, or general document-management platform.
+It is not a hosted chat memory, team wiki, or document-management platform.
 
 ## Quick start
 
@@ -70,131 +62,44 @@ session.
   <img alt="AI coding agents call one local MCP server. It answers from a disposable retrieval index, writes explicit captures back to canonical Markdown records, and resumes projects from them. Document ingestion adds new records; the optional Cockpit reads them." src="docs/architecture-overview.svg">
 </picture>
 
-1. Index or ingest local evidence.
-2. Answer from that evidence with citations.
-3. Capture useful learning back into inspectable Markdown.
-4. Retrieve it in a later session or resume the project as a cited briefing.
+Index or ingest local evidence, answer with citations, capture what was learned
+back into Markdown, and resume the project in a later session.
 
 ## MCP surface
 
-The default `core` profile deliberately exposes four semantic tools:
+The default `core` profile exposes four tools: `kb.search`, `kb.get_record`,
+`kb.answer_and_capture`, and `kb.resume_project`. Retention is update-first:
+new findings are appended to the record that owns them. The `full` profile adds
+advanced retrieval, decisions, and explicit write tools. See the
+[MCP server reference](tools/kb-mcp-server/README.md).
 
-- `kb.search` — return ranked local evidence.
-- `kb.get_record` — retrieve one explicitly requested record.
-- `kb.answer_and_capture` — answer with evidence and apply the selected capture
-  policy.
-- `kb.resume_project` — resume one explicitly identified project.
-
-Retention is automatic and update-first. When an agent establishes a durable
-finding the KB lacked, it passes the finding as `noteBody` with
-`captureStrategy=auto`. The server appends it to the owning record: a project's
-`Last meaningful change`, or the matching topic or term note. It creates a new
-note only when no home exists. Repeats are idempotent, and all writes need a
-writable workspace and pass the capture safety checks. The `full`
-profile adds advanced retrieval, refresh, decision operations, and explicit
-write tools without changing the Markdown source of truth.
-
-See the [MCP server reference](tools/kb-mcp-server/README.md) for profiles,
-resources, environment variables, and client setup.
-
-## Bring your own workspace
-
-Run `gke setup` inside the workspace you want to connect. Named workspace
-vaults launch as separate processes with fixed roots; GKE does not perform
-cross-workspace retrieval or silently switch between clients.
+## Your own workspace and documents
 
 ```bash
 gke setup --workspace client-alpha --workspace-root "/path/to/client-alpha"
-gke setup --workspace client-alpha --client codex
-gke setup --scope user   # reach this workspace from every folder
-```
-
-Named vaults default to writes disabled, and setup registers the server for
-the current folder unless you pass `--scope user`. See
-[workspace configuration](docs/workspace-config.md) for scan roots, write
-policy, registration scope, domain vocabulary, and client-specific setup.
-
-## Ingest documents
-
-From a source checkout:
-
-```bash
-npm run ingest -- ./inbox
 npm run ingest -- ./inbox --dry-run
-npm run ingest -- ./inbox --project my-project
 ```
 
-The local pipeline is:
+Each named workspace runs as its own process, with writes disabled by default.
+See [workspace configuration](docs/workspace-config.md) and the
+[ingestion guide](tools/ingest/README.md).
 
-```text
-detect -> extract -> normalize -> scrub -> capture -> index
-```
+## Operator Cockpit
 
-Sources receive stable workspace-local identities. Unchanged files are skipped;
-changed or removed content enters the normal review flow before accepted source
-state advances. Read the [ingestion guide](tools/ingest/README.md) for supported
-formats, converter options, and provenance behavior.
+An optional local view for project attention, capture and decision review, and
+a context graph. Try the [public demo](https://gke.dimouzunov.com) or read the
+[Cockpit guide](apps/cockpit/README.md).
 
-## Optional Operator Cockpit
+## Learn more
 
-The Cockpit is a local, optional view over the same Markdown and shared engine
-models. It provides project attention, capture review, decision review, and a
-context graph. The hosted site is a static preview over sanitized demo data; it
-does not host private workspaces or the MCP process.
+[Golden path](docs/tutorials/five-minute-golden-path.md) ·
+[Boundaries](docs/separation-of-concerns.md) ·
+[Data model](docs/workspace-data-architecture.md) ·
+[Copilot](docs/integrations/github-copilot.md) ·
+[Agent workflows](docs/agent-workflows.md) ·
+[Contributing](CONTRIBUTING.md)
 
-See the [Cockpit guide](apps/cockpit/README.md) or open the
-[public demo](https://gke.dimouzunov.com).
+## License
 
-## Documentation
-
-- [Five-minute golden path](docs/tutorials/five-minute-golden-path.md)
-- [Boundaries](docs/separation-of-concerns.md)
-- [Workspace configuration](docs/workspace-config.md)
-- [Workspace and project data model](docs/workspace-data-architecture.md)
-- [MCP server reference](tools/kb-mcp-server/README.md)
-- [Document ingestion reference](tools/ingest/README.md)
-- [GitHub Copilot integration](docs/integrations/github-copilot.md)
-- [Complex task workflows](docs/agent-workflows.md)
-
-## Development
-
-The engine and Cockpit use separate npm trees. Node.js 22 and 24 are tested in
-CI.
-
-```bash
-npm install
-npm run typecheck
-npm run lint
-npm run build
-npm run test:gke
-```
-
-For the Cockpit:
-
-```bash
-cd apps/cockpit
-npm install
-npm run typecheck
-npm run test
-npm run build
-```
-
-Do not run the Cockpit test and build commands in parallel because both sync
-Markdown into the preview content directory.
-
-## Boundaries
-
-- UI uses contracts; the engine owns behavior; Markdown is canonical.
-- The MCP server and private workspace files remain local.
-- Project membership is explicit and deterministic, never inferred from
-  semantic similarity.
-- Writes are disabled by default for named vaults and remain subject to
-  workspace policy, dry-run support, and conflict guards.
-- The repository is public. Demo and example content must remain sanitized.
-
-## License and demo sources
-
-GKE is available under the [MIT License](LICENSE). The sanitized demo knowledge
-base includes original synthetic project records and paraphrased notes from the
-MIT-licensed Model Context Protocol documentation; see
-[demo source attribution](docs/demo-sources.md).
+[MIT](LICENSE). The demo knowledge base includes paraphrased notes from the
+MIT-licensed MCP documentation; see [demo sources](docs/demo-sources.md).
