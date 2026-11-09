@@ -27,19 +27,19 @@ testing. It is a **proof of concept**, not production architecture.
 ## 1. Start the local HTTP bridge
 
 ```bash
-export KB_MCP_HTTP_API_KEY="$(openssl rand -hex 24)"   # required; requests 401/503 without it
+export KB_MCP_HTTP_API_KEY="$(openssl rand -hex 24)"   # required; 32+ characters or the bridge will not start
 export KB_MCP_SCAN_ROOTS="demo-kb"                      # use the sanitized demo workspace
 npm run dev:mcp:http
 ```
 
 It listens on `http://127.0.0.1:8765/mcp` (health: `/healthz`).
 
-| Env var               | Default                           | Purpose                    |
-| --------------------- | --------------------------------- | -------------------------- |
-| `KB_MCP_HTTP_API_KEY` | _(unset → all requests rejected)_ | shared secret for `/mcp`   |
-| `KB_MCP_HTTP_PORT`    | `8765`                            | loopback port              |
-| `KB_MCP_HTTP_HOST`    | `127.0.0.1`                       | must stay loopback         |
-| `KB_MCP_SCAN_ROOTS`   | `demo-kb,kb`                      | workspace folders to index |
+| Env var               | Default                                   | Purpose                    |
+| --------------------- | ----------------------------------------- | -------------------------- |
+| `KB_MCP_HTTP_API_KEY` | _(unset or <32 chars → refuses to start)_ | shared secret for `/mcp`   |
+| `KB_MCP_HTTP_PORT`    | `8765`                                    | loopback port              |
+| `KB_MCP_HTTP_HOST`    | `127.0.0.1`                               | must stay loopback         |
+| `KB_MCP_SCAN_ROOTS`   | `demo-kb,kb`                              | workspace folders to index |
 
 Quick local check:
 

@@ -5,7 +5,7 @@ import process from "node:process";
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { authenticate } from "./auth.js";
+import { apiKeyConfigurationProblem, authenticate } from "./auth.js";
 
 /**
  * Loopback-only Streamable HTTP bridge for the GKE MCP server.
@@ -18,8 +18,12 @@ import { authenticate } from "./auth.js";
  *     approved tunnel client (e.g. `ngrok http`), never from this process.
  *   - Forces read-only: writes are disabled in the imported server and any
  *     non-read tool is refused at the HTTP boundary regardless of local config.
- *   - Requires API-key auth on /mcp (constant-time, see auth.ts).
- *   - Applies body-size, concurrency, and request-timeout limits.
+ *   - Requires API-key auth on /mcp (constant-time, see auth.ts) and refuses
+ *     to start without a key of at least 32 characters. There is no per-IP
+ *     lockout: behind a tunnel every caller shares 127.0.0.1, so a lockout
+ *     would let anyone block the operator, and a 32+ character random key is
+ *     not guessable online.
+ *   - Applies body-size, batch-size, concurrency, and request-timeout limits.
  *   - Strips absolute host filesystem paths from responses.
  *
  * It intentionally does not implement sessions or server-initiated SSE; it runs
@@ -34,9 +38,10 @@ const DEFAULT_PORT = 8765;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024; // 1 MiB
 const DEFAULT_MAX_CONCURRENT = 8;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_BATCH_SIZE = 20;
 
 type JsonObject = Record<string, unknown>;
-type Dispatch = {
+export type Dispatch = {
   handleRequest: (method: string, params: JsonObject) => Promise<unknown>;
   handleNotification: (method: string, params: JsonObject) => Promise<void>;
 };
@@ -51,8 +56,11 @@ export interface HttpServerConfig {
   maxBodyBytes?: number;
   maxConcurrent?: number;
   requestTimeoutMs?: number;
+  maxBatchSize?: number;
   repoRoot?: string;
   log?: (entry: LogEntry) => void;
+  /** Test seam: replace the stdio dispatch imported from server.ts. */
+  dispatch?: Dispatch;
 }
 
 // Methods that are safe to expose remotely. All are read-only; mutation methods
@@ -79,6 +87,11 @@ export async function createMcpHttpServer(config: HttpServerConfig = {}): Promis
   const maxBodyBytes = config.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const maxConcurrent = config.maxConcurrent ?? DEFAULT_MAX_CONCURRENT;
   const requestTimeoutMs = config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const maxBatchSize = config.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE;
+  const keyProblem = apiKeyConfigurationProblem();
+  if (keyProblem) {
+    throw new Error(`Refusing to start the HTTP bridge: ${keyProblem}`);
+  }
   if (config.repoRoot) process.env.KB_MCP_REPO_ROOT = config.repoRoot;
   const repoRoot = path.resolve(process.env.KB_MCP_REPO_ROOT || path.join(__dirname, "..", ".."));
 
@@ -86,7 +99,7 @@ export async function createMcpHttpServer(config: HttpServerConfig = {}): Promis
   // The dynamic import guarantees this runs first; server.ts reads
   // KB_MCP_ENABLE_WRITES at module load.
   process.env.KB_MCP_ENABLE_WRITES = "false";
-  const dispatch = (await import("./server.js")) as unknown as Dispatch;
+  const dispatch = config.dispatch ?? ((await import("./server.js")) as unknown as Dispatch);
 
   const readOnlyToolNames = await computeReadOnlyToolNames(dispatch);
 
@@ -157,8 +170,27 @@ export async function createMcpHttpServer(config: HttpServerConfig = {}): Promis
           return;
         }
 
+        if (Array.isArray(parsed.value)) {
+          if (parsed.value.length === 0) {
+            sendJson(res, 400, jsonRpcError(null, -32600, "Invalid Request: empty batch"));
+            finish(400, "empty_batch");
+            return;
+          }
+          if (parsed.value.length > maxBatchSize) {
+            sendJson(
+              res,
+              400,
+              jsonRpcError(null, -32600, `Batch too large: at most ${maxBatchSize} messages`),
+            );
+            finish(400, "batch_too_large", { batchSize: parsed.value.length });
+            return;
+          }
+        }
+
         inFlight += 1;
+        let timedOut = false;
         const timer = setTimeout(() => {
+          timedOut = true;
           if (!res.writableEnded) {
             sendJson(res, 504, jsonRpcError(null, -32603, "Request timeout"));
             finish(504, "timeout");
@@ -169,6 +201,8 @@ export async function createMcpHttpServer(config: HttpServerConfig = {}): Promis
           const messages = Array.isArray(parsed.value) ? parsed.value : [parsed.value];
           const responses: unknown[] = [];
           for (const message of messages) {
+            // The client already has its 504; stop starting new work.
+            if (timedOut) break;
             const response = await handleMessage(message, dispatch, readOnlyToolNames, log);
             if (response !== undefined) responses.push(response);
           }
@@ -396,10 +430,10 @@ async function main(): Promise<void> {
     );
     process.exit(1);
   }
-  if (!process.env.KB_MCP_HTTP_API_KEY) {
-    process.stderr.write(
-      "[kb-mcp-http] KB_MCP_HTTP_API_KEY is not set. Requests will be rejected (503) until you set it.\n",
-    );
+  const keyProblem = apiKeyConfigurationProblem();
+  if (keyProblem) {
+    process.stderr.write(`[kb-mcp-http] refusing to start: ${keyProblem}\n`);
+    process.exit(1);
   }
 
   const server = await createMcpHttpServer();
