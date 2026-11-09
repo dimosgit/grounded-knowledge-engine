@@ -16,6 +16,8 @@ const SKIP_DIRECTORIES = new Set([".git", ".gke", "node_modules", "dist", "conte
 export interface ParsedFrontmatter {
   frontmatter: Frontmatter;
   body: string;
+  /** Number of file lines before the body, so body line N is file line N + offset. */
+  bodyLineOffset: number;
 }
 
 export async function gatherCandidateFiles(
@@ -62,9 +64,9 @@ export async function readDocumentEntries(
     } catch {
       continue;
     }
-    const { body, frontmatter } = file.relPath.endsWith(".md")
+    const { body, frontmatter, bodyLineOffset } = file.relPath.endsWith(".md")
       ? parseFrontmatter(raw)
-      : { body: raw, frontmatter: {} };
+      : { body: raw, frontmatter: {}, bodyLineOffset: 0 };
     entries.push({
       file,
       raw,
@@ -72,6 +74,7 @@ export async function readDocumentEntries(
         id: entries.length,
         relPath: file.relPath,
         body,
+        bodyLineOffset,
         frontmatter,
         title: getDocumentTitle(body, file.relPath),
         track: inferTrack(file.relPath, frontmatter, domain),
@@ -103,11 +106,12 @@ export function buildManifestHash(files: CandidateFile[]): string {
 }
 
 export function parseFrontmatter(raw: string): ParsedFrontmatter {
-  if (!raw.startsWith("---\n")) return { frontmatter: {}, body: raw };
+  if (!raw.startsWith("---\n")) return { frontmatter: {}, body: raw, bodyLineOffset: 0 };
   const end = raw.indexOf("\n---\n", 4);
-  if (end === -1) return { frontmatter: {}, body: raw };
+  if (end === -1) return { frontmatter: {}, body: raw, bodyLineOffset: 0 };
   const header = raw.slice(4, end);
   const body = raw.slice(end + 5);
+  const bodyLineOffset = raw.slice(0, end + 5).split("\n").length - 1;
   const frontmatter: Frontmatter = {};
   for (const line of header.split("\n")) {
     const separator = line.indexOf(":");
@@ -116,7 +120,7 @@ export function parseFrontmatter(raw: string): ParsedFrontmatter {
     const value = line.slice(separator + 1).trim();
     if (key) frontmatter[key] = value;
   }
-  return { frontmatter, body };
+  return { frontmatter, body, bodyLineOffset };
 }
 
 export function getDocumentTitle(body: string, relPath: string): string {

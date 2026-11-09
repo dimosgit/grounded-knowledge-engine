@@ -40,7 +40,7 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const INDEX_VERSION = 2;
+const INDEX_VERSION = 3;
 const DEFAULT_INDEX_CACHE_TTL_MS = 30000;
 const DEFAULT_SQLITE_INDEX_FILE = ".cache/kb-retriever.sqlite";
 const DEFAULT_QUERY_CACHE_TTL_MS = 45000;
@@ -381,7 +381,8 @@ async function rebuildDatabase(
       mtime_ms REAL NOT NULL,
       size INTEGER NOT NULL,
       content_hash TEXT NOT NULL,
-      is_archive INTEGER NOT NULL DEFAULT 0
+      is_archive INTEGER NOT NULL DEFAULT 0,
+      body_line_offset INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE chunks (
@@ -449,8 +450,8 @@ async function rebuildDatabase(
 
   const insertDocument = db.prepare(`
     INSERT INTO documents
-      (id, path, title, source_kind, module, track, status, type, updated, mtime_ms, size, content_hash, is_archive, body, frontmatter_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, path, title, source_kind, module, track, status, type, updated, mtime_ms, size, content_hash, is_archive, body, frontmatter_json, body_line_offset)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   const insertChunk = db.prepare(`
     INSERT INTO chunks
@@ -476,6 +477,7 @@ async function rebuildDatabase(
     let chunkId = 0;
     for (const { file, raw, document } of entries) {
       const { body, frontmatter, title, sourceKind, track, module } = document;
+      const lineOffset = document.bodyLineOffset ?? 0;
       const status = normalizeScalar(frontmatter.status);
       const type = normalizeScalar(frontmatter.type);
       const updated = normalizeScalar(frontmatter.updated);
@@ -498,6 +500,7 @@ async function rebuildDatabase(
         isArchive,
         body,
         JSON.stringify(frontmatter),
+        lineOffset,
       );
 
       if (sourceKind === "kb-term") {
@@ -531,8 +534,8 @@ async function rebuildDatabase(
           sourceKind,
           module,
           track,
-          piece.startLine,
-          piece.endLine,
+          piece.startLine + lineOffset,
+          piece.endLine + lineOffset,
           piece.text,
           tokens.length,
           isArchive,
@@ -736,6 +739,7 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
         updated,
         body,
         frontmatter_json,
+        body_line_offset AS bodyLineOffset,
         is_archive AS isArchive
       FROM documents
       ORDER BY path
@@ -751,6 +755,7 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
         sourceKind: `${row.sourceKind || ""}`,
         frontmatter: JSON.parse(String(row.frontmatter_json || "{}")),
         body: String(row.body || ""),
+        bodyLineOffset: Number(row.bodyLineOffset || 0),
         isArchive: Boolean(row.isArchive),
       }));
   }
@@ -1176,8 +1181,14 @@ function chunkDocument(lines: string[]): ChunkDraft[] {
 
   const flush = (lineIndex: number): void => {
     const text = buffer.join("\n").trim();
+    // trim() drops leading blank lines; shift the start so line offsets stay true.
+    const leadingBlank = buffer.findIndex((line) => line.trim() !== "");
     if (text) {
-      chunks.push({ startLine: chunkStartLine, endLine: lineIndex, text });
+      chunks.push({
+        startLine: chunkStartLine + Math.max(0, leadingBlank),
+        endLine: lineIndex,
+        text,
+      });
     }
     const overlapLines: string[] = [];
     let overlapChars = 0;

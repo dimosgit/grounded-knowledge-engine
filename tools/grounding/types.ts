@@ -76,6 +76,8 @@ export interface IndexedDocument {
   sourceKind: string;
   frontmatter: Frontmatter;
   body: string;
+  /** File lines before `body` (frontmatter); citations are file-relative. */
+  bodyLineOffset?: number;
   isArchive: boolean;
 }
 
