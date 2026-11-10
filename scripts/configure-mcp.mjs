@@ -26,18 +26,26 @@
 //     absolute path, so it resolves identically from every working directory.
 
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
+  closeSync,
   copyFileSync,
   existsSync,
+  fchmodSync,
+  fsyncSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   realpathSync,
   renameSync,
   statSync,
+  unlinkSync,
   writeFileSync,
+  writeSync,
 } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_SERVER_NAME = "kb";
@@ -192,10 +200,42 @@ function readJson(path) {
 }
 
 function writeJson(path, value) {
-  mkdirSync(dirname(path), { recursive: true });
-  const tempPath = `${path}.${process.pid}.tmp`;
-  writeFileSync(tempPath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
-  renameSync(tempPath, path);
+  writeFileAtomic(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+}
+
+// Replace a config file atomically. The temp file gets an unpredictable name
+// and is created exclusively ('wx'), so a pre-planted file or symlink at a
+// guessable path cannot redirect the write. A symlinked target (for example a
+// dotfiles-managed config) is followed so the link itself survives. With
+// `preserveMode`, an existing file keeps its permissions; new files get `mode`.
+function writeFileAtomic(path, content, { mode = 0o600, preserveMode = false } = {}) {
+  let target = path;
+  if (existsSync(path) && lstatSync(path).isSymbolicLink()) target = realpathSync(path);
+  mkdirSync(dirname(target), { recursive: true });
+  let finalMode = mode;
+  if (preserveMode && existsSync(target)) finalMode = statSync(target).mode & 0o777;
+  const tempPath = join(
+    dirname(target),
+    `.${basename(target)}.${randomBytes(12).toString("hex")}.tmp`,
+  );
+  const fd = openSync(tempPath, "wx", 0o600);
+  try {
+    try {
+      writeSync(fd, content);
+      fchmodSync(fd, finalMode);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(tempPath, target);
+  } catch (error) {
+    try {
+      unlinkSync(tempPath);
+    } catch {
+      // Already renamed or never created.
+    }
+    throw error;
+  }
 }
 
 // Keep one pristine copy of a home-directory config the first time we touch it.
@@ -529,8 +569,9 @@ function configureCodex() {
   ]
     .filter(Boolean)
     .join("\n");
-  mkdirSync(dirname(configPath), { recursive: true });
-  writeFileSync(configPath, replaceManagedTomlBlock(current, block, serverName));
+  writeFileAtomic(configPath, replaceManagedTomlBlock(current, block, serverName), {
+    preserveMode: true,
+  });
 }
 
 function configureGemini() {

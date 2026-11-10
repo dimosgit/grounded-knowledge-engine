@@ -55,6 +55,22 @@ GKE_MARKITDOWN_BIN=/path/to/markitdown npm run ingest -- ./inbox
 `GKE_MARKITDOWN_TIMEOUT_MS` defaults to `60000`. Markdown and plain text always
 use the native pass-through path.
 
+### Input limits
+
+Before any converter runs, `limits.ts` checks each file and reports a rejected
+one under `Skipped` with its reason; the run continues with the next file.
+
+| Variable                     | Default | Meaning                                                  |
+| ---------------------------- | ------- | -------------------------------------------------------- |
+| `GKE_INGEST_MAX_FILE_MB`     | `50`    | Largest file accepted, in megabytes.                     |
+| `GKE_INGEST_MAX_UNZIPPED_MB` | `200`   | Largest total declared uncompressed size of a ZIP input. |
+
+ZIP containers (DOCX, XLSX, PPTX, EPUB, ZIP) are inspected through their
+central directory without decompressing. They are rejected when they hold more
+than 10,000 entries, when any entry above 10 MB expands more than 200:1, or
+when they use ZIP64 or span several disks. Invalid limit values stop the run
+with an error.
+
 ## Pipeline
 
 ```text

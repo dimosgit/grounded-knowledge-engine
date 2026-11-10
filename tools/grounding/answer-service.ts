@@ -300,26 +300,62 @@ async function extractDirectAnswerLines(
     const sourcePaths = [...new Set(evidence.map((hit) => hit.path))];
     if (!sourcePaths.length) return [];
     const sourceRanks = new Map(sourcePaths.map((path, index) => [path, index]));
+    const bestScores = new Map<string, number>();
+    for (const hit of evidence) {
+      const score = Number.isFinite(hit.score) ? hit.score : 0;
+      bestScores.set(hit.path, Math.max(bestScores.get(hit.path) ?? 0, score));
+    }
+    const topScore = Math.max(0, ...bestScores.values());
     const queryTokens = new Set(tokenizeForSimilarity(question));
     const documents = (await listDocuments())
       .map(toAnswerDocument)
-      .filter((document) => sourceRanks.has(document.relPath));
+      .filter((document) => sourceRanks.has(document.relPath))
+      .filter((document) =>
+        isEligibleAnswerSource(
+          document,
+          bestScores.get(document.relPath) ?? 0,
+          topScore,
+          queryTokens,
+        ),
+      );
     if (!documents.length) return [];
 
     const primary = [...documents].sort((left, right) => {
       const titleDifference =
-        titleOverlap(right.title, queryTokens) - titleOverlap(left.title, queryTokens);
+        namedTitleOverlap(right.title, queryTokens) - namedTitleOverlap(left.title, queryTokens);
       if (titleDifference) return titleDifference;
       return (sourceRanks.get(left.relPath) || 0) - (sourceRanks.get(right.relPath) || 0);
     })[0];
     if (!primary) return [];
 
+    // Long records (project logs, source notes) mix many subjects, so quote only
+    // the lines around the cited evidence, best-ranked citation first. Short
+    // notes stay whole-document.
+    const longRecord = primary.lines.length > LONG_RECORD_LINES;
+    const citedWindows = longRecord
+      ? evidence
+          .filter((hit) => hit.path === primary.relPath && Number.isFinite(hit.lineNumber))
+          .map((hit) => hit.lineNumber - 1 - (primary.bodyLineOffset ?? 0))
+          .map((index) => [index - CITED_WINDOW_RADIUS, index + CITED_WINDOW_RADIUS] as const)
+      : [];
+    /** Rank of the best citation whose window covers the entry, or -1 if none. */
+    const citedWindowRank = (start: number, end: number): number =>
+      citedWindows.findIndex(([from, to]) => start <= to && end >= from);
+
     const candidates = extractSourceAnswerEntries(primary.lines)
-      .map(({ rawLine, index }) => ({ rawLine, line: cleanAnswerLine(rawLine), index }))
-      .map(({ rawLine, line, index }) => ({
+      .map((entry) => ({ ...entry, windowRank: citedWindowRank(entry.index, entry.endIndex) }))
+      .filter(({ windowRank }) => !longRecord || windowRank >= 0)
+      .map(({ rawLine, index, windowRank }) => ({
+        rawLine,
+        line: cleanAnswerLine(rawLine),
+        index,
+        windowRank,
+      }))
+      .map(({ rawLine, line, index, windowRank }) => ({
         rawLine,
         line,
         index,
+        windowRank,
         matches: tokenizeForSimilarity(line).filter((token) => queryTokens.has(token)),
       }))
       .filter(
@@ -334,7 +370,16 @@ async function extractDirectAnswerLines(
       }))
       .sort((left, right) => right.score - left.score || left.index - right.index);
     const listCandidates = candidates.filter((candidate) => isMarkdownListItem(candidate.rawLine));
-    const preferredCandidates = listCandidates.length >= 2 ? listCandidates : candidates;
+    const preferredCandidates = longRecord
+      ? [...candidates].sort(
+          (left, right) =>
+            left.windowRank - right.windowRank ||
+            right.score - left.score ||
+            left.index - right.index,
+        )
+      : listCandidates.length >= 2
+        ? listCandidates
+        : candidates;
     const selectedCandidates = preferredCandidates
       .slice(0, 3)
       .sort((left, right) => left.index - right.index);
@@ -351,14 +396,49 @@ function titleOverlap(title: string, queryTokens: ReadonlySet<string>): number {
   return tokenizeForSimilarity(title).filter((token) => queryTokens.has(token)).length;
 }
 
+/**
+ * A source may only be quoted when the evidence supports it: its best hit
+ * scores at least half of the top hit, or the question names it (most of its
+ * title appears in the question). Without this, one shared title word let a
+ * weakly ranked, unrelated record supply the visible answer.
+ */
+const ANSWER_SOURCE_MIN_SCORE_SHARE = 0.5;
+/** Records longer than this are answered only from lines near their citations. */
+const LONG_RECORD_LINES = 40;
+const CITED_WINDOW_RADIUS = 1;
+
+function isEligibleAnswerSource(
+  document: AnswerDocument,
+  bestScore: number,
+  topScore: number,
+  queryTokens: ReadonlySet<string>,
+): boolean {
+  if (topScore <= 0 || bestScore >= topScore * ANSWER_SOURCE_MIN_SCORE_SHARE) return true;
+  return isNamedInQuestion(document.title, queryTokens);
+}
+
+function isNamedInQuestion(title: string, queryTokens: ReadonlySet<string>): boolean {
+  const titleTokens = [...new Set(tokenizeForSimilarity(title))];
+  if (!titleTokens.length) return false;
+  const overlap = titleTokens.filter((token) => queryTokens.has(token)).length;
+  return overlap >= 2 && overlap / titleTokens.length >= 0.6;
+}
+
+/** Title overlap counts only when the question names the source. */
+function namedTitleOverlap(title: string, queryTokens: ReadonlySet<string>): number {
+  return isNamedInQuestion(title, queryTokens) ? titleOverlap(title, queryTokens) : 0;
+}
+
 /** Markdown often wraps one list item across several physical lines. */
-function extractSourceAnswerEntries(lines: string[]): Array<{ rawLine: string; index: number }> {
-  const entries: Array<{ rawLine: string; index: number }> = [];
+function extractSourceAnswerEntries(
+  lines: string[],
+): Array<{ rawLine: string; index: number; endIndex: number }> {
+  const entries: Array<{ rawLine: string; index: number; endIndex: number }> = [];
   for (let index = 0; index < lines.length; index += 1) {
     const rawLine = lines[index];
     if (!rawLine.trim() || isMarkdownHeading(rawLine)) continue;
     if (!isMarkdownListItem(rawLine)) {
-      entries.push({ rawLine, index });
+      entries.push({ rawLine, index, endIndex: index });
       continue;
     }
     const parts = [rawLine.trim()];
@@ -369,7 +449,7 @@ function extractSourceAnswerEntries(lines: string[]): Array<{ rawLine: string; i
       parts.push(next.trim());
       nextIndex += 1;
     }
-    entries.push({ rawLine: parts.join(" "), index });
+    entries.push({ rawLine: parts.join(" "), index, endIndex: nextIndex - 1 });
     index = nextIndex - 1;
   }
   return entries;

@@ -278,6 +278,186 @@ async function testFocusedCanonicalAnswerRequiresTheTopHit(): Promise<void> {
   assert.equal(answer.gate.thresholds.minHits, 3);
 }
 
+/**
+ * Two unrelated records share vocabulary. The top-ranked record answers the
+ * question; a weakly ranked record shares one title word with it. The answer
+ * must quote the record the evidence supports, never the weak neighbour.
+ */
+function crossProjectFixture(): {
+  program: IndexedDocument;
+  redesign: IndexedDocument;
+  searchResult: SearchResult;
+} {
+  const program = document({
+    relPath: "kb/projects/operations-program/project.md",
+    title: "Operations Program 2026",
+    sourceKind: "doc",
+    body: [
+      "# Operations Program 2026",
+      "",
+      "## Last meaningful change",
+      "",
+      "- Harbor scheduler pilot: decided to run the pilot on simulated bookings; Mira owns the test cases.",
+      "- Harbor scheduler pilot: still open is the session date; Theo owns the date.",
+      "- Office move: decided to keep the second floor.",
+    ].join("\n"),
+  });
+  const redesign = document({
+    relPath: "kb/sources/crane-redesign/review.md",
+    title: "Harbor Crane Redesign Review",
+    sourceKind: "doc",
+    body: [
+      "# Harbor Crane Redesign Review",
+      "",
+      "- Redesign the harbor process, not the code.",
+      "- Who pays for the harbor crane trial is still open.",
+      "- Pin the crane controller firmware version.",
+    ].join("\n"),
+  });
+  const searchResult = result([
+    hit(0, {
+      path: program.relPath,
+      title: program.title,
+      lineNumber: 5,
+      score: 58,
+      matchedTokens: ["harbor", "scheduler", "pilot", "decided", "open", "owns"],
+    }),
+    hit(1, {
+      path: program.relPath,
+      title: program.title,
+      lineNumber: 6,
+      score: 55,
+      matchedTokens: ["harbor", "scheduler", "pilot", "open", "owns"],
+    }),
+    hit(2, {
+      path: "kb/topics/meeting-notes.md",
+      title: "Meeting Notes",
+      score: 21,
+      matchedTokens: ["owns"],
+    }),
+    hit(3, {
+      path: redesign.relPath,
+      title: redesign.title,
+      lineNumber: 3,
+      score: 20,
+      matchedTokens: ["harbor", "open"],
+    }),
+  ]);
+  searchResult.queryTokens = ["harbor", "scheduler", "pilot", "decided", "open", "owns"];
+  searchResult.signals = {
+    tokenCoverage: 1,
+    uniqueSources: 3,
+    topScore: 58,
+    dominantSourceShare: 0.5,
+  };
+  return { program, redesign, searchResult };
+}
+
+async function testAnswerQuotesTheSupportedRecord(): Promise<void> {
+  const { program, redesign, searchResult } = crossProjectFixture();
+  const answer = await answerGrounded(
+    {
+      question: "Harbor scheduler pilot: what is decided, what is open, and who owns what?",
+      responseMode: "curate",
+    },
+    {
+      search: async () => searchResult,
+      listDocuments: async () => [redesign, program],
+      now: clock(),
+    },
+  );
+
+  assert.equal(answer.abstained, false);
+  assert.match(answer.answer, /Mira owns the test cases/);
+  assert.match(answer.answer, /Theo owns the date/);
+  assert.doesNotMatch(answer.answer, /crane|Redesign the harbor process/i);
+}
+
+async function testNamedRecordStillWinsWhenAskedFor(): Promise<void> {
+  const { program, redesign, searchResult } = crossProjectFixture();
+  const answer = await answerGrounded(
+    {
+      question: "According to the Harbor Crane Redesign Review, who pays for the trial?",
+      responseMode: "curate",
+    },
+    {
+      search: async () => searchResult,
+      listDocuments: async () => [program, redesign],
+      now: clock(),
+    },
+  );
+
+  assert.match(answer.answer, /Who pays for the harbor crane trial is still open/);
+  assert.doesNotMatch(answer.answer, /Mira|Theo/);
+}
+
+/**
+ * A long project log mixes subjects. Bullet lines elsewhere in the record share
+ * words with the question; only the cited paragraph may be quoted. Hit lines
+ * are file-relative, so the frontmatter offset must be honoured.
+ */
+async function testLongRecordQuotesOnlyCitedLines(): Promise<void> {
+  const filler = Array.from(
+    { length: 40 },
+    (_, index) => `- Session ${index}: workshop deck review is open; the owner owns slides.`,
+  );
+  const bodyLines = [
+    "# Operations Program 2026",
+    "",
+    "## Delivery checklist",
+    "",
+    ...filler,
+    "",
+    "## Last meaningful change",
+    "",
+    "2026-11-09 — Harbor scheduler pilot: decided to run on simulated bookings; Mira owns the test cases; the session date is still open.",
+    "",
+    "2026-11-02 — Office move: decided to keep the second floor.",
+  ];
+  const record = document({
+    relPath: "kb/projects/operations-program/project.md",
+    title: "Operations Program 2026",
+    sourceKind: "doc",
+    body: bodyLines.join("\n"),
+    bodyLineOffset: 6,
+  });
+  const citedBodyIndex = bodyLines.findIndex((line) => line.includes("Harbor scheduler pilot"));
+  const searchResult = result([
+    hit(0, {
+      path: record.relPath,
+      title: record.title,
+      lineNumber: citedBodyIndex + 1 + 6,
+      score: 40,
+      matchedTokens: ["harbor", "scheduler", "pilot", "session", "open", "owns"],
+    }),
+    hit(1, { score: 18, matchedTokens: ["session"] }),
+    hit(2, { score: 17, matchedTokens: ["owns"] }),
+  ]);
+  searchResult.queryTokens = ["harbor", "scheduler", "pilot", "session", "open", "owns"];
+  searchResult.signals = {
+    tokenCoverage: 1,
+    uniqueSources: 3,
+    topScore: 40,
+    dominantSourceShare: 1 / 3,
+  };
+
+  const answer = await answerGrounded(
+    {
+      question: "Harbor scheduler pilot session: what is open and who owns what?",
+      responseMode: "curate",
+    },
+    {
+      search: async () => searchResult,
+      listDocuments: async () => [record],
+      now: clock(),
+    },
+  );
+
+  assert.match(answer.answer, /Mira owns the test cases/);
+  assert.doesNotMatch(answer.answer, /workshop deck|Office move/);
+  assert.equal(answer.citations[0]?.line, citedBodyIndex + 1 + 6);
+}
+
 async function testFastTermAndTopicPaths(): Promise<void> {
   let searchCalls = 0;
   const documents = [
@@ -325,6 +505,9 @@ async function main(): Promise<void> {
   await testDirectExtractiveAnswer();
   await testFocusedCanonicalAnswer();
   await testFocusedCanonicalAnswerRequiresTheTopHit();
+  await testAnswerQuotesTheSupportedRecord();
+  await testNamedRecordStillWinsWhenAskedFor();
+  await testLongRecordQuotesOnlyCitedLines();
   await testFastTermAndTopicPaths();
   console.log("Grounded answer service tests passed.");
 }

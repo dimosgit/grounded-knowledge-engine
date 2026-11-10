@@ -2,7 +2,45 @@
 
 All notable changes to Grounded Knowledge Engine are documented here.
 
-## Unreleased
+## 0.2.2 — 2026-11-09
+
+### Grounded answers
+
+- Fixed file-and-line citations: line numbers counted from the end of the
+  Markdown frontmatter, and sometimes one line early, so every citation into a
+  file with frontmatter pointed above the cited text. Citations are now
+  file-relative in both the BM25 and SQLite backends, matching decision and
+  checkpoint evidence. Both index formats are versioned, so existing caches
+  rebuild on first use.
+- Fixed answers quoting an unrelated record: a weakly ranked source that shared
+  one title word with the question could supply the visible answer while the
+  citations pointed elsewhere. A source is now quoted only when its evidence
+  scores at least half of the top hit or the question names it, and long
+  records are answered only from the lines next to their citations.
+
+### Security hardening
+
+- Ingestion rejects files over 50 MB and ZIP-based documents (DOCX, XLSX,
+  PPTX) whose central directory declares more than 200 MB uncompressed, more
+  than 10,000 entries, or an extreme compression ratio, before any parser runs.
+  The archive is found from its end record, as ZIP readers do, so data placed
+  before an archive cannot skip the check; such archives are rejected, as are
+  ZIP-based files with no end record. Rejected files are reported as skipped. Override with
+  `GKE_INGEST_MAX_FILE_MB` and `GKE_INGEST_MAX_UNZIPPED_MB`.
+- The HTTP bridge refuses to start unless `KB_MCP_HTTP_API_KEY` has at least
+  32 characters, rejects empty or oversized JSON-RPC batches (more than 20
+  messages), and stops processing a batch once its request has timed out.
+- `gke setup` writes client configuration atomically through an unpredictable,
+  exclusively created temporary file, including the Codex TOML, which was
+  previously written in place.
+- Updated dependencies with published advisories: Vite 8.1.6 for the Cockpit
+  dev server, `@xmldom/xmldom` 0.8.15 for DOCX parsing, DOMPurify 3.4.17, and
+  patched development tooling.
+
+### Documentation
+
+- The README now states that retention is automatic and update-first when
+  writes are enabled, and that named workspaces start with writes disabled.
 
 ### Client registration
 

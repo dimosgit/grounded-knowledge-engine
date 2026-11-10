@@ -1,6 +1,6 @@
 {
   "name": "grounded-knowledge-engine",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "type": "module",
   "bin": {
@@ -91,7 +91,8 @@
     "unpdf": "^1.6.2"
   },
   "overrides": {
-    "uuid": "^11.1.1"
+    "uuid": "^11.1.1",
+    "@xmldom/xmldom": "^0.8.15"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

@@ -7,8 +7,8 @@
 
 Grounded Knowledge Engine (GKE) gives Claude Code, Codex, Gemini CLI, and other
 MCP clients durable context across sessions. It retrieves evidence from local
-files, answers with file-and-line citations, captures useful learning when you
-request it, and resumes structured project state without turning a database or
+files, answers with file-and-line citations, retains useful learning back into
+Markdown, and resumes structured project state without turning a database or
 hosted service into the source of truth.
 
 Your Markdown remains canonical. Retrieval indexes are derived and disposable,
@@ -33,7 +33,7 @@ GKE requires **Node 22.5 or newer**; Node 24 is recommended.
 Install the current release:
 
 ```bash
-npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.1/grounded-knowledge-engine-0.2.1.tgz
+npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.2/grounded-knowledge-engine-0.2.2.tgz
 ```
 
 Create the verified demo workspace and configure supported clients:
@@ -68,8 +68,11 @@ back into Markdown, and resume the project in a later session.
 ## MCP surface
 
 The default `core` profile exposes four tools: `kb.search`, `kb.get_record`,
-`kb.answer_and_capture`, and `kb.resume_project`. Retention is update-first:
-new findings are appended to the record that owns them. The `full` profile adds
+`kb.answer_and_capture`, and `kb.resume_project`. When writes are enabled,
+retention is automatic and update-first: when the agent establishes a finding
+the knowledge base lacked, it is appended to the record that owns it, without
+asking first. The demo and default workspaces enable writes; named workspaces
+start with writes disabled. The `full` profile adds
 advanced retrieval, decisions, and explicit write tools. See the
 [MCP server reference](tools/kb-mcp-server/README.md).
 

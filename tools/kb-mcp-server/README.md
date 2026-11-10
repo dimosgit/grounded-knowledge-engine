@@ -7,6 +7,9 @@ Runs over **stdio** by default (`npm run dev:mcp`). An optional read-only
 **loopback HTTP bridge** (`npm run dev:mcp:http`) exposes the same tools for
 remote agents (Copilot Studio / M365 declarative agents) via a short-lived
 authenticated tunnel — see [docs/integrations/remote-mcp-tunnel.md](../../docs/integrations/remote-mcp-tunnel.md).
+The bridge refuses to start unless `KB_MCP_HTTP_API_KEY` is at least 32
+characters (`openssl rand -hex 24`), rejects JSON-RPC batches longer than 20
+messages, and stops a batch once its request times out.
 
 ## Profiles
 

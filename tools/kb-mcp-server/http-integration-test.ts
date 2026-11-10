@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 // Configure before importing the server module: server.ts reads env at load.
-const API_KEY = "test-key-please-rotate";
+// Generated per run (48 hex chars) so no key literal lives in source.
+const API_KEY = randomBytes(24).toString("hex");
 process.env.KB_MCP_HTTP_API_KEY = API_KEY;
 process.env.KB_MCP_SCAN_ROOTS = "demo-kb";
 process.env.KB_MCP_PROFILE = process.env.KB_MCP_PROFILE || "full"; // exercise refresh denial
@@ -28,6 +30,9 @@ try {
   await testGroundedSearchAndSanitization();
   await testWriteDenial();
   await testBodyLimit();
+  await testBatchLimit();
+  await testShortKeyRefusesToStart();
+  await testTimeoutStopsBatch();
   console.log("MCP HTTP bridge tests passed.");
 } finally {
   await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -137,4 +142,75 @@ async function testBodyLimit(): Promise<void> {
   const huge = "x".repeat(4096);
   const res = await rpc({ jsonrpc: "2.0", id: 7, method: "ping", params: { pad: huge } });
   assert.equal(res.status, 413, "oversized body rejected with 413");
+}
+
+async function testBatchLimit(): Promise<void> {
+  const ping = (id: number) => ({ jsonrpc: "2.0", id, method: "ping" });
+  const atLimit = await rpc(Array.from({ length: 20 }, (_, i) => ping(i)));
+  assert.equal(atLimit.status, 200, "a batch of 20 is accepted");
+  assert.equal(atLimit.json.length, 20);
+
+  const over = await rpc(Array.from({ length: 21 }, (_, i) => ping(i)));
+  assert.equal(over.status, 400, "a batch of 21 is rejected");
+  assert.equal(over.json.error.code, -32600);
+  assert.ok(!Array.isArray(over.json), "an oversized batch yields one error, nothing processed");
+
+  const empty = await rpc([]);
+  assert.equal(empty.status, 400);
+  assert.equal(empty.json.error.code, -32600);
+}
+
+async function testShortKeyRefusesToStart(): Promise<void> {
+  const previous = process.env.KB_MCP_HTTP_API_KEY;
+  try {
+    process.env.KB_MCP_HTTP_API_KEY = randomBytes(15).toString("hex"); // 30 chars
+    await assert.rejects(createMcpHttpServer({ log: () => {} }), /at least 32 characters/);
+    delete process.env.KB_MCP_HTTP_API_KEY;
+    await assert.rejects(createMcpHttpServer({ log: () => {} }), /KB_MCP_HTTP_API_KEY is unset/);
+  } finally {
+    process.env.KB_MCP_HTTP_API_KEY = previous;
+  }
+}
+
+async function testTimeoutStopsBatch(): Promise<void> {
+  let pings = 0;
+  const slow = await createMcpHttpServer({
+    log: () => {},
+    requestTimeoutMs: 150,
+    maxConcurrent: 1,
+    dispatch: {
+      handleRequest: async (method: string) => {
+        if (method === "tools/list") return { tools: [] };
+        pings += 1;
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return {};
+      },
+      handleNotification: async () => {},
+    },
+  });
+  await new Promise<void>((resolve) => slow.listen(0, "127.0.0.1", resolve));
+  const slowBase = `http://127.0.0.1:${(slow.address() as AddressInfo).port}`;
+  const post = (body: unknown) =>
+    fetch(`${slowBase}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+      body: JSON.stringify(body),
+    });
+  try {
+    const batch = Array.from({ length: 20 }, (_, i) => ({ jsonrpc: "2.0", id: i, method: "ping" }));
+    const timedOut = await post(batch);
+    assert.equal(timedOut.status, 504, "slow batch times out");
+    await timedOut.text();
+    // Let the in-flight item finish; the loop must not start the rest.
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    assert.ok(pings < 20, `timed-out batch kept processing (${pings} of 20 items ran)`);
+    assert.ok(pings <= 4, `expected processing to stop near the timeout, got ${pings}`);
+
+    // inFlight returned to zero: with maxConcurrent 1 a new request is served.
+    const after = await post({ jsonrpc: "2.0", id: 99, method: "ping" });
+    assert.equal(after.status, 200, "slot released after the timed-out batch stopped");
+    await after.text();
+  } finally {
+    await new Promise<void>((resolve) => slow.close(() => resolve()));
+  }
 }

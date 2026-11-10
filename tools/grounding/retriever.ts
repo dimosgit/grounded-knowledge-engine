@@ -45,7 +45,7 @@ const __dirname = path.dirname(__filename);
 // corpus; `kb` holds notes captured back by the agent.
 export const DEFAULT_SCAN_ROOTS = ["demo-kb", "kb"];
 
-const INDEX_VERSION = 3;
+const INDEX_VERSION = 4;
 const DEFAULT_INDEX_CACHE_FILE = ".cache/kb-retriever-index.v2.json";
 const DEFAULT_INDEX_CACHE_TTL_MS = 30000;
 const DEFAULT_QUERY_CACHE_TTL_MS = 45000;
@@ -357,6 +357,7 @@ async function buildIndex({
     docs.push(doc);
 
     const bodyLines = body.split(/\r?\n/);
+    const lineOffset = doc.bodyLineOffset ?? 0;
     const docChunks = chunkDocument(bodyLines);
     for (const piece of docChunks) {
       const chunkId = chunks.length;
@@ -377,8 +378,8 @@ async function buildIndex({
         module: doc.module,
         sourceKind: doc.sourceKind,
         isArchive: doc.isArchive,
-        startLine: piece.startLine,
-        endLine: piece.endLine,
+        startLine: piece.startLine + lineOffset,
+        endLine: piece.endLine + lineOffset,
         text: piece.text,
         length: tokens.length,
       };
@@ -1081,9 +1082,11 @@ function chunkDocument(lines: string[]): ChunkDraft[] {
 
   const flush = (lineIndex: number): void => {
     const text = buffer.join("\n").trim();
+    // trim() drops leading blank lines; shift the start so line offsets stay true.
+    const leadingBlank = buffer.findIndex((line) => line.trim() !== "");
     if (text) {
       chunks.push({
-        startLine: chunkStartLine,
+        startLine: chunkStartLine + Math.max(0, leadingBlank),
         endLine: lineIndex,
         text,
       });

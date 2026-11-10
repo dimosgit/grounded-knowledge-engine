@@ -11,10 +11,13 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import { fileURLToPath } from "node:url";
 import { detectFormat, extractText, isSupported } from "./extractors.js";
+import { IngestLimitError, checkIngestSafety, readIngestLimits } from "./limits.js";
+import { loadWorkspaceContext } from "../workspaces/config.js";
 import { deriveTitle, scrubSecrets, chunkText, normalizeDocument } from "./normalize.js";
-import { mergeSourceMetadata, slugifySource } from "./ingest.js";
+import { mergeSourceMetadata, runIngest, slugifySource } from "./ingest.js";
 import { deriveSourceId } from "./source-record.js";
 import { FIXTURE_TOKENS } from "./fixtures/tokens.js";
 
@@ -156,7 +159,11 @@ async function testMarkItDownConverter(): Promise<void> {
       "#!/usr/bin/env node\nconsole.log('# Converted Deck\\n\\n- MARKITDOWNTOKEN9005')\n",
       { mode: 0o755 },
     );
-    await fs.writeFile(source, "placeholder", "utf8");
+    // A real (tiny) ZIP container: ZIP-family files must pass the archive check.
+    await fs.writeFile(
+      source,
+      buildZip([{ name: "ppt/presentation.xml", data: Buffer.from("placeholder") }]),
+    );
     process.env.GKE_INGEST_CONVERTER = "markitdown";
     process.env.GKE_MARKITDOWN_BIN = bin;
 
@@ -194,6 +201,248 @@ async function testMarkItDownAutoFallsBackToNativeExtractor(): Promise<void> {
   }
 }
 
+interface ZipEntrySpec {
+  name: string;
+  data: Buffer;
+  /** Store deflated (method 8) instead of stored (method 0). */
+  deflate?: boolean;
+  /** Override the uncompressed size the central directory declares. */
+  declaredSize?: number;
+}
+
+/** Build a minimal ZIP in memory so bombs never ship as committed binaries. */
+function buildZip(entries: ZipEntrySpec[]): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, "utf8");
+    const body = entry.deflate ? zlib.deflateRawSync(entry.data) : entry.data;
+    const crc = typeof zlib.crc32 === "function" ? zlib.crc32(entry.data) : 0;
+    const size = entry.declaredSize ?? entry.data.length;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(entry.deflate ? 8 : 0, 8);
+    local.writeUInt32LE(crc >>> 0, 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(size, 22);
+    local.writeUInt16LE(name.length, 26);
+    locals.push(local, name, body);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(entry.deflate ? 8 : 0, 10);
+    central.writeUInt32LE(crc >>> 0, 16);
+    central.writeUInt32LE(body.length, 20);
+    central.writeUInt32LE(size, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(central, name);
+    offset += local.length + name.length + body.length;
+  }
+  const cd = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(cd.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cd, eocd]);
+}
+
+async function withEnv<T>(vars: Record<string, string | undefined>, run: () => Promise<T>) {
+  const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));
+  for (const [key, value] of Object.entries(vars)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await run();
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+async function testIngestLimitsRejectZipBombs(): Promise<void> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "gke-zip-limits-"));
+  try {
+    const limits = readIngestLimits();
+    // Real deflate of 24 MB of zeros: ~24 KB on disk, ratio far above 200:1.
+    const deflateBomb = path.join(dir, "deflate-bomb.docx");
+    await fs.writeFile(
+      deflateBomb,
+      buildZip([
+        { name: "word/document.xml", data: Buffer.alloc(24 * 1024 * 1024), deflate: true },
+      ]),
+    );
+    const ratio = await checkIngestSafety(deflateBomb, limits);
+    assert.equal(ratio.ok, false);
+    assert.match(ratio.ok ? "" : ratio.reason, /compression ratio/);
+
+    // Tiny archive whose central directory claims more than the unzipped cap.
+    const claimed = path.join(dir, "claimed.xlsx");
+    await fs.writeFile(
+      claimed,
+      // 25 entries x 9 MB declared: each is under the ratio floor, the sum is not.
+      buildZip(
+        Array.from({ length: 25 }, (_, i) => ({
+          name: `part-${i}.xml`,
+          data: Buffer.from("x"),
+          declaredSize: 9 * 1024 * 1024,
+        })),
+      ),
+    );
+    const total = await checkIngestSafety(claimed, limits);
+    assert.equal(total.ok, false);
+    assert.match(total.ok ? "" : total.reason, /ZIP expands to more than/);
+
+    // Too many entries.
+    const many = path.join(dir, "many.zip");
+    await fs.writeFile(
+      many,
+      buildZip(
+        Array.from({ length: limits.maxEntries + 1 }, (_, i) => ({
+          name: `e${i}`,
+          data: Buffer.alloc(0),
+        })),
+      ),
+    );
+    const entries = await checkIngestSafety(many, limits);
+    assert.equal(entries.ok, false);
+    assert.match(entries.ok ? "" : entries.reason, /entry limit/);
+
+    // ZIP64 markers are rejected rather than parsed.
+    const zip64 = path.join(dir, "zip64.pptx");
+    const zip64Buffer = buildZip([{ name: "a", data: Buffer.from("a") }]);
+    zip64Buffer.writeUInt32LE(0xffffffff, zip64Buffer.length - 22 + 16);
+    await fs.writeFile(zip64, zip64Buffer);
+    const z64 = await checkIngestSafety(zip64, limits);
+    assert.equal(z64.ok, false);
+    assert.match(z64.ok ? "" : z64.reason, /ZIP64/);
+
+    // Data placed before the archive must not skip the check: ZIP readers
+    // find the archive from its end record and accept a prefix.
+    const bombBuffer = await fs.readFile(deflateBomb);
+    for (const name of ["prefixed-bomb.docx", "prefixed-bomb.txt", "prefixed-bomb.pdf"]) {
+      const prefixed = path.join(dir, name);
+      await fs.writeFile(prefixed, Buffer.concat([Buffer.from("junk-prefix\n"), bombBuffer]));
+      const verdict = await checkIngestSafety(prefixed, limits);
+      assert.equal(verdict.ok, false, `${name} with a prefix must be rejected`);
+      assert.match(verdict.ok ? "" : verdict.reason, /data before its first entry/);
+    }
+
+    // A ZIP-family extension without an end record is rejected, not skipped.
+    const noEnd = path.join(dir, "not-really.docx");
+    await fs.writeFile(noEnd, Buffer.from("plain text pretending to be a document"));
+    const missing = await checkIngestSafety(noEnd, limits);
+    assert.equal(missing.ok, false);
+    assert.match(missing.ok ? "" : missing.reason, /end-of-central-directory/);
+
+    // Other formats whose tail merely contains the end-record bytes still pass.
+    const coincidence = path.join(dir, "coincidence.txt");
+    const stray = Buffer.alloc(22);
+    stray.writeUInt32LE(0x06054b50, 0);
+    stray.writeUInt32LE(5, 12);
+    stray.writeUInt32LE(3, 16);
+    await fs.writeFile(coincidence, Buffer.concat([Buffer.from("notes ".repeat(20)), stray]));
+    assert.deepEqual(await checkIngestSafety(coincidence, limits), { ok: true });
+
+    // extractText refuses the bomb before any parser runs.
+    await assert.rejects(
+      withEnv({ GKE_INGEST_CONVERTER: "native" }, () => extractText(deflateBomb)),
+      (error: unknown) => error instanceof IngestLimitError,
+    );
+
+    // A benign archive and the committed fixtures pass.
+    const benign = path.join(dir, "benign.zip");
+    await fs.writeFile(
+      benign,
+      buildZip([{ name: "notes.txt", data: Buffer.from("hello ".repeat(100)), deflate: true }]),
+    );
+    assert.deepEqual(await checkIngestSafety(benign, limits), { ok: true });
+    for (const fixture of ["sample.docx", "sample.xlsx", "sample.pdf", "sample.md"]) {
+      assert.deepEqual(
+        await checkIngestSafety(path.join(__dirname, "fixtures", fixture), limits),
+        { ok: true },
+        `fixture ${fixture} should pass the ingest limits`,
+      );
+    }
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function testIngestLimitsEnvValidation(): Promise<void> {
+  await withEnv({ GKE_INGEST_MAX_FILE_MB: "abc" }, async () => {
+    assert.throws(() => readIngestLimits(), /Invalid GKE_INGEST_MAX_FILE_MB/);
+  });
+  await withEnv({ GKE_INGEST_MAX_UNZIPPED_MB: "-5" }, async () => {
+    assert.throws(() => readIngestLimits(), /Invalid GKE_INGEST_MAX_UNZIPPED_MB/);
+  });
+  await withEnv({ GKE_INGEST_MAX_FILE_MB: "0" }, async () => {
+    assert.throws(() => readIngestLimits(), /Invalid GKE_INGEST_MAX_FILE_MB/);
+  });
+  await withEnv({ GKE_INGEST_MAX_FILE_MB: "2", GKE_INGEST_MAX_UNZIPPED_MB: "" }, async () => {
+    const limits = readIngestLimits();
+    assert.equal(limits.maxFileBytes, 2 * 1024 * 1024);
+    assert.equal(limits.maxUnzippedBytes, 200 * 1024 * 1024);
+  });
+}
+
+async function testIngestRunSkipsOversizeAndBombs(): Promise<void> {
+  const repoRoot = await fs.mkdtemp(path.join(os.tmpdir(), "gke-ingest-limits-"));
+  try {
+    await fs.mkdir(path.join(repoRoot, "kb", "topics"), { recursive: true });
+    await fs.writeFile(path.join(repoRoot, "kb", "index.md"), "# Limits test\n", "utf8");
+    const inbox = path.join(repoRoot, "inbox");
+    await fs.mkdir(inbox, { recursive: true });
+    await fs.writeFile(path.join(inbox, "small.md"), "# Small\n\nFits the limit.\n", "utf8");
+    await fs.writeFile(path.join(inbox, "large.txt"), "x".repeat(64 * 1024), "utf8");
+    await fs.writeFile(
+      path.join(inbox, "bomb.docx"),
+      buildZip([
+        { name: "word/document.xml", data: Buffer.alloc(24 * 1024 * 1024), deflate: true },
+      ]),
+    );
+    const workspace = await loadWorkspaceContext({
+      repoRoot,
+      scanRoots: ["kb"],
+      writeRoots: ["kb", ".gke", ".cache"],
+    });
+    // 0.05 MB is about 51 KB: the 64 KB text file is over; the note and the ~24 KB bomb are not.
+    const summary = await withEnv(
+      { GKE_INGEST_MAX_FILE_MB: "0.05", GKE_INGEST_CONVERTER: "native" },
+      () =>
+        runIngest({
+          folder: inbox,
+          module: "general",
+          dryRun: true,
+          scrub: true,
+          workspace,
+          logger: () => undefined,
+        }),
+    );
+    assert.deepEqual(summary.failures, []);
+    assert.equal(summary.filesProcessed, 1, "only the small note should be processed");
+    assert.ok(
+      summary.skipped.some((line) => /^large\.txt \(rejected: file too large/.test(line)),
+      `oversize file not reported as skipped: ${summary.skipped.join("; ")}`,
+    );
+    assert.ok(
+      summary.skipped.some((line) => /^bomb\.docx \(rejected: .*compression ratio/.test(line)),
+      `zip bomb not reported as skipped: ${summary.skipped.join("; ")}`,
+    );
+    assert.ok(!JSON.stringify(summary).includes(repoRoot), "summary exposed an absolute path");
+  } finally {
+    await fs.rm(repoRoot, { recursive: true, force: true });
+  }
+}
+
 const tests = [
   testDetectFormat,
   testDeriveTitle,
@@ -204,6 +453,9 @@ const tests = [
   testNormalizeDocumentChunkingAndProvenance,
   testMarkItDownConverter,
   testMarkItDownAutoFallsBackToNativeExtractor,
+  testIngestLimitsRejectZipBombs,
+  testIngestLimitsEnvValidation,
+  testIngestRunSkipsOversizeAndBombs,
 ];
 
 let failed = 0;

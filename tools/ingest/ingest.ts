@@ -26,6 +26,7 @@ import {
   type ExtractResult,
 } from "./extractors.js";
 import { normalizeDocument } from "./normalize.js";
+import { IngestLimitError, checkIngestSafety, readIngestLimits } from "./limits.js";
 import { normalizeProjectId } from "../projects/project-manifest.js";
 import { createProject, getProject, linkProjectSource } from "../projects/project-service.js";
 import { loadWorkspaceContext } from "../workspaces/config.js";
@@ -147,6 +148,8 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
   const repoRoot = workspace.repoRoot;
   const now = options.now ?? (() => new Date());
   const extractor = options.extractor ?? extractText;
+  // Resolve size limits up front so an invalid env override fails the run loudly.
+  const limits = readIngestLimits();
 
   const root = path.resolve(options.folder);
   let stat: Awaited<ReturnType<typeof fs.stat>> | null = null;
@@ -182,6 +185,12 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
     const slug = slugifySource(sourceUri);
     const createdPaths: string[] = [];
     try {
+      const safety = await checkIngestSafety(file, limits);
+      if (!safety.ok) {
+        summary.skipped.push(`${sourceUri} (rejected: ${safety.reason})`);
+        log(`  • skipped: ${sourceUri} (${safety.reason})`);
+        continue;
+      }
       const rawHash = await hashRawSource(file, workspace);
       const accepted = await readSourceRecord(repoRoot, sourceId, workspace);
       const format = detectFormat(file);
@@ -400,6 +409,11 @@ export async function runIngest(options: IngestOptions): Promise<IngestSummary> 
       );
     } catch (error) {
       const message = sanitizeIngestError((error as Error).message, file, root);
+      if (error instanceof IngestLimitError) {
+        summary.skipped.push(`${sourceUri} (rejected: ${message})`);
+        log(`  • skipped: ${sourceUri} (${message})`);
+        continue;
+      }
       summary.failures.push(`${sourceUri}: ${message}`);
       log(`  ✗ ${sourceUri}: ${message}`);
     }

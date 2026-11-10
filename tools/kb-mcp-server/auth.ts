@@ -13,9 +13,25 @@ export type AuthResult = { ok: true } | { ok: false; status: number; reason: str
 
 const BEARER_PREFIX = /^Bearer\s+/i;
 
+/** Shortest accepted shared secret; `openssl rand -hex 24` yields 48 characters. */
+export const MIN_API_KEY_LENGTH = 32;
+
 /** Read the configured API key, trimmed. Empty string means "not configured". */
 export function getConfiguredApiKey(env: NodeJS.ProcessEnv = process.env): string {
   return (env.KB_MCP_HTTP_API_KEY ?? "").trim();
+}
+
+/**
+ * Explain why the configured key is unusable, or return null when it is fine.
+ * The HTTP bridge refuses to start on any non-null result.
+ */
+export function apiKeyConfigurationProblem(env: NodeJS.ProcessEnv = process.env): string | null {
+  const configured = getConfiguredApiKey(env);
+  if (!configured) return "KB_MCP_HTTP_API_KEY is unset.";
+  if (configured.length < MIN_API_KEY_LENGTH) {
+    return `KB_MCP_HTTP_API_KEY must be at least ${MIN_API_KEY_LENGTH} characters (got ${configured.length}). Generate one with: openssl rand -hex 24`;
+  }
+  return null;
 }
 
 /**
@@ -45,14 +61,16 @@ export function authenticate(
   headers: Record<string, string | string[] | undefined>,
   env: NodeJS.ProcessEnv = process.env,
 ): AuthResult {
-  const configured = getConfiguredApiKey(env);
-  if (!configured) {
+  const problem = apiKeyConfigurationProblem(env);
+  if (problem) {
+    // Never echo the length detail to remote callers.
     return {
       ok: false,
       status: 503,
-      reason: "Server not configured: KB_MCP_HTTP_API_KEY is unset.",
+      reason: "Server not configured: invalid KB_MCP_HTTP_API_KEY.",
     };
   }
+  const configured = getConfiguredApiKey(env);
   const presented = extractPresentedKey(headers);
   if (!presented) {
     return { ok: false, status: 401, reason: "Missing API key." };

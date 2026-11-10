@@ -25,6 +25,7 @@ try {
 track: test
 module: parity
 ---
+
 # Alpha Record
 
 The uniqueparitytoken appears in this evidence line.
@@ -107,6 +108,11 @@ The uniqueparitytoken appears in this evidence line.
   assert.equal(bm25Result.hits[0]?.path, "kb/topics/alpha.md");
   assert.equal(sqliteResult.hits[0]?.path, "kb/topics/alpha.md");
   assert.equal(sqliteResult.hits[0]?.lineNumber, bm25Result.hits[0]?.lineNumber);
+  // Citations are file-relative: four frontmatter lines and a blank line come
+  // before the heading, so the evidence sentence is line 8 of the file.
+  assert.equal(bm25Result.hits[0]?.lineNumber, 8);
+  assert.equal(sqliteResult.hits[0]?.lineNumber, 8);
+  assert.equal(parsed.bodyLineOffset, 4);
   assert.equal(sqliteResult.hits[0]?.title, bm25Result.hits[0]?.title);
   assert.equal(sqliteResult.hits[0]?.track, bm25Result.hits[0]?.track);
   assert.equal(sqliteResult.hits[0]?.module, bm25Result.hits[0]?.module);

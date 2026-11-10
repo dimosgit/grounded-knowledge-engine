@@ -12,6 +12,7 @@ import { execFile } from "node:child_process";
 import { createRequire } from "node:module";
 import mammoth from "mammoth";
 import ExcelJS from "exceljs";
+import { IngestLimitError, checkIngestSafety } from "./limits.js";
 
 export type SupportedFormat =
   | "pdf"
@@ -84,6 +85,9 @@ export async function extractText(filePath: string): Promise<ExtractResult> {
   const format = detectFormat(filePath);
   if (!format) throw new Error(`Unsupported file type: ${filePath}`);
   const converter = getIngestConverter();
+  // Defense in depth: callers other than runIngest still get the pre-parse limits.
+  const verdict = await checkIngestSafety(filePath);
+  if (!verdict.ok) throw new IngestLimitError(verdict.reason);
   if (!PLAIN_FORMATS.has(format) && converter !== "native") {
     try {
       return await extractWithMarkItDown(filePath, format);

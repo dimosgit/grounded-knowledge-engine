@@ -3,13 +3,17 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
   statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -32,6 +36,20 @@ function runSetup(...args) {
     stdio: "pipe",
     encoding: "utf8",
   });
+}
+
+// Every atomic write must clean up after itself: no temp files may linger.
+function assertNoStrayTempFiles(root) {
+  const stray = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (/\.tmp$/.test(entry.name)) stray.push(full);
+    }
+  };
+  walk(root);
+  assert.deepEqual(stray, [], `stray temp files left behind: ${stray.join(", ")}`);
 }
 
 function writeWorkspace(name, config) {
@@ -102,6 +120,43 @@ try {
   assert.match(codexConfig, /^\[mcp_servers\.kb\]$/m);
   assert.match(codexConfig, /^KB_MCP_PROFILE = "full"$/m);
   assert.match(codexConfig, /^KB_MCP_ENABLE_WRITES = "true"$/m);
+
+  assertNoStrayTempFiles(configRoot);
+
+  // The temp name is random and exclusive-create, never pid-derived.
+  const setupSource = readFileSync(setupScript, "utf8");
+  assert.ok(!/process\.pid\}?\.tmp/.test(setupSource), "temp names must not be pid-based");
+  assert.match(setupSource, /openSync\(tempPath, "wx", 0o600\)/);
+  assert.match(setupSource, /randomBytes\(/);
+  // The Codex TOML goes through the same atomic helper, not an in-place write.
+  assert.match(setupSource, /writeFileAtomic\(configPath, replaceManagedTomlBlock\(/);
+
+  if (process.platform !== "win32") {
+    // An existing TOML keeps its mode across the atomic replace.
+    const codexPath = join(configRoot, ".codex", "config.toml");
+    chmodSync(codexPath, 0o640);
+    runSetup("--client=codex", "--profile=core", "--skip-smoke");
+    assert.equal(statSync(codexPath).mode & 0o777, 0o640, "TOML mode must be preserved");
+    const rewritten = readFileSync(codexPath, "utf8");
+    assert.match(rewritten, /^KB_MCP_PROFILE = "core"$/m);
+    assert.equal((rewritten.match(/^\[mcp_servers\.kb\]$/gm) || []).length, 1);
+    for (const json of [".mcp.json", join(".claude", "settings.local.json")]) {
+      assert.equal(statSync(join(configRoot, json)).mode & 0o777, 0o600, `${json} stays 0600`);
+    }
+
+    // A symlinked TOML (dotfiles-managed) stays a symlink; its target is updated.
+    const linkedTarget = join(workspaceParent, "linked-config.toml");
+    writeFileSync(linkedTarget, rewritten);
+    rmSync(codexPath);
+    symlinkSync(linkedTarget, codexPath);
+    runSetup("--client=codex", "--profile=full", "--skip-smoke");
+    assert.ok(lstatSync(codexPath).isSymbolicLink(), "symlinked config must stay a symlink");
+    assert.match(readFileSync(linkedTarget, "utf8"), /^KB_MCP_PROFILE = "full"$/m);
+    rmSync(codexPath);
+    writeFileSync(codexPath, readFileSync(linkedTarget, "utf8"));
+    assertNoStrayTempFiles(configRoot);
+    assertNoStrayTempFiles(workspaceParent);
+  }
 
   const alphaRoot = writeWorkspace("Client Alpha Vault", {
     id: "client-alpha",
@@ -239,6 +294,7 @@ try {
       );
     }
 
+    assertNoStrayTempFiles(fakeHome);
     assert.throws(
       () => runSetup("--scope=nowhere", "--client=codex", "--skip-smoke"),
       /Unsupported scope/i,
@@ -248,6 +304,7 @@ try {
     rmSync(fakeHome, { recursive: true, force: true });
   }
 
+  assertNoStrayTempFiles(configRoot);
   const listed = runSetup("--list-workspaces");
   assert.match(listed, /client-alpha: Client Alpha \(read-only\)/);
   assert.match(listed, /client-beta: Client Beta \(writable\)/);
