@@ -12,6 +12,10 @@
  * size cap and the per-entry ratio check keep that window small.
  */
 import fs from "node:fs/promises";
+import path from "node:path";
+
+/** Formats that are ZIP containers; these must pass the archive check. */
+const ZIP_FAMILY_EXTENSIONS = new Set([".docx", ".xlsx", ".pptx", ".epub", ".zip"]);
 
 export const DEFAULT_MAX_FILE_MB = 50;
 export const DEFAULT_MAX_UNZIPPED_MB = 200;
@@ -95,8 +99,12 @@ export async function checkIngestSafety(
   }
   const handle = await fs.open(filePath, "r");
   try {
-    if (!(await looksLikeZip(handle, stat.size))) return { ok: true };
-    return await inspectZipCentralDirectory(handle, stat.size, limits);
+    return await inspectZipCentralDirectory(
+      handle,
+      stat.size,
+      limits,
+      ZIP_FAMILY_EXTENSIONS.has(path.extname(filePath).toLowerCase()),
+    );
   } finally {
     await handle.close();
   }
@@ -109,24 +117,32 @@ async function readAt(handle: fs.FileHandle, position: number, length: number): 
 }
 
 /** Local file header (PK\3\4) or an empty archive (PK\5\6) at offset 0. */
-async function looksLikeZip(handle: fs.FileHandle, size: number): Promise<boolean> {
-  if (size < 4) return false;
-  const head = await readAt(handle, 0, 4);
+function startsLikeZip(head: Buffer): boolean {
   if (head.length < 4 || head[0] !== 0x50 || head[1] !== 0x4b) return false;
   return (head[2] === 0x03 && head[3] === 0x04) || (head[2] === 0x05 && head[3] === 0x06);
 }
 
+/**
+ * ZIP readers (JSZip behind mammoth/exceljs, Python's zipfile behind
+ * MarkItDown) locate an archive from its end record and accept data placed in
+ * front of it. So the decision to inspect cannot rest on the first bytes: the
+ * end record is searched in every file, and any archive found must start at
+ * offset 0 with its central directory directly before the end record.
+ */
 async function inspectZipCentralDirectory(
   handle: fs.FileHandle,
   size: number,
   limits: IngestLimits,
+  zipByExtension: boolean,
 ): Promise<IngestSafetyVerdict> {
   const reject = (reason: string): IngestSafetyVerdict => ({ ok: false, reason });
-  if (size < EOCD_MIN_SIZE) return reject("malformed ZIP: too small for a central directory");
+  const startsAsZip = startsLikeZip(await readAt(handle, 0, Math.min(size, 4)));
+  const mustBeZip = zipByExtension || startsAsZip;
 
   const tailLength = Math.min(size, EOCD_MIN_SIZE + EOCD_MAX_COMMENT);
   const tailStart = size - tailLength;
-  const tail = await readAt(handle, tailStart, tailLength);
+  const tail =
+    tailLength >= EOCD_MIN_SIZE ? await readAt(handle, tailStart, tailLength) : Buffer.alloc(0);
   let eocd = -1;
   for (let i = tail.length - EOCD_MIN_SIZE; i >= 0; i -= 1) {
     if (tail.readUInt32LE(i) === EOCD_SIGNATURE) {
@@ -134,7 +150,31 @@ async function inspectZipCentralDirectory(
       break;
     }
   }
-  if (eocd < 0) return reject("malformed ZIP: end-of-central-directory record not found");
+  if (eocd < 0) {
+    return mustBeZip
+      ? reject("malformed ZIP: end-of-central-directory record not found")
+      : { ok: true };
+  }
+
+  const eocdAbsolute = tailStart + eocd;
+  if (!mustBeZip) {
+    // Another format whose tail happens to hold the end-record bytes. Treat it
+    // as an archive only when a central directory sits where a reader would
+    // look for one: at the declared offset or directly before the end record.
+    const declaredSize = tail.readUInt32LE(eocd + 12);
+    const declaredOffset = tail.readUInt32LE(eocd + 16);
+    let hasDirectory = declaredSize === 0;
+    for (const candidate of [declaredOffset, eocdAbsolute - declaredSize]) {
+      if (candidate < 0 || candidate + 4 > eocdAbsolute) continue;
+      if ((await readAt(handle, candidate, 4)).readUInt32LE(0) === CENTRAL_HEADER_SIGNATURE) {
+        hasDirectory = true;
+      }
+    }
+    if (!hasDirectory) return { ok: true };
+  }
+  if (!startsAsZip) {
+    return reject("ZIP archive with data before its first entry is not supported for ingestion");
+  }
 
   const diskNumber = tail.readUInt16LE(eocd + 4);
   const cdDisk = tail.readUInt16LE(eocd + 6);
@@ -159,8 +199,8 @@ async function inspectZipCentralDirectory(
   if (totalEntries > limits.maxEntries) {
     return reject(`ZIP has ${totalEntries} entries, above the ${limits.maxEntries} entry limit`);
   }
-  if (cdOffset + cdSize > tailStart + eocd) {
-    return reject("malformed ZIP: central directory extends past its end record");
+  if (cdOffset + cdSize !== eocdAbsolute) {
+    return reject("malformed ZIP: central directory does not end at its end record");
   }
 
   const cd = await readAt(handle, cdOffset, cdSize);

@@ -159,7 +159,11 @@ async function testMarkItDownConverter(): Promise<void> {
       "#!/usr/bin/env node\nconsole.log('# Converted Deck\\n\\n- MARKITDOWNTOKEN9005')\n",
       { mode: 0o755 },
     );
-    await fs.writeFile(source, "placeholder", "utf8");
+    // A real (tiny) ZIP container: ZIP-family files must pass the archive check.
+    await fs.writeFile(
+      source,
+      buildZip([{ name: "ppt/presentation.xml", data: Buffer.from("placeholder") }]),
+    );
     process.env.GKE_INGEST_CONVERTER = "markitdown";
     process.env.GKE_MARKITDOWN_BIN = bin;
 
@@ -320,6 +324,33 @@ async function testIngestLimitsRejectZipBombs(): Promise<void> {
     const z64 = await checkIngestSafety(zip64, limits);
     assert.equal(z64.ok, false);
     assert.match(z64.ok ? "" : z64.reason, /ZIP64/);
+
+    // Data placed before the archive must not skip the check: ZIP readers
+    // find the archive from its end record and accept a prefix.
+    const bombBuffer = await fs.readFile(deflateBomb);
+    for (const name of ["prefixed-bomb.docx", "prefixed-bomb.txt", "prefixed-bomb.pdf"]) {
+      const prefixed = path.join(dir, name);
+      await fs.writeFile(prefixed, Buffer.concat([Buffer.from("junk-prefix\n"), bombBuffer]));
+      const verdict = await checkIngestSafety(prefixed, limits);
+      assert.equal(verdict.ok, false, `${name} with a prefix must be rejected`);
+      assert.match(verdict.ok ? "" : verdict.reason, /data before its first entry/);
+    }
+
+    // A ZIP-family extension without an end record is rejected, not skipped.
+    const noEnd = path.join(dir, "not-really.docx");
+    await fs.writeFile(noEnd, Buffer.from("plain text pretending to be a document"));
+    const missing = await checkIngestSafety(noEnd, limits);
+    assert.equal(missing.ok, false);
+    assert.match(missing.ok ? "" : missing.reason, /end-of-central-directory/);
+
+    // Other formats whose tail merely contains the end-record bytes still pass.
+    const coincidence = path.join(dir, "coincidence.txt");
+    const stray = Buffer.alloc(22);
+    stray.writeUInt32LE(0x06054b50, 0);
+    stray.writeUInt32LE(5, 12);
+    stray.writeUInt32LE(3, 16);
+    await fs.writeFile(coincidence, Buffer.concat([Buffer.from("notes ".repeat(20)), stray]));
+    assert.deepEqual(await checkIngestSafety(coincidence, limits), { ok: true });
 
     // extractText refuses the bomb before any parser runs.
     await assert.rejects(
