@@ -66,11 +66,7 @@ export interface ReviewActionEntry extends CommandPaletteEntryBase {
 }
 
 export type CommandPaletteEntry =
-  | DocumentEntry
-  | ProjectEntry
-  | DecisionEntry
-  | ViewEntry
-  | ReviewActionEntry;
+  DocumentEntry | ProjectEntry | DecisionEntry | ViewEntry | ReviewActionEntry;
 
 export interface CommandPaletteGroup {
   key: string;
