@@ -246,8 +246,15 @@ async function write(relPath: string, content: string): Promise<void> {
 }
 
 async function git(args: string[], date?: string): Promise<void> {
-  const env = date
-    ? { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date }
-    : process.env;
+  // Drop repository-locating variables (set when tests run from a Git hook)
+  // so fixture commands never touch the enclosing repository.
+  const {
+    GIT_DIR: _gitDir,
+    GIT_WORK_TREE: _gitWorkTree,
+    GIT_INDEX_FILE: _gitIndexFile,
+    GIT_COMMON_DIR: _gitCommonDir,
+    ...baseEnv
+  } = process.env;
+  const env = date ? { ...baseEnv, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date } : baseEnv;
   await execFileAsync("git", ["-C", root, ...args], { env, encoding: "utf8" });
 }
