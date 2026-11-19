@@ -250,11 +250,9 @@ async function handleKbListDecisions(args: JsonObject): Promise<ToolPayload> {
   const results = await decisionService.list({
     projectId: normalizeScalar(args?.projectId) || undefined,
     status: (normalizeScalar(args?.status).toLowerCase() || undefined) as
-      | DecisionStatus
-      | undefined,
+      DecisionStatus | undefined,
     reviewState: (normalizeScalar(args?.reviewState).toLowerCase() || undefined) as
-      | DecisionReviewState
-      | undefined,
+      DecisionReviewState | undefined,
     owner: normalizeScalar(args?.owner) || undefined,
     tag: normalizeScalar(args?.tag) || undefined,
     asOf: normalizeScalar(args?.asOf) || undefined,
