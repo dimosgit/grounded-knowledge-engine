@@ -29,6 +29,11 @@ export default tseslint.config(
       // Typed-boundary cleanup (FR-14) is tracked separately; keep visible but
       // non-blocking so the lint gate stays green.
       "@typescript-eslint/no-explicit-any": "warn",
+      // React Compiler rules added in eslint-plugin-react-hooks 7 flag existing
+      // effect and ref patterns; warn until those components are refactored.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/immutability": "warn",
     },
   },
   // Dev tooling and config files run in Node and may use console freely.
