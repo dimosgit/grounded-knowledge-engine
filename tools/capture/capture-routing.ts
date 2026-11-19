@@ -5,10 +5,7 @@ import { getProject } from "../projects/project-service.js";
 export type CaptureRouteFieldName = "path" | "track" | "module" | "projectId";
 
 export type CaptureRouteSource =
-  | "explicit"
-  | "identified-project"
-  | "evidence-consensus"
-  | "workspace-default";
+  "explicit" | "identified-project" | "evidence-consensus" | "workspace-default";
 
 export type CaptureRouteAmbiguityReason =
   | "invalid-explicit-project"

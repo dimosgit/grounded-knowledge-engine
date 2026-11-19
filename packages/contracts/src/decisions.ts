@@ -3,12 +3,7 @@ export type DecisionStatus = "proposed" | "active" | "superseded" | "rejected";
 export type DecisionConfidence = "low" | "medium" | "high";
 export type DecisionReviewState = "current" | "due" | "overdue";
 export type DecisionEvidenceChange =
-  | "unchanged"
-  | "strengthened"
-  | "weakened"
-  | "contradicted"
-  | "missing"
-  | "new";
+  "unchanged" | "strengthened" | "weakened" | "contradicted" | "missing" | "new";
 
 export interface DecisionEvidenceInput {
   path: string;
