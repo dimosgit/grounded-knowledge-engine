@@ -4,6 +4,10 @@ import {
   authorizeWorkspaceOperationalRead,
   authorizeWorkspaceWrite,
 } from "../workspaces/path-policy.js";
+import {
+  parseFrontmatter,
+  setFrontmatterValues,
+} from "../../packages/contracts/src/frontmatter.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
 import {
   normalizeProjectId,
@@ -829,21 +833,10 @@ function updateFrontmatter(raw: string, updates: Record<string, string>): string
   if (!raw.startsWith("---\n") && !raw.startsWith("---\r\n")) {
     throw new Error("Canonical project record is missing frontmatter.");
   }
-  const lines = raw.split(/\r?\n/);
-  const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
-  if (end < 0) throw new Error("Canonical project frontmatter is not closed.");
-
-  const pending = new Map(Object.entries(updates));
-  for (let index = 1; index < end; index += 1) {
-    const match = lines[index].match(/^([A-Za-z0-9_-]+):/);
-    if (!match || !pending.has(match[1])) continue;
-    lines[index] = `${match[1]}: ${pending.get(match[1])}`;
-    pending.delete(match[1]);
+  if (!parseFrontmatter(raw).found) {
+    throw new Error("Canonical project frontmatter is not closed.");
   }
-  if (pending.size) {
-    lines.splice(end, 0, ...[...pending].map(([key, value]) => `${key}: ${value}`));
-  }
-  return ensureTrailingNewline(lines.join("\n"));
+  return ensureTrailingNewline(setFrontmatterValues(raw, updates));
 }
 
 function updateMarkdownSection(raw: string, key: ProjectSectionKey, body: string): string {

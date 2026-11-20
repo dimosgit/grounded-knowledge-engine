@@ -210,6 +210,7 @@ async function testWorkspaceConfigCarriesDomainAndUi(): Promise<void> {
             { id: "not valid", label: "Ignored" },
           ],
           defaultFocusAreaId: "work",
+          obsidian: { vault: " Team notes ", pathPrefix: "kb/" },
         },
       }),
     );
@@ -239,6 +240,7 @@ async function testWorkspaceConfigCarriesDomainAndUi(): Promise<void> {
       },
     ]);
     assert.equal(workspace.ui.defaultFocusAreaId, "work");
+    assert.deepEqual(workspace.ui.obsidian, { vault: "Team notes", pathPrefix: "kb/" });
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

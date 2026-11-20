@@ -3,6 +3,9 @@
  * Keep this module free of Node, browser, React, transport, and filesystem APIs.
  */
 
+import { parseFrontmatter } from "./frontmatter.js";
+import { createWikiLinkIndex, extractWikiLinks, relativeWorkspacePath } from "./wikilinks.js";
+
 export const PROJECT_CONTRACT_VERSION = 1 as const;
 
 export interface ProjectManifest {
@@ -32,6 +35,8 @@ export interface ParsedProjectDocument {
   manifest: ProjectManifest;
   sections: Map<string, ProjectSection>;
   explicitPaths: string[];
+  /** `[[wiki-link]]` targets; resolve them with `resolveProjectWikiLinks`. */
+  wikiLinks: string[];
 }
 
 export interface ProjectCitation {
@@ -323,6 +328,13 @@ export function parseProjectData(
     manifest,
     sections,
     explicitPaths: extractWorkspaceRelativeLinks(body),
+    wikiLinks: [
+      ...new Set(
+        extractWikiLinks(body)
+          .map((link) => link.target)
+          .filter(Boolean),
+      ),
+    ],
   };
 }
 
@@ -330,18 +342,8 @@ export function parseProjectFrontmatter(raw: string): {
   frontmatter: Record<string, string>;
   bodyStartLine: number;
 } {
-  if (!raw.startsWith("---\n") && !raw.startsWith("---\r\n")) {
-    return { frontmatter: {}, bodyStartLine: 1 };
-  }
-  const lines = raw.split(/\r?\n/);
-  const frontmatter: Record<string, string> = {};
-  let index = 1;
-  for (; index < lines.length; index += 1) {
-    if (lines[index].trim() === "---") break;
-    const match = lines[index].match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (match) frontmatter[match[1]] = match[2].trim();
-  }
-  return { frontmatter, bodyStartLine: Math.min(index + 2, lines.length + 1) };
+  const { frontmatter, bodyStartLine } = parseFrontmatter(raw);
+  return { frontmatter, bodyStartLine };
 }
 
 const LIST_ITEM_MARKER = /^([-*]\s+|\d+[.)]\s+|\[[ xX]\]\s+)/;
@@ -543,6 +545,28 @@ export function isDocumentInProject(
   explicitPaths: string[],
 ): boolean {
   return createProjectMembership(projectId, manifestPath, sourceRoots, explicitPaths)(doc);
+}
+
+/**
+ * Resolves a project's wiki-links against the workspace paths and returns them
+ * relative to the manifest folder, the same form as `explicitPaths`, so every
+ * membership check treats them as explicit links.
+ */
+export function resolveProjectWikiLinks(
+  wikiLinks: string[],
+  manifestPath: string,
+  workspacePaths: Iterable<string>,
+): string[] {
+  if (!wikiLinks.length) return [];
+  const index = createWikiLinkIndex(workspacePaths);
+  const resolved = new Set<string>();
+  for (const target of wikiLinks) {
+    const relPath = index.resolve(target, manifestPath);
+    if (relPath && relPath !== manifestPath) {
+      resolved.add(relativeWorkspacePath(manifestPath, relPath));
+    }
+  }
+  return [...resolved];
 }
 
 function normalizePosixPath(parts: string[]): string {

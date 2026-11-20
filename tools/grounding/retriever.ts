@@ -45,7 +45,7 @@ const __dirname = path.dirname(__filename);
 // corpus; `kb` holds notes captured back by the agent.
 export const DEFAULT_SCAN_ROOTS = ["demo-kb", "kb"];
 
-const INDEX_VERSION = 4;
+const INDEX_VERSION = 5;
 const DEFAULT_INDEX_CACHE_FILE = ".cache/kb-retriever-index.v2.json";
 const DEFAULT_INDEX_CACHE_TTL_MS = 30000;
 const DEFAULT_QUERY_CACHE_TTL_MS = 45000;
@@ -359,9 +359,13 @@ async function buildIndex({
     const bodyLines = body.split(/\r?\n/);
     const lineOffset = doc.bodyLineOffset ?? 0;
     const docChunks = chunkDocument(bodyLines);
-    for (const piece of docChunks) {
+    const aliasText = (doc.aliases || []).join("\n");
+    for (const [pieceIndex, piece] of docChunks.entries()) {
       const chunkId = chunks.length;
-      const tokens = tokenizeForIndex(piece.text, domain);
+      // Aliases are alternative names: index them with the first chunk only.
+      const indexedText =
+        pieceIndex === 0 && aliasText ? `${piece.text}\n${aliasText}` : piece.text;
+      const tokens = tokenizeForIndex(indexedText, domain);
       if (!tokens.length) continue;
 
       const termFreq = new Map<string, number>();

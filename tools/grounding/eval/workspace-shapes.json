@@ -37,6 +37,10 @@
       "vague": {
         "recallAtK": 1,
         "top1Accuracy": 1
+      },
+      "vault": {
+        "recallAtK": 1,
+        "top1Accuracy": 1
       }
     }
   },
@@ -151,6 +155,23 @@
         "kb/sources/aurora-checksum-evidence.md",
         "kb/sources/aurora-approval-evidence.md"
       ],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "vault-alias-bramblegate",
+      "category": "vault",
+      "query": "Bramblegate switchover",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/notes/Quillstone cutover.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "vault-block-list-frontmatter-citation",
+      "category": "vault",
+      "query": "Quillstone cutover ledger intake weekend window queue depth",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/notes/Quillstone cutover.md"],
+      "expectedCitationPathPatterns": ["kb/notes/Quillstone cutover.md"],
       "forbiddenPathPatterns": []
     }
   ]

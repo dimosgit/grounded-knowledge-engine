@@ -1208,6 +1208,54 @@ body {
   color: #0f625d;
 }
 
+.doc-backlinks {
+  margin-top: 2rem;
+  border-top: 1px solid var(--line);
+  padding-top: 1rem;
+}
+
+.doc-backlinks h2 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+}
+
+.doc-backlinks ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.doc-backlinks-item {
+  width: 100%;
+  display: grid;
+  gap: 0.1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+}
+
+.doc-backlinks-item:hover,
+.doc-backlinks-item:focus-visible {
+  border-color: currentColor;
+}
+
+.doc-backlinks-title {
+  font-weight: 700;
+}
+
+.doc-backlinks-path {
+  color: var(--muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
 .digest-link-list {
   margin-top: 0.55rem;
   display: grid;

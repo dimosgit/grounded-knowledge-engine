@@ -7,11 +7,24 @@ import type {
   DocumentSnapshotEntry,
   DocumentSnapshot,
 } from "./types.js";
+import {
+  frontmatterList,
+  parseFrontmatter as parseSharedFrontmatter,
+} from "../../packages/contracts/src/frontmatter.js";
 import { DEFAULT_DOMAIN_PROFILE } from "../workspaces/domain-profile.js";
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 
-const SKIP_DIRECTORIES = new Set([".git", ".gke", "node_modules", "dist", "content", ".cache"]);
+const SKIP_DIRECTORIES = new Set([
+  ".git",
+  ".gke",
+  ".obsidian",
+  ".trash",
+  "node_modules",
+  "dist",
+  "content",
+  ".cache",
+]);
 
 export interface ParsedFrontmatter {
   frontmatter: Frontmatter;
@@ -77,6 +90,7 @@ export async function readDocumentEntries(
         bodyLineOffset,
         frontmatter,
         title: getDocumentTitle(body, file.relPath),
+        aliases: frontmatterList(frontmatter.aliases),
         track: inferTrack(file.relPath, frontmatter, domain),
         module: normalizeScalar(frontmatter.module),
         sourceKind: inferSourceKind(file.relPath, domain),
@@ -106,21 +120,12 @@ export function buildManifestHash(files: CandidateFile[]): string {
 }
 
 export function parseFrontmatter(raw: string): ParsedFrontmatter {
-  if (!raw.startsWith("---\n")) return { frontmatter: {}, body: raw, bodyLineOffset: 0 };
-  const end = raw.indexOf("\n---\n", 4);
-  if (end === -1) return { frontmatter: {}, body: raw, bodyLineOffset: 0 };
-  const header = raw.slice(4, end);
-  const body = raw.slice(end + 5);
-  const bodyLineOffset = raw.slice(0, end + 5).split("\n").length - 1;
-  const frontmatter: Frontmatter = {};
-  for (const line of header.split("\n")) {
-    const separator = line.indexOf(":");
-    if (separator === -1) continue;
-    const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1).trim();
-    if (key) frontmatter[key] = value;
-  }
-  return { frontmatter, body, bodyLineOffset };
+  const parsed = parseSharedFrontmatter(raw);
+  return {
+    frontmatter: parsed.frontmatter,
+    body: parsed.body,
+    bodyLineOffset: parsed.bodyStartLine - 1,
+  };
 }
 
 export function getDocumentTitle(body: string, relPath: string): string {

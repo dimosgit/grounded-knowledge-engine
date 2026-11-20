@@ -1,4 +1,7 @@
-import { selectProjectNextActions } from "../../packages/contracts/src/projects.js";
+import {
+  resolveProjectWikiLinks,
+  selectProjectNextActions,
+} from "../../packages/contracts/src/projects.js";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { getKbRetriever } from "../grounding/retriever.js";
@@ -59,6 +62,14 @@ export async function resumeProject(
   if (workspace) await authorizeWorkspaceRead(workspace, projectPath);
   const rawProject = await fs.readFile(projectPath, "utf8");
   const parsed = parseProjectDocument(rawProject, manifestDoc.relPath, manifestDoc.title);
+  const linkedPaths = [
+    ...parsed.explicitPaths,
+    ...resolveProjectWikiLinks(
+      parsed.wikiLinks,
+      manifestDoc.relPath,
+      allDocs.map((doc) => doc.relPath),
+    ),
+  ];
   const checkpoints = /(?:^|\/)kb\/projects\/[^/]+\/project\.md$/.test(manifestDoc.relPath)
     ? await listProjectCheckpoints(parsed.manifest.projectId, {
         repoRoot,
@@ -73,7 +84,7 @@ export async function resumeProject(
       parsed.manifest.projectId,
       manifestDoc.relPath,
       parsed.manifest.sourceRoots,
-      parsed.explicitPaths,
+      linkedPaths,
     ),
   );
   if (!projectDocs.length)

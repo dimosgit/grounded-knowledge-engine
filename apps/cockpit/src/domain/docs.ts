@@ -1,3 +1,5 @@
+import { parseFrontmatter as parseSharedFrontmatter } from "@gke/contracts/frontmatter";
+
 export const tagLabels = {
   all: "All",
   modules: "Modules",
@@ -128,28 +130,7 @@ export function getTitle(path, body) {
 }
 
 export function parseFrontmatter(raw) {
-  if (!raw.startsWith("---\n")) {
-    return { body: raw, frontmatter: {} };
-  }
-
-  const end = raw.indexOf("\n---\n", 4);
-  if (end === -1) {
-    return { body: raw, frontmatter: {} };
-  }
-
-  const header = raw.slice(4, end).trim();
-  const body = raw.slice(end + 5);
-  const frontmatter = {};
-
-  for (const line of header.split("\n")) {
-    const sep = line.indexOf(":");
-    if (sep === -1) continue;
-    const key = line.slice(0, sep).trim();
-    const value = line.slice(sep + 1).trim();
-    if (!key) continue;
-    frontmatter[key] = value;
-  }
-
+  const { body, frontmatter } = parseSharedFrontmatter(raw);
   return { body, frontmatter };
 }
 
@@ -515,12 +496,20 @@ export function normalizeDocPath(path) {
   return output.join("/");
 }
 
+function safeDecodeUri(value) {
+  try {
+    return decodeURI(value);
+  } catch {
+    return value;
+  }
+}
+
 export function resolveMarkdownDocPath(currentPath, href) {
   if (!href) return null;
   if (href.startsWith("#")) return null;
 
-  const cleanHref = href.split("#")[0].split("?")[0];
-  if (!cleanHref.endsWith(".md")) return null;
+  const cleanHref = safeDecodeUri(href.split("#")[0].split("?")[0]);
+  if (!cleanHref.toLowerCase().endsWith(".md")) return null;
 
   const currentDir = currentPath.includes("/")
     ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1)

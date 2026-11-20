@@ -1,5 +1,6 @@
 import {
   createProjectMembership,
+  resolveProjectWikiLinks,
   selectProjectNextActions,
   calculateProjectAttention,
   isCompletedProjectStatus,
@@ -54,6 +55,7 @@ export function buildProjectSummaries(
 ) {
   const projectGroups = new Map();
   const scopeDocuments = docs.map((doc) => ({ relPath: doc.path, frontmatter: doc.frontmatter }));
+  const workspacePaths = docs.map((doc) => doc.path);
 
   docs
     .filter((doc) => !isArchivedDoc(doc))
@@ -65,7 +67,11 @@ export function buildProjectSummaries(
         doc.path,
         doc.title,
       );
-      const { manifest, sections, explicitPaths } = parsed;
+      const { manifest, sections } = parsed;
+      const explicitPaths = [
+        ...parsed.explicitPaths,
+        ...resolveProjectWikiLinks(parsed.wikiLinks, doc.path, workspacePaths),
+      ];
       if (!manifest.projectId) return;
 
       const outcome = sectionSummary(sections.get("outcome"));

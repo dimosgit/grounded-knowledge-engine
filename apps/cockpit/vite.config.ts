@@ -27,6 +27,8 @@ export default defineConfig({
     __KB_DEFAULT_ACTIVE_TRACK__: JSON.stringify(workspace.ui.defaultActiveTrack ?? "all"),
     __KB_FOCUS_AREAS__: JSON.stringify(workspace.ui.focusAreas ?? []),
     __KB_DEFAULT_FOCUS_AREA__: JSON.stringify(workspace.ui.defaultFocusAreaId ?? ""),
+    // Read only behind import.meta.env.DEV, so production builds drop it.
+    __KB_OBSIDIAN__: JSON.stringify(workspace.ui.obsidian ?? null),
   },
   plugins: [
     react(),
