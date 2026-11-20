@@ -23,6 +23,9 @@ https://github.com/user-attachments/assets/d00c977b-9538-4835-94d5-26350136eb34
 - **Project resume** as a cited briefing: focus, decisions, blockers, next steps.
 - **Document ingestion** for PDF, DOCX, XLSX, PPTX, HTML, and more.
 - **One local MCP server** for Claude Code, Codex, Gemini CLI, and Copilot.
+- **Obsidian vaults** as workspaces: wiki-links, embeds, aliases, and list
+  properties are read and written safely
+  ([setup](docs/workspace-config.md#using-an-obsidian-vault)).
 
 It is not a hosted chat memory, team wiki, or document-management platform.
 

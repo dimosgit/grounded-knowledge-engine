@@ -1,6 +1,15 @@
 # Obsidian Vault Compatibility Plan
 
-**Status:** Planned, not started.
+**Status:** Implemented on local branches, not pushed.
+
+**Progress note (2026-11-20):** All three slices are built as stacked
+branches: `feat/obsidian-frontmatter` (safe frontmatter), `feat/obsidian-links`
+(wiki-links, embeds, aliases, inline tags) and `feat/obsidian-cockpit`
+(backlinks panel, Open in Obsidian). Each passed `npm run verify`. Limits:
+wiki-links count as project links in resume, review and the Cockpit, but
+checkpoint and decision evidence checks still accept only path links; image
+embeds render only when the image is synced into the Cockpit (`assets/`
+folders), otherwise the missing-asset fallback shows.
 **Review date:** 2026-12-04.
 **Repository:** Grounded Knowledge Engine.
 **Surfaces:** `packages/contracts`, `tools/grounding`, `tools/projects`,

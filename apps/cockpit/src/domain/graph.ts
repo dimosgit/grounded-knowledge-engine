@@ -38,6 +38,21 @@ function resolveMarkdownHref(href, sourcePath, docsByPath) {
   return candidates.find((candidate) => docsByPath.has(candidate)) || "";
 }
 
+/** Notes whose Markdown or wiki-links resolve to `activePath`, sorted by title. */
+export function buildBacklinks(activePath, docs) {
+  if (!activePath) return [];
+  const docsByPath = new Map<string, any>(docs.map((doc) => [doc.path, doc]));
+  return docs
+    .filter((doc) => doc.path !== activePath)
+    .filter((doc) => {
+      const links = Array.isArray(doc.links) ? doc.links : getSectionLinks(doc.content || "");
+      return links.some(
+        (link) => resolveMarkdownHref(link.href, doc.path, docsByPath) === activePath,
+      );
+    })
+    .sort((left, right) => `${left.title}`.localeCompare(`${right.title}`));
+}
+
 function getGraphDocMeta(doc, docsByPath) {
   const links = Array.isArray(doc.links) ? doc.links : getSectionLinks(doc.content || "");
   const outgoingPaths = new Set(

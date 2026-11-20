@@ -155,6 +155,28 @@ whose area labels are safe to disclose.
 }
 ```
 
+## Using an Obsidian vault
+
+GKE reads an Obsidian vault as an ordinary workspace: point `scanRoots` at the
+vault folders. Frontmatter block lists (`tags:` followed by `- item` lines),
+`aliases`, `[[wiki-links]]`, `![[embeds]]` and inline `#tags` are understood;
+`.obsidian/` and `.trash/` are skipped. Writes keep list keys as lists, and GKE
+keeps writing standard Markdown links, which Obsidian also reads.
+
+The optional `ui.obsidian` block adds an **Open in Obsidian** action to the
+local Cockpit reader. `vault` is the vault name as Obsidian shows it;
+`pathPrefix` is the leading part of a Cockpit document path that lies outside
+the vault (for example `"kb/"` when the vault is the `kb/` folder). The action
+never appears in production builds.
+
+```json
+{
+  "ui": {
+    "obsidian": { "vault": "Team notes", "pathPrefix": "kb/" }
+  }
+}
+```
+
 ## Example: a specialized workspace
 
 ```json

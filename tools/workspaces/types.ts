@@ -80,6 +80,17 @@ export interface WorkspaceUiConfig {
    */
   readonly focusAreas?: readonly WorkspaceFocusAreaConfig[];
   readonly defaultFocusAreaId?: string;
+  /**
+   * Optional local-only "Open in Obsidian" action. `vault` is the Obsidian
+   * vault name; `pathPrefix` is the leading part of a Cockpit document path
+   * that lies outside the vault (for example "kb/" when the vault is `kb/`).
+   */
+  readonly obsidian?: WorkspaceObsidianConfig;
+}
+
+export interface WorkspaceObsidianConfig {
+  readonly vault: string;
+  readonly pathPrefix?: string;
 }
 
 export type WorkspaceFocusAreaIcon = "briefcase" | "sparkles" | "graduation-cap";

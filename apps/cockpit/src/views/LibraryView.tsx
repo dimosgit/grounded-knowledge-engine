@@ -1,6 +1,8 @@
 import { Suspense, lazy } from "react";
 import { Zap } from "lucide-react";
 import { CommandBar } from "../components/CommandBar";
+import { DocumentBacklinks } from "../components/DocumentBacklinks";
+import { OpenInObsidianLink } from "../components/OpenInObsidianLink";
 import { OperatorFrame } from "../components/OperatorFrame";
 
 const MarkdownArticle = lazy(() => import("../components/MarkdownArticle"));
@@ -348,6 +350,7 @@ export function LibraryView({
                         Back to Module
                       </button>
                     )}
+                    <OpenInObsidianLink docPath={activeDoc.path} />
                     <button className="action-btn" onClick={onToggleReadingMode} type="button">
                       {isReadingMode ? "Exit Reading Mode" : "Reading Mode"}
                     </button>
@@ -420,6 +423,11 @@ export function LibraryView({
                           suppressTopLevelTitle
                         />
                       </Suspense>
+                      <DocumentBacklinks
+                        activePath={activeDoc.path}
+                        docs={docs}
+                        onOpenDoc={onOpenDoc}
+                      />
                     </>
                   )}
                 </article>

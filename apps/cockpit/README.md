@@ -17,7 +17,9 @@ not expose a remote MCP server, private workspaces, or write access.
   Markdown and composes those filters with the existing Board lanes.
 - Lets you browse all Markdown notes with track, item, and document-type filters.
 - Provides full-text search and a command bar.
-- Renders Markdown with GFM tables, Mermaid diagrams, internal links, relative assets, and unresolved-asset fallbacks.
+- Renders Markdown with GFM tables, Mermaid diagrams, internal links, Obsidian `[[wiki-links]]` and image embeds, relative assets, and unresolved-asset fallbacks.
+- Shows a "Linked from" backlinks panel under each document and, in local
+  development with `ui.obsidian` configured, an "Open in Obsidian" action.
 - Shows digest quick-recall panels.
 - Builds a project board from Markdown project sections, with drag-to-lane moves persisted back to frontmatter in dev.
 - Builds structured project detail pages from the shared engine parser, including

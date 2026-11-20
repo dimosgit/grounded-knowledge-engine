@@ -6,6 +6,7 @@ import {
   type WorkspaceConfigFile,
   type WorkspaceContext,
   type WorkspaceFocusAreaConfig,
+  type WorkspaceObsidianConfig,
   type WorkspaceFocusAreaIcon,
   type WorkspaceFocusTaskConfig,
   type WorkspaceSensitivity,
@@ -142,6 +143,7 @@ function normalizeUiConfig(value: unknown): WorkspaceUiConfig {
       ? config.defaultActiveTrack.trim()
       : undefined;
   const focusAreas = normalizeFocusAreas(config.focusAreas);
+  const obsidian = normalizeObsidianConfig((config as { obsidian?: unknown }).obsidian);
   const requestedFocusAreaId =
     typeof config.defaultFocusAreaId === "string" ? config.defaultFocusAreaId.trim() : "";
   const defaultFocusAreaId =
@@ -154,7 +156,17 @@ function normalizeUiConfig(value: unknown): WorkspaceUiConfig {
     ...(defaultActiveTrack ? { defaultActiveTrack } : {}),
     ...(focusAreas.length ? { focusAreas: Object.freeze(focusAreas) } : {}),
     ...(defaultFocusAreaId ? { defaultFocusAreaId } : {}),
+    ...(obsidian ? { obsidian } : {}),
   });
+}
+
+function normalizeObsidianConfig(value: unknown): WorkspaceObsidianConfig | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const config = value as Record<string, unknown>;
+  const vault = typeof config.vault === "string" ? config.vault.trim() : "";
+  if (!vault) return undefined;
+  const pathPrefix = typeof config.pathPrefix === "string" ? config.pathPrefix.trim() : "";
+  return Object.freeze({ vault, ...(pathPrefix ? { pathPrefix } : {}) });
 }
 
 const FOCUS_AREA_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;

@@ -10,6 +10,7 @@ export const forbiddenLocalEndpointMarkers = [
   "/__gke/projects/tasks",
   "/__gke/workspace/context",
   "/__board/lifecycle",
+  "obsidian://",
 ] as const;
 
 export interface ProductionBoundaryViolation {
