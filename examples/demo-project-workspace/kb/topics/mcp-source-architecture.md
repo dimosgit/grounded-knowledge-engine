@@ -21,3 +21,11 @@ server; common transports include stdio for local processes and HTTP/SSE for
 networked communication.
 
 JSON-RPC 2.0 is the message exchange format used by the transports.
+
+## Related
+
+- [[MCP host]]
+- [[MCP client]]
+- [[MCP server]]
+- [[Capability negotiation]]
+- [[Start here]]

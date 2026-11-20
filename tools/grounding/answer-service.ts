@@ -241,7 +241,7 @@ export async function answerGrounded(
     answer =
       "Grounded answer withheld (strict evidence gate):\n" +
       `- Reason: ${reasonText}.\n` +
-      `- Please refine your question with specific ${domain.label} object names, transaction codes, or implementation context.\n` +
+      "- Your notes do not answer this well enough. Name the specific record, project, or term, or capture the answer once you know it.\n" +
       "\nBest matching local evidence:\n" +
       evidenceBullets.map((line) => `- ${line}`).join("\n") +
       "\n\nNote: Strict mode avoids weakly-grounded synthesis.";
@@ -249,7 +249,7 @@ export async function answerGrounded(
     answer =
       "Grounded answer (retrieval-based, low confidence):\n" +
       "- The current evidence is partial or weak for a reliable direct answer.\n" +
-      `- Please refine with more specific ${domain.label} object names, transaction codes, or module context.\n` +
+      "- Name the specific record, project, or term to narrow it down.\n" +
       "\nBest matching local evidence:\n" +
       evidenceBullets.map((line) => `- ${line}`).join("\n") +
       "\n\nNote: This output is extractive and intentionally conservative.";
@@ -463,11 +463,17 @@ function isMarkdownHeading(value: string | undefined): boolean {
   return /^\s{0,3}#{1,6}\s+/.test(value || "");
 }
 
+/** `[[target#fragment|label]]` and `![[embed]]`; answers show the label or target. */
+const WIKI_LINK_MARKUP = /!?\[\[([^\]|#\n]*)(?:#([^\]|\n]*))?(?:\|([^\]\n]*))?\]\]/g;
+
 function cleanAnswerLine(value: string): string {
   return value
     .trim()
     .replace(/^[-*+]\s+/, "")
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(WIKI_LINK_MARKUP, (_match, target: string, fragment = "", label = "") =>
+      `${label || target || fragment}`.trim(),
+    )
     .replace(/[*_`]/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -955,8 +961,10 @@ function buildGateThresholds() {
 }
 
 /**
- * A question that names a canonical note directly is safely answerable from
- * that one source. Broad questions still use the stricter multi-source gate.
+ * A question that names a note directly is safely answerable from that one
+ * source: a canonical topic or term sharing two title words, or any top-ranked
+ * note (an Obsidian vault keeps notes in any folder) whose title the question
+ * names. Broad questions still use the stricter multi-source gate.
  */
 function buildFocusedCanonicalGateThresholds() {
   return {
@@ -972,9 +980,9 @@ function findFocusedCanonicalHit(hits: SearchHit[], queryTokens: string[]): Sear
   const topHit = hits[0];
   if (!topHit) return undefined;
   const tokens = new Set(queryTokens);
-  return isCanonicalTopicOrTerm(topHit) && titleOverlap(topHit.title, tokens) >= 2
-    ? topHit
-    : undefined;
+  const namesCanonicalNote =
+    isCanonicalTopicOrTerm(topHit) && titleOverlap(topHit.title, tokens) >= 2;
+  return namesCanonicalNote || isNamedInQuestion(topHit.title, tokens) ? topHit : undefined;
 }
 
 function isCanonicalTopicOrTerm(hit: SearchHit): boolean {
@@ -1052,7 +1060,12 @@ function tokenizeForSimilarity(value: unknown): string[] {
 }
 
 function trimSentence(text: string): string {
-  const clean = text.replace(/\s+/g, " ").trim();
+  const clean = text
+    .replace(WIKI_LINK_MARKUP, (_match, target: string, fragment = "", label = "") =>
+      `${label || target || fragment}`.trim(),
+    )
+    .replace(/\s+/g, " ")
+    .trim();
   return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
 }
 

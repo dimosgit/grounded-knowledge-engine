@@ -32,6 +32,14 @@ source:
   decision and checkpoint — second canonical project used to prove strict
   project isolation when projects contain similar language.
 - `demo-kb/open_questions.md` — open questions log.
+- `demo-kb/Start here.md`, `demo-kb/terms/*.md`, `demo-kb/runbooks/*.md`, the
+  dated meeting notes in `demo-kb/sources/router-rollout/`, and
+  `demo-kb/sources/transport-review/Tunnel threat model.md` — an Obsidian-style
+  layer (wiki-links, aliases, list properties) written for this repository. The
+  glossary entries define general MCP terms in original wording and link to the
+  paraphrased concept notes above; nothing is copied from the upstream docs.
+- `demo-kb/.obsidian/` — a starter Obsidian configuration (dark theme, graph
+  colors by folder, attachments in an `assets` subfolder). GKE never indexes it.
 - `kb/topics/mcp-primitive-decision.md` — a decision note written by the MCP smoke
   test to demonstrate the capture → retain → reuse loop.
 

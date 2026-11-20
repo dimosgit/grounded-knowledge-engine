@@ -47,7 +47,7 @@ The project context became available through both `kb.resume_project` and the
 
 ## Blockers
 
-- The Microsoft tunnel proof remains outside this milestone.
+- None currently.
 
 ## Open questions
 

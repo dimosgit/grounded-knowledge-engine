@@ -22,3 +22,9 @@ The tools flow has two important operations:
 Tools are model-controlled, unlike resources, which are usually selected by the
 application. Search and capture are tools because the agent can decide to call
 them during a task.
+
+## Related
+
+- [[Tool call]]
+- [[Rollout checklist]]
+- [[Start here]]

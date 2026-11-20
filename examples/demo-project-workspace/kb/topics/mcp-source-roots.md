@@ -21,3 +21,8 @@ well-behaved server prioritizes operations within them. They commonly scope
 repositories, project folders, and API surfaces so a server knows where to work.
 
 Roots describe *where* to look; resources expose *what* is there.
+
+## Related
+
+- [[Root]]
+- [[Start here]]

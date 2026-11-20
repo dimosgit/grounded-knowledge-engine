@@ -24,3 +24,8 @@ The flow keeps a human in the loop on the client side:
 
 The client retains final control over model selection, context inclusion, and
 whether a proposed completion is accepted at all.
+
+## Related
+
+- [[Sampling request]]
+- [[Start here]]

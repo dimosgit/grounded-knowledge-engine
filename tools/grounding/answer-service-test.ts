@@ -200,6 +200,43 @@ async function testDirectExtractiveAnswer(): Promise<void> {
   );
 }
 
+async function testWikiLinksRenderAsLabels(): Promise<void> {
+  const threatModel = document({
+    relPath: "demo-kb/sources/transport-review/Tunnel threat model.md",
+    title: "Tunnel threat model",
+    body: [
+      "# Tunnel threat model",
+      "",
+      "- The [[Streamable HTTP|HTTP bridge]] is read-only; writes stay in [[stdio transport]].",
+      "- Tunnels close after each session, see ![[Rollback plan#Steps]].",
+    ].join("\n"),
+  });
+  const evidence = [0, 1, 2].map((index) =>
+    hit(index, {
+      path: threatModel.relPath,
+      title: threatModel.title,
+      matchedTokens: ["tunnel", "bridge", "writes"],
+    }),
+  );
+  const searchResult = result(evidence);
+  searchResult.queryTokens = ["tunnel", "bridge", "writes"];
+  searchResult.signals = {
+    tokenCoverage: 1,
+    uniqueSources: 3,
+    topScore: 20,
+    dominantSourceShare: 1 / 3,
+  };
+  const answer = await answerGrounded(
+    {
+      question: "According to Tunnel threat model, does the bridge allow writes?",
+      responseMode: "curate",
+    },
+    { search: async () => searchResult, listDocuments: async () => [threatModel], now: clock() },
+  );
+  assert.doesNotMatch(answer.answer, /\[\[|\]\]/);
+  assert.match(answer.answer, /HTTP bridge is read-only; writes stay in stdio transport\./);
+}
+
 async function testFocusedCanonicalAnswer(): Promise<void> {
   const demoCard = document({
     relPath: "demo-kb/topics/demo-card.md",
@@ -241,6 +278,51 @@ async function testFocusedCanonicalAnswer(): Promise<void> {
   assert.equal(answer.gate.pass, true);
   assert.equal(answer.answer, "- Status: Ready for review.");
   assert.match(answer.confidence.rationale, /Direct match/);
+}
+
+async function testNamedVaultNoteAnswer(): Promise<void> {
+  const threatModel = document({
+    relPath: "kb/sources/transport-review/Tunnel threat model.md",
+    title: "Tunnel threat model",
+    body: [
+      "# Tunnel threat model",
+      "",
+      "- Loopback only, plus a long random API key.",
+      "- The bridge is read-only; writes stay local.",
+    ].join("\n"),
+  });
+  const namedHit = hit(0, {
+    path: threatModel.relPath,
+    title: threatModel.title,
+    sourceKind: "doc",
+    snippet: "Loopback only, plus a long random API key.",
+    matchedTokens: ["tunnel", "threat", "model"],
+    score: 9,
+  });
+  const namedResult = result([namedHit]);
+  namedResult.queryTokens = ["tunnel", "threat", "model"];
+  namedResult.signals = { tokenCoverage: 1, uniqueSources: 1, topScore: 9, dominantSourceShare: 1 };
+  const named = await answerGrounded(
+    { question: "What is in the tunnel threat model?", responseMode: "curate" },
+    { search: async () => namedResult, listDocuments: async () => [threatModel], now: clock() },
+  );
+  assert.equal(named.abstained, false);
+  assert.equal(named.gate.pass, true);
+
+  // Sharing one title word is not naming the note: the strict gate still applies.
+  const vagueResult = result([{ ...namedHit, matchedTokens: ["tunnel"] }]);
+  vagueResult.queryTokens = ["tunnel", "budget", "approved"];
+  vagueResult.signals = {
+    tokenCoverage: 0.33,
+    uniqueSources: 1,
+    topScore: 9,
+    dominantSourceShare: 1,
+  };
+  const vague = await answerGrounded(
+    { question: "Who approved the tunnel budget?", responseMode: "curate" },
+    { search: async () => vagueResult, listDocuments: async () => [threatModel], now: clock() },
+  );
+  assert.equal(vague.abstained, true);
 }
 
 async function testFocusedCanonicalAnswerRequiresTheTopHit(): Promise<void> {
@@ -503,7 +585,9 @@ async function main(): Promise<void> {
   await testNoEvidenceAndForwarding();
   await testEvidenceGate();
   await testDirectExtractiveAnswer();
+  await testWikiLinksRenderAsLabels();
   await testFocusedCanonicalAnswer();
+  await testNamedVaultNoteAnswer();
   await testFocusedCanonicalAnswerRequiresTheTopHit();
   await testAnswerQuotesTheSupportedRecord();
   await testNamedRecordStillWinsWhenAskedFor();
