@@ -22,3 +22,7 @@ or binary payloads.
 Resources are application-controlled in the normal MCP model. For automatic
 model-driven actions, a server should expose a tool instead.
 
+## Related
+
+- [[Resource URI]]
+- [[Start here]]

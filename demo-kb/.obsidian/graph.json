@@ -1,0 +1,72 @@
+{
+  "collapse-filter": true,
+  "search": "",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": true,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {
+      "query": "path:terms",
+      "color": {
+        "a": 1,
+        "rgb": 2864035
+      }
+    },
+    {
+      "query": "path:topics",
+      "color": {
+        "a": 1,
+        "rgb": 9141494
+      }
+    },
+    {
+      "query": "path:projects",
+      "color": {
+        "a": 1,
+        "rgb": 16098596
+      }
+    },
+    {
+      "query": "path:sources",
+      "color": {
+        "a": 1,
+        "rgb": 5219319
+      }
+    },
+    {
+      "query": "path:decisions",
+      "color": {
+        "a": 1,
+        "rgb": 15882106
+      }
+    },
+    {
+      "query": "path:runbooks",
+      "color": {
+        "a": 1,
+        "rgb": 10213710
+      }
+    },
+    {
+      "query": "file:\"Start here\"",
+      "color": {
+        "a": 1,
+        "rgb": 16777215
+      }
+    }
+  ],
+  "collapse-display": false,
+  "showArrow": false,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1.2,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": true,
+  "centerStrength": 0.5,
+  "repelStrength": 12,
+  "linkStrength": 1,
+  "linkDistance": 180,
+  "scale": 1,
+  "close": false
+}

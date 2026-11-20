@@ -74,6 +74,7 @@ function createDemo(args) {
         writeRoots: ["kb", ".gke", ".cache"],
         readOnly: false,
         sensitivity: "personal",
+        ui: { obsidian: { vault: "kb", pathPrefix: "kb/" } },
       },
       null,
       2,
@@ -88,7 +89,10 @@ Next:
   gke setup
 
 Then restart Codex or Claude from that directory and ask:
-  Use GKE to resume the router-rollout project.`);
+  Use GKE to resume the router-rollout project.
+
+To watch the notes in Obsidian, open the folder ${path.join(requestedTarget, "kb")}
+as a vault and press Cmd/Ctrl+G for the graph.`);
   return 0;
 }
 

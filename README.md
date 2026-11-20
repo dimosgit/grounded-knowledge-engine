@@ -25,7 +25,7 @@ https://github.com/user-attachments/assets/d00c977b-9538-4835-94d5-26350136eb34
 - **One local MCP server** for Claude Code, Codex, Gemini CLI, and Copilot.
 - **Obsidian vaults** as workspaces: wiki-links, embeds, aliases, and list
   properties are read and written safely
-  ([setup](docs/workspace-config.md#using-an-obsidian-vault)).
+  ([two-minute demo](docs/integrations/obsidian.md)).
 
 It is not a hosted chat memory, team wiki, or document-management platform.
 
@@ -102,6 +102,7 @@ a context graph. Try the [public demo](https://gke.dimouzunov.com) or read the
 [Boundaries](docs/separation-of-concerns.md) ·
 [Data model](docs/workspace-data-architecture.md) ·
 [Copilot](docs/integrations/github-copilot.md) ·
+[Obsidian](docs/integrations/obsidian.md) ·
 [Agent workflows](docs/agent-workflows.md) ·
 [Contributing](CONTRIBUTING.md)
 

@@ -15,6 +15,10 @@ if (!relativeDestination || relativeDestination === ".." || relativeDestination.
   throw new Error("Demo export destination must stay inside the repository.");
 }
 
+// The staged workspace holds only kb/; without this the project CLI falls back
+// to the repository defaults (demo-kb and kb) and stops on the missing demo-kb.
+process.env.KB_MCP_SCAN_ROOTS = "kb";
+
 const sourceRoot = path.join(repoRoot, "demo-kb");
 const destinationParent = path.dirname(destination);
 await fs.mkdir(destinationParent, { recursive: true });

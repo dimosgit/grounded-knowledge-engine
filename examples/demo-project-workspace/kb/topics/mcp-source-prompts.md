@@ -24,3 +24,8 @@ The prompts flow has two operations:
 Prompts can accept required or optional arguments, embed resource context (logs,
 code files) directly, and chain several conversation steps into a guided
 workflow.
+
+## Related
+
+- [[Prompt template]]
+- [[Start here]]

@@ -1,0 +1,6 @@
+{
+  "attachmentFolderPath": "./assets",
+  "newLinkFormat": "shortest",
+  "useMarkdownLinks": false,
+  "alwaysUpdateLinks": true
+}
