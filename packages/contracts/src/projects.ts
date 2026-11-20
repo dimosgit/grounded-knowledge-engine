@@ -3,6 +3,8 @@
  * Keep this module free of Node, browser, React, transport, and filesystem APIs.
  */
 
+import { parseFrontmatter } from "./frontmatter.js";
+
 export const PROJECT_CONTRACT_VERSION = 1 as const;
 
 export interface ProjectManifest {
@@ -330,18 +332,8 @@ export function parseProjectFrontmatter(raw: string): {
   frontmatter: Record<string, string>;
   bodyStartLine: number;
 } {
-  if (!raw.startsWith("---\n") && !raw.startsWith("---\r\n")) {
-    return { frontmatter: {}, bodyStartLine: 1 };
-  }
-  const lines = raw.split(/\r?\n/);
-  const frontmatter: Record<string, string> = {};
-  let index = 1;
-  for (; index < lines.length; index += 1) {
-    if (lines[index].trim() === "---") break;
-    const match = lines[index].match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
-    if (match) frontmatter[match[1]] = match[2].trim();
-  }
-  return { frontmatter, bodyStartLine: Math.min(index + 2, lines.length + 1) };
+  const { frontmatter, bodyStartLine } = parseFrontmatter(raw);
+  return { frontmatter, bodyStartLine };
 }
 
 const LIST_ITEM_MARKER = /^([-*]\s+|\d+[.)]\s+|\[[ xX]\]\s+)/;

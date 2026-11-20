@@ -2,6 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { getPaths, syncContent } from "./sync-lib.js";
 
+// Editor and engine state folders never hold knowledge notes.
+const SKIPPED_DIRECTORIES = new Set([".gke", ".obsidian", ".trash"]);
+
 const { repoRoot, sourceFolders } = getPaths();
 const pollMs = 1500;
 const imageExtensions = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif"]);
@@ -69,7 +72,7 @@ async function collectMarkdownStats(rootPath: string, relPrefix = ""): Promise<F
   const dirEntries = await fs.readdir(rootPath, { withFileTypes: true });
 
   for (const entry of dirEntries) {
-    if (entry.name.toLowerCase() === ".gke") continue;
+    if (SKIPPED_DIRECTORIES.has(entry.name.toLowerCase())) continue;
     const absolutePath = path.join(rootPath, entry.name);
     const relativePath = relPrefix ? `${relPrefix}/${entry.name}` : entry.name;
 

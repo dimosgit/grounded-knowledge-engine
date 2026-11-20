@@ -1,3 +1,5 @@
+import { parseFrontmatter as parseSharedFrontmatter } from "../../../packages/contracts/src/frontmatter.js";
+
 const BODY_SEARCH_CHARACTER_LIMIT = 2_200;
 const STRUCTURAL_CONTENT_LIMIT = 8_000;
 const MAX_HEADINGS = 80;
@@ -94,19 +96,8 @@ function parseFrontmatter(raw: string): {
   body: string;
   frontmatter: Record<string, string>;
 } {
-  if (!raw.startsWith("---\n")) return { body: raw, frontmatter: {} };
-  const end = raw.indexOf("\n---\n", 4);
-  if (end === -1) return { body: raw, frontmatter: {} };
-
-  const frontmatter: Record<string, string> = {};
-  for (const line of raw.slice(4, end).trim().split("\n")) {
-    const separator = line.indexOf(":");
-    if (separator === -1) continue;
-    const key = line.slice(0, separator).trim();
-    if (!key) continue;
-    frontmatter[key] = line.slice(separator + 1).trim();
-  }
-  return { body: raw.slice(end + 5), frontmatter };
+  const { body, frontmatter } = parseSharedFrontmatter(raw);
+  return { body, frontmatter };
 }
 
 function boundFrontmatter(frontmatter: Record<string, string>): Record<string, string> {

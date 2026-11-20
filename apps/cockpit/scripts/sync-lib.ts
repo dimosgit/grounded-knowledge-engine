@@ -4,6 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildCatalogEntries, type CatalogSource } from "./catalog-generator.js";
 
+// Editor and engine state folders never hold knowledge notes.
+const SKIPPED_DIRECTORIES = new Set([".gke", ".obsidian", ".trash"]);
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const appRoot = path.resolve(__dirname, "..");
@@ -161,7 +164,7 @@ async function copyContentTree(sourceDir: string, destinationDir: string): Promi
   let assets = 0;
 
   for (const entry of entries) {
-    if (entry.name.toLowerCase() === ".gke") continue;
+    if (SKIPPED_DIRECTORIES.has(entry.name.toLowerCase())) continue;
     const sourcePath = path.join(sourceDir, entry.name);
     const destinationPath = path.join(destinationDir, entry.name);
 

@@ -9,7 +9,11 @@ try {
   fs.cpSync(path.join(root, "packages/contracts"), path.join(isolated, "contracts"), {
     recursive: true,
   });
-  for (const test of ["project-contract-test.ts", "decision-contract-test.ts"]) {
+  for (const test of [
+    "project-contract-test.ts",
+    "decision-contract-test.ts",
+    "frontmatter-contract-test.ts",
+  ]) {
     execFileSync(
       process.execPath,
       ["--import", import.meta.resolve("tsx"), path.join(isolated, "contracts", test)],

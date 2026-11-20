@@ -50,7 +50,7 @@
     "test:workspaces:mcp": "tsx tools/workspaces/workspace-mcp-integration-test.ts",
     "test:loop": "tsx tools/kb-mcp-server/loop-integration-test.ts",
     "typecheck:contracts": "tsc --noEmit -p packages/contracts/tsconfig.json",
-    "test:contracts": "npm run typecheck:contracts && tsx packages/contracts/project-contract-test.ts && tsx packages/contracts/decision-contract-test.ts && node scripts/contracts-isolation-test.mjs",
+    "test:contracts": "npm run typecheck:contracts && tsx packages/contracts/project-contract-test.ts && tsx packages/contracts/decision-contract-test.ts && tsx packages/contracts/frontmatter-contract-test.ts && node scripts/contracts-isolation-test.mjs",
     "test:layers": "node scripts/layers-test.mjs && node scripts/import-boundaries-test.mjs",
     "test:projects": "tsx tools/projects/project-context-test.ts",
     "test:project-service": "tsx tools/projects/project-service-test.ts && tsx tools/projects/project-application-service-test.ts",

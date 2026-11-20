@@ -110,6 +110,31 @@ try {
   assert.match(updatedRaw, /custom_field: keep-me/);
   assert.match(updatedRaw, /## Custom operator notes\n\nPreserve this section exactly\./);
 
+  // Editor-style block lists stay valid YAML when the service rewrites them.
+  await fs.writeFile(
+    path.join(root, created.path),
+    updatedRaw.replace(
+      "tags: alpha, pilot",
+      "tags:\n  - alpha\n  - pilot\naliases:\n  - Pilot programme",
+    ),
+    "utf8",
+  );
+  await updateProject({
+    repoRoot: root,
+    scanRoots: ["kb"],
+    projectId: "alpha-pilot",
+    tags: ["alpha", "rollout"],
+  });
+  const blockListRaw = await fs.readFile(path.join(root, created.path), "utf8");
+  assert.match(
+    blockListRaw,
+    /\ntags:\n {2}- alpha\n {2}- rollout\naliases:\n {2}- Pilot programme\n/,
+  );
+  assert.doesNotMatch(blockListRaw, /- pilot\n/);
+  const reloaded = await getProject("alpha-pilot", { repoRoot: root, scanRoots: ["kb"] });
+  assert.deepEqual(reloaded.parsed.manifest.tags, ["alpha", "rollout"]);
+  await fs.writeFile(path.join(root, created.path), updatedRaw, "utf8");
+
   const taskDryRun = await addProjectTask({
     repoRoot: root,
     scanRoots: ["kb"],
