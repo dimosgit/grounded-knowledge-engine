@@ -78,6 +78,8 @@ export interface IndexedDocument {
   body: string;
   /** File lines before `body` (frontmatter); citations are file-relative. */
   bodyLineOffset?: number;
+  /** Frontmatter `aliases`; searchable as alternative names for the document. */
+  aliases?: string[];
   isArchive: boolean;
 }
 

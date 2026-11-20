@@ -7,6 +7,7 @@
     "./projects": "./src/projects.ts",
     "./decisions": "./src/decisions.ts",
     "./lifecycle": "./src/lifecycle.ts",
-    "./frontmatter": "./src/frontmatter.ts"
+    "./frontmatter": "./src/frontmatter.ts",
+    "./wikilinks": "./src/wikilinks.ts"
   }
 }

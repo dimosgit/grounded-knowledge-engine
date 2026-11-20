@@ -52,7 +52,12 @@ function getGraphDocMeta(doc, docsByPath) {
   return {
     doc,
     moduleKey,
-    tags: normalizeFrontmatterList(doc.frontmatter?.tags),
+    tags: [
+      ...new Set([
+        ...normalizeFrontmatterList(doc.frontmatter?.tags),
+        ...(Array.isArray(doc.inlineTags) ? doc.inlineTags.map((tag) => toSlug(tag)) : []),
+      ]),
+    ].filter(Boolean),
     outgoingPaths,
     searchableText: `${doc.title}\n${doc.path}\n${doc.searchIndexNormalized || ""}`.toLowerCase(),
   };

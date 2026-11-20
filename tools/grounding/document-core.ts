@@ -7,7 +7,10 @@ import type {
   DocumentSnapshotEntry,
   DocumentSnapshot,
 } from "./types.js";
-import { parseFrontmatter as parseSharedFrontmatter } from "../../packages/contracts/src/frontmatter.js";
+import {
+  frontmatterList,
+  parseFrontmatter as parseSharedFrontmatter,
+} from "../../packages/contracts/src/frontmatter.js";
 import { DEFAULT_DOMAIN_PROFILE } from "../workspaces/domain-profile.js";
 import { authorizeWorkspaceRead } from "../workspaces/path-policy.js";
 import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
@@ -87,6 +90,7 @@ export async function readDocumentEntries(
         bodyLineOffset,
         frontmatter,
         title: getDocumentTitle(body, file.relPath),
+        aliases: frontmatterList(frontmatter.aliases),
         track: inferTrack(file.relPath, frontmatter, domain),
         module: normalizeScalar(frontmatter.module),
         sourceKind: inferSourceKind(file.relPath, domain),

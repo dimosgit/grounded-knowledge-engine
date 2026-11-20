@@ -40,7 +40,7 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const INDEX_VERSION = 3;
+const INDEX_VERSION = 4;
 const DEFAULT_INDEX_CACHE_TTL_MS = 30000;
 const DEFAULT_SQLITE_INDEX_FILE = ".cache/kb-retriever.sqlite";
 const DEFAULT_QUERY_CACHE_TTL_MS = 45000;
@@ -477,6 +477,8 @@ async function rebuildDatabase(
     let chunkId = 0;
     for (const { file, raw, document } of entries) {
       const { body, frontmatter, title, sourceKind, track, module } = document;
+      // Aliases are alternative names, searchable through the FTS title column.
+      const searchTitle = [title, ...(document.aliases || [])].join(" ");
       const lineOffset = document.bodyLineOffset ?? 0;
       const status = normalizeScalar(frontmatter.status);
       const type = normalizeScalar(frontmatter.type);
@@ -540,7 +542,7 @@ async function rebuildDatabase(
           tokens.length,
           isArchive,
         );
-        insertFts.run(chunkId, piece.text, title, file.relPath);
+        insertFts.run(chunkId, piece.text, searchTitle, file.relPath);
         chunkId += 1;
         chunkIndex += 1;
       }

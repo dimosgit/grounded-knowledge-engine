@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { createWikiLinkIndex, wikiLinksToMarkdown } from "@gke/contracts/wikilinks";
 import { useTheme } from "../hooks/useTheme";
 import { writeTextToClipboard } from "../utils/clipboard";
 
@@ -253,6 +254,11 @@ export default function MarkdownArticle({
   const headingElementMapRef = useRef(new Map());
   const [tocHeadings, setTocHeadings] = useState([]);
   const wordCount = useMemo(() => getWordCount(content), [content]);
+  const renderedContent = useMemo(() => {
+    if (typeof content !== "string" || !content.includes("[[")) return content;
+    const index = createWikiLinkIndex((docs || []).map((doc) => doc.path));
+    return wikiLinksToMarkdown(content, index, activePath || "", (resolved) => `/${resolved}`);
+  }, [content, docs, activePath]);
   const forceWrapCodeBlocks = useMemo(
     () => /(^|\/)prompts\.md$/i.test(activePath || ""),
     [activePath],
@@ -539,7 +545,7 @@ export default function MarkdownArticle({
           img: MarkdownImage,
         }}
       >
-        {content}
+        {renderedContent}
       </ReactMarkdown>
     </div>
   );

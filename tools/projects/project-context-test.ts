@@ -143,6 +143,30 @@ Completed.
 `,
   );
 
+  // Obsidian-style records: block-list frontmatter and [[wiki-links]] count as
+  // explicit links; an unlinked note with a similar name stays out.
+  await write("kb/notes/Harbor checklist.md", "# Harbor checklist\n\nVault-only note.\n");
+  await write("kb/notes/Harbor checklist draft.md", "# Draft\n\nNot linked.\n");
+  await write(
+    "kb/projects/vault-project/project.md",
+    `---
+record_type: project
+project_id: vault-project
+title: Vault Project
+status: active
+tags:
+  - vault
+  - obsidian
+---
+# Vault Project
+
+## Current focus
+Work from [[harbor checklist|the checklist]].
+
+## Next actions
+- Check the harbor.
+`,
+  );
   const alpha = await resumeProject({ projectId: "client-alpha" }, root, ["kb"]);
   assert.equal(alpha.structured.title, "Client Alpha Rollout");
   assert.equal(alpha.structured.status, "active");
@@ -180,6 +204,11 @@ Completed.
     completed.structured.recommendedNextAction,
     "Project completed; no next action required.",
   );
+
+  const vault = await resumeProject({ projectId: "vault-project" }, root, ["kb"]);
+  assert.equal(vault.structured.title, "Vault Project");
+  assert.ok(vault.structured.keyDocuments.includes("kb/notes/Harbor checklist.md"));
+  assert.ok(!vault.structured.keyDocuments.includes("kb/notes/Harbor checklist draft.md"));
 
   await assert.rejects(
     () => resumeProject({ projectId: "missing-project" }, root, ["kb"]),

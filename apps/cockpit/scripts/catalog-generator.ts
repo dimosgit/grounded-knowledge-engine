@@ -1,9 +1,16 @@
 import { parseFrontmatter as parseSharedFrontmatter } from "../../../packages/contracts/src/frontmatter.js";
+import {
+  createWikiLinkIndex,
+  extractInlineTags,
+  extractWikiLinks,
+  type WikiLinkIndex,
+} from "../../../packages/contracts/src/wikilinks.js";
 
 const BODY_SEARCH_CHARACTER_LIMIT = 2_200;
 const STRUCTURAL_CONTENT_LIMIT = 8_000;
 const MAX_HEADINGS = 80;
 const MAX_LINKS = 80;
+const MAX_INLINE_TAGS = 40;
 const MAX_OPEN_QUESTIONS = 40;
 const MAX_TASKS = 100;
 const TRACK_LABELS: Record<string, string> = {
@@ -38,13 +45,14 @@ export interface CatalogSource {
 }
 
 export function buildCatalogEntries(sources: CatalogSource[]) {
+  const wikiIndex = createWikiLinkIndex(sources.map((source) => source.path));
   return sources
-    .map(({ path, content }) => buildCatalogEntry(path, content))
+    .map(({ path, content }) => buildCatalogEntry(path, content, wikiIndex))
     .filter((entry) => shouldIndexDoc(entry.path, entry.frontmatter))
     .sort((left, right) => left.path.localeCompare(right.path));
 }
 
-export function buildCatalogEntry(path: string, content: string) {
+export function buildCatalogEntry(path: string, content: string, wikiIndex?: WikiLinkIndex) {
   const { body, frontmatter: parsedFrontmatter } = parseFrontmatter(content);
   const frontmatter = boundFrontmatter(parsedFrontmatter);
   const title = getTitle(path, body);
@@ -78,7 +86,8 @@ export function buildCatalogEntry(path: string, content: string) {
     title,
     excerpt,
     headings,
-    links: getSectionLinks(body).slice(0, MAX_LINKS),
+    links: [...getSectionLinks(body), ...getWikiLinks(body, path, wikiIndex)].slice(0, MAX_LINKS),
+    inlineTags: extractInlineTags(body).slice(0, MAX_INLINE_TAGS),
     metrics: getDocMetrics(body),
     quickRecall: buildQuickRecall(body),
     digestQuickView: buildDigestQuickView(body),
@@ -300,6 +309,19 @@ function getSectionLinks(content: string): Array<{ label: string; href: string }
     label: match[1].trim(),
     href: match[2].trim(),
   }));
+}
+
+/** Resolved `[[wiki-links]]` as workspace-absolute hrefs; unresolved ones are skipped. */
+function getWikiLinks(
+  content: string,
+  path: string,
+  wikiIndex?: WikiLinkIndex,
+): Array<{ label: string; href: string }> {
+  if (!wikiIndex) return [];
+  return extractWikiLinks(content).flatMap((link) => {
+    const resolved = link.target ? wikiIndex.resolve(link.target, path) : null;
+    return resolved && resolved !== path ? [{ label: link.label, href: `/${resolved}` }] : [];
+  });
 }
 
 function buildQuickRecall(content: string) {

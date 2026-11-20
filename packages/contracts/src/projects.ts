@@ -4,6 +4,7 @@
  */
 
 import { parseFrontmatter } from "./frontmatter.js";
+import { createWikiLinkIndex, extractWikiLinks, relativeWorkspacePath } from "./wikilinks.js";
 
 export const PROJECT_CONTRACT_VERSION = 1 as const;
 
@@ -34,6 +35,8 @@ export interface ParsedProjectDocument {
   manifest: ProjectManifest;
   sections: Map<string, ProjectSection>;
   explicitPaths: string[];
+  /** `[[wiki-link]]` targets; resolve them with `resolveProjectWikiLinks`. */
+  wikiLinks: string[];
 }
 
 export interface ProjectCitation {
@@ -325,6 +328,13 @@ export function parseProjectData(
     manifest,
     sections,
     explicitPaths: extractWorkspaceRelativeLinks(body),
+    wikiLinks: [
+      ...new Set(
+        extractWikiLinks(body)
+          .map((link) => link.target)
+          .filter(Boolean),
+      ),
+    ],
   };
 }
 
@@ -535,6 +545,28 @@ export function isDocumentInProject(
   explicitPaths: string[],
 ): boolean {
   return createProjectMembership(projectId, manifestPath, sourceRoots, explicitPaths)(doc);
+}
+
+/**
+ * Resolves a project's wiki-links against the workspace paths and returns them
+ * relative to the manifest folder, the same form as `explicitPaths`, so every
+ * membership check treats them as explicit links.
+ */
+export function resolveProjectWikiLinks(
+  wikiLinks: string[],
+  manifestPath: string,
+  workspacePaths: Iterable<string>,
+): string[] {
+  if (!wikiLinks.length) return [];
+  const index = createWikiLinkIndex(workspacePaths);
+  const resolved = new Set<string>();
+  for (const target of wikiLinks) {
+    const relPath = index.resolve(target, manifestPath);
+    if (relPath && relPath !== manifestPath) {
+      resolved.add(relativeWorkspacePath(manifestPath, relPath));
+    }
+  }
+  return [...resolved];
 }
 
 function normalizePosixPath(parts: string[]): string {

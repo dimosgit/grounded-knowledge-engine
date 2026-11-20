@@ -13,6 +13,7 @@ try {
     "project-contract-test.ts",
     "decision-contract-test.ts",
     "frontmatter-contract-test.ts",
+    "wikilinks-contract-test.ts",
   ]) {
     execFileSync(
       process.execPath,

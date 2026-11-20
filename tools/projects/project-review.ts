@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { getKbRetriever } from "../grounding/retriever.js";
 import type { IndexedDocument } from "../grounding/types.js";
 import type { WorkspaceContext } from "../workspaces/types.js";
+import { resolveProjectWikiLinks } from "../../packages/contracts/src/projects.js";
 import { meaningfulSectionItems } from "./project-manifest.js";
 import { calculateProjectAttention, isValidIsoDate } from "./project-attention.js";
 import { loadProjectRecords, resolveLoadedProject, type LoadedProject } from "./project-service.js";
@@ -84,7 +85,14 @@ export async function reviewWorkspace(
         projectId,
         manifestDocument.relPath,
         loaded.parsed.manifest.sourceRoots,
-        loaded.parsed.explicitPaths,
+        [
+          ...loaded.parsed.explicitPaths,
+          ...resolveProjectWikiLinks(
+            loaded.parsed.wikiLinks,
+            manifestDocument.relPath,
+            allDocuments.map((document) => document.relPath),
+          ),
+        ],
       ),
     );
     const entry = await buildProjectReview({

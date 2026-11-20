@@ -496,12 +496,20 @@ export function normalizeDocPath(path) {
   return output.join("/");
 }
 
+function safeDecodeUri(value) {
+  try {
+    return decodeURI(value);
+  } catch {
+    return value;
+  }
+}
+
 export function resolveMarkdownDocPath(currentPath, href) {
   if (!href) return null;
   if (href.startsWith("#")) return null;
 
-  const cleanHref = href.split("#")[0].split("?")[0];
-  if (!cleanHref.endsWith(".md")) return null;
+  const cleanHref = safeDecodeUri(href.split("#")[0].split("?")[0]);
+  if (!cleanHref.toLowerCase().endsWith(".md")) return null;
 
   const currentDir = currentPath.includes("/")
     ? currentPath.slice(0, currentPath.lastIndexOf("/") + 1)
