@@ -1,5 +1,5 @@
 {
-  "description": "Isolated synthetic workspace-shape quality gate for exact recall, vague recall, project isolation, abstention, freshness, filters, and citations.",
+  "description": "Isolated synthetic workspace-shape quality gate for exact recall, vague recall, project isolation, abstention, freshness, filters, citations, and partial-word matching.",
   "floors": {
     "overall": {
       "recallAtK": 1,
@@ -39,6 +39,10 @@
         "top1Accuracy": 1
       },
       "vault": {
+        "recallAtK": 1,
+        "top1Accuracy": 1
+      },
+      "partial": {
         "recallAtK": 1,
         "top1Accuracy": 1
       }
@@ -172,6 +176,32 @@
       "mode": "generic",
       "expectedPathPatterns": ["kb/notes/Quillstone cutover.md"],
       "expectedCitationPathPatterns": ["kb/notes/Quillstone cutover.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "partial-word-family-approval",
+      "category": "partial",
+      "query": "who approves a big quote",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/topics/tidewell-approval-ladder.md"],
+      "forbiddenPathPatterns": []
+    },
+    {
+      "id": "partial-umlaut-transliteration",
+      "category": "partial",
+      "query": "Pruefung Frachtbrief Nordmole",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/notes/Prüfung der Frachtbriefe.md"],
+      "expectedCitationPathPatterns": ["kb/notes/Prüfung der Frachtbriefe.md"],
+      "forbiddenPathPatterns": [],
+      "expectAbstention": false
+    },
+    {
+      "id": "partial-compound-part",
+      "category": "partial",
+      "query": "which scheine travel with the vehicle",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/notes/Prüfung der Frachtbriefe.md"],
       "forbiddenPathPatterns": []
     }
   ]

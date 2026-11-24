@@ -2,6 +2,27 @@
 
 All notable changes to Grounded Knowledge Engine are documented here.
 
+## Unreleased
+
+### Search
+
+- Search finds word forms, not only exact words. A query word also matches its
+  word family through a light English and German stem ("approves" finds
+  "approver" and "approval", "quotes" finds "quotation"), longer words it
+  starts from five letters, and compounds that contain it from six letters
+  ("scheine" finds "Lieferschein"). Related words score below the exact word,
+  and a match through one counts as a match of the word asked, so the answer
+  gate's coverage is not inflated.
+- Umlauts are written out and accents removed before matching, so "Prüfung"
+  and "Pruefung" are the same word; before, "Prüfung" was split into "pr" and
+  "fung". The answer gate's title check uses the same folding and word
+  families.
+- SQLite runs the exact query first and adds hits found only through related
+  words at a lower rank. Both index formats are versioned, so existing caches
+  rebuild on first use.
+- New "partial" cases in the workspace retrieval eval; on the demo QA set BM25
+  top-1 accuracy rose from 0.625 to 0.875 (MRR 0.81 to 0.94), SQLite unchanged.
+
 ## 0.2.2 — 2026-11-09
 
 ### Grounded answers
