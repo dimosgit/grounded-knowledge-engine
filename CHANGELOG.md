@@ -2,7 +2,27 @@
 
 All notable changes to Grounded Knowledge Engine are documented here.
 
-## Unreleased
+## 0.2.3 — 2026-11-24
+
+### Obsidian vaults
+
+- A knowledge base can be an Obsidian vault. Wiki-links (`[[Note]]`,
+  `[[path/Note|label]]`, `[[Note#Heading]]`) and `![[embeds]]` resolve by vault
+  path, unique file name, same folder, then shortest path. They count as
+  explicit project links in resume and review, and the Cockpit catalog,
+  Context Graph and reader follow them. Frontmatter aliases are searchable in
+  both backends, and inline `#tags` join frontmatter tags in the graph.
+- Frontmatter in Obsidian style is read and written safely: quoted scalars,
+  inline and block lists, block scalars and CRLF files. Updating tags no
+  longer leaves stale list lines behind. `.obsidian` and `.trash` folders are
+  skipped by the index and the Cockpit content sync.
+- The Cockpit reader shows a "Linked from" panel. An optional `ui.obsidian`
+  workspace setting adds a local "Open in Obsidian" action; it never reaches a
+  production build.
+- `gke demo` ships an Obsidian-ready demo vault: a Start here hub, MCP term
+  notes, meeting notes, runbooks and a starter `.obsidian` configuration.
+  Answers render wiki-links as their labels. See the Obsidian integration
+  guide.
 
 ### Search
 
@@ -22,6 +42,19 @@ All notable changes to Grounded Knowledge Engine are documented here.
   rebuild on first use.
 - New "partial" cases in the workspace retrieval eval; on the demo QA set BM25
   top-1 accuracy rose from 0.625 to 0.875 (MRR 0.81 to 0.94), SQLite unchanged.
+
+### Fixes
+
+- `npm run verify` from the pre-push hook no longer lets the hook's Git
+  variables reach the gates' fixture repositories, which could write commits
+  and settings into the enclosing repository.
+
+### Dependencies
+
+- Updated through Dependabot: the engine and Cockpit dependency groups,
+  jsdom 31, ESLint 10, typescript-eslint, minimatch, KaTeX, Mermaid and
+  `actions/setup-node` 7.1.0. Dependabot now groups only minor and patch
+  updates.
 
 ## 0.2.2 — 2026-11-09
 
