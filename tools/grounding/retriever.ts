@@ -14,6 +14,14 @@ import {
 } from "../workspaces/domain-profile.js";
 import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 import {
+  addWordVariants,
+  buildTermIndex,
+  foldText,
+  foldWithMap,
+  textHasWordOrFamily,
+  type TermIndex,
+} from "./word-match.js";
+import {
   readDocumentEntries,
   buildManifestHash,
   gatherCandidateFiles,
@@ -45,7 +53,7 @@ const __dirname = path.dirname(__filename);
 // corpus; `kb` holds notes captured back by the agent.
 export const DEFAULT_SCAN_ROOTS = ["demo-kb", "kb"];
 
-const INDEX_VERSION = 5;
+const INDEX_VERSION = 6;
 const DEFAULT_INDEX_CACHE_FILE = ".cache/kb-retriever-index.v2.json";
 const DEFAULT_INDEX_CACHE_TTL_MS = 30000;
 const DEFAULT_QUERY_CACHE_TTL_MS = 45000;
@@ -418,6 +426,9 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
   const { docs, chunks, postings, docFreq, avgChunkLength } = indexed;
   const byPath = new Map(docs.map((doc) => [doc.relPath, doc]));
   const queryCache = new Map<string, { createdAt: number; value: SearchResult }>();
+  // Built on first search: the index's words, grouped for word-family and partial matching.
+  let termIndex: TermIndex | null = null;
+  const getTermIndex = (): TermIndex => (termIndex ??= buildTermIndex(postings.keys()));
   let queryCacheHits = 0;
   let queryCacheMisses = 0;
 
@@ -479,6 +490,9 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
     }
 
     const tokenWeights = buildWeightedQueryTokens(query, options.domain);
+    // Exact words keep their weight; related words (same family, longer word,
+    // compound) score lower and count as a match of the word that was asked.
+    const { matchWeights, variantOf } = addWordVariants(tokenWeights, getTermIndex());
     const candidateScores: CandidateScoreMap = new Map();
     const matchedTerms: MatchedTermsMap = new Map();
     const tokenContributions: TokenContributionMap | null = debug ? new Map() : null;
@@ -493,7 +507,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
     };
 
     const nChunks = Math.max(chunks.length, 1);
-    for (const [token, weight] of tokenWeights.entries()) {
+    for (const [token, weight] of matchWeights.entries()) {
       const posting = postings.get(token);
       if (!posting || !posting.length) continue;
       const df = docFreq.get(token) || 0;
@@ -509,7 +523,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
 
         const chunkMatchedTerms = matchedTerms.get(chunkId) || new Set<string>();
         if (!matchedTerms.has(chunkId)) matchedTerms.set(chunkId, chunkMatchedTerms);
-        chunkMatchedTerms.add(token);
+        chunkMatchedTerms.add(variantOf.get(token) ?? token);
         if (tokenContributions) {
           if (!tokenContributions.has(chunkId)) tokenContributions.set(chunkId, new Map());
           const chunkTokenContrib = tokenContributions.get(chunkId);
@@ -573,7 +587,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
       const pathCount = pathHitCounts.get(item.chunk.path) || 0;
       if (pathCount >= maxPerPath) continue;
 
-      const anchor = chooseAnchorLine(item.chunk, query, tokenWeights);
+      const anchor = chooseAnchorLine(item.chunk, query, matchWeights, variantOf);
       const hitKey = `${item.chunk.path}:${anchor.lineNumber}`;
       if (seenHitKeys.has(hitKey)) continue;
       seenHitKeys.add(hitKey);
@@ -589,7 +603,7 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
         sourceKind: item.chunk.sourceKind,
         track: item.chunk.track,
         module: item.chunk.module,
-        snippet: buildSnippet(item.chunk.text, query, tokenWeights),
+        snippet: buildSnippet(item.chunk.text, query, matchWeights),
         matchedTokens: item.matchedTerms,
         context,
       };
@@ -834,10 +848,10 @@ function rerankCandidate({
 }: RerankArgs): RerankResult {
   let score = baseScore;
   const adjustments: RerankAdjustment[] = [];
-  const queryLower = query.toLowerCase();
-  const textLower = chunk.text.toLowerCase();
-  const pathLower = chunk.path.toLowerCase();
-  const titleLower = (chunk.title || "").toLowerCase();
+  const queryLower = foldText(query);
+  const textLower = foldText(chunk.text);
+  const pathLower = foldText(chunk.path);
+  const titleLower = foldText(chunk.title || "");
 
   if (queryLower.length >= 5 && textLower.includes(queryLower)) {
     score += 5;
@@ -850,13 +864,17 @@ function rerankCandidate({
     adjustments.push({ reason: "matched_token_count", delta: round(tokenMatchBoost) });
 
   for (const token of tokenWeights.keys()) {
-    if (pathLower.includes(token)) {
-      score += 0.35;
-      if (debug) adjustments.push({ reason: `path_token:${token}`, delta: 0.35 });
+    const inPath = textHasWordOrFamily(pathLower, token);
+    if (inPath) {
+      const delta = inPath === "exact" ? 0.35 : 0.3;
+      score += delta;
+      if (debug) adjustments.push({ reason: `path_token:${token}`, delta });
     }
-    if (titleLower.includes(token)) {
-      score += 0.55;
-      if (debug) adjustments.push({ reason: `title_token:${token}`, delta: 0.55 });
+    const inTitle = textHasWordOrFamily(titleLower, token);
+    if (inTitle) {
+      const delta = inTitle === "exact" ? 0.55 : 0.45;
+      score += delta;
+      if (debug) adjustments.push({ reason: `title_token:${token}`, delta });
     }
   }
 
@@ -927,21 +945,22 @@ function chooseAnchorLine(
   chunk: IndexedChunk,
   query: string,
   tokenWeights: QueryWeights,
+  related?: Map<string, string>,
 ): AnchorLine {
   const lines = chunk.text.split(/\r?\n/);
-  const queryLower = query.toLowerCase();
+  const queryLower = foldText(query);
   const tokens = [...tokenWeights.keys()];
 
   let bestOffset = 0;
   let bestScore = -1;
   for (let i = 0; i < lines.length; i += 1) {
-    const lower = lines[i].toLowerCase();
+    const lower = foldText(lines[i]);
     if (!lower.trim()) continue;
 
     let lineScore = 0;
     if (queryLower.length >= 4 && lower.includes(queryLower)) lineScore += 10;
     for (const token of tokens) {
-      if (lower.includes(token)) lineScore += 2;
+      if (lower.includes(token)) lineScore += related?.has(token) ? 1.5 : 2;
     }
     if (lineScore > bestScore) {
       bestScore = lineScore;
@@ -978,19 +997,19 @@ function buildSnippet(text: string, query: string, tokenWeights: QueryWeights): 
   const compact = text.replace(/\s+/g, " ").trim();
   if (!compact) return "";
 
-  const lower = compact.toLowerCase();
-  const queryLower = query.toLowerCase();
+  const { folded: lower, map } = foldWithMap(compact);
+  const queryLower = foldText(query);
   if (queryLower.length >= 4) {
     const idx = lower.indexOf(queryLower);
     if (idx >= 0) {
-      return trimWindow(compact, idx, queryLower.length, 240);
+      return trimWindow(compact, map[idx] ?? 0, queryLower.length, 240);
     }
   }
 
   for (const token of tokenWeights.keys()) {
     const idx = lower.indexOf(token);
     if (idx >= 0) {
-      return trimWindow(compact, idx, token.length, 240);
+      return trimWindow(compact, map[idx] ?? 0, token.length, 240);
     }
   }
 
@@ -1173,7 +1192,8 @@ function normalizeForTokenization(text: string, domain: DomainProfile): string {
   for (const rule of domain.textNormalizations) {
     normalized = normalized.replace(rule.pattern, rule.replacement);
   }
-  return normalized;
+  // Umlauts written out and accents removed, so "Prüfung" and "Pruefung" are one word.
+  return foldText(normalized);
 }
 
 async function tryLoadCachedIndex(cachePath: string): Promise<CachedRetrieverIndex | null> {

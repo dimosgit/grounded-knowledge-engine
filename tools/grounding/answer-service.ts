@@ -4,6 +4,7 @@ import { normalizeScalar, parsePositiveInt } from "./document-core.js";
 import { DEFAULT_DOMAIN_PROFILE, resolveModeAlias } from "../workspaces/domain-profile.js";
 import type { DomainProfile } from "../workspaces/types.js";
 import type { IndexedDocument, SearchArgs, SearchHit, SearchResult } from "./types.js";
+import { foldText, wordStem } from "./word-match.js";
 
 const DEFAULT_LIMIT = 8;
 const MAX_LIMIT = 30;
@@ -393,7 +394,16 @@ async function extractDirectAnswerLines(
 }
 
 function titleOverlap(title: string, queryTokens: ReadonlySet<string>): number {
-  return tokenizeForSimilarity(title).filter((token) => queryTokens.has(token)).length;
+  return tokenizeForSimilarity(title).filter((token) => namesWord(token, queryTokens)).length;
+}
+
+/** A title word is named when the question has it, or a word of the same family ("Frachtbriefe" for "Frachtbrief"). */
+function namesWord(titleToken: string, queryTokens: ReadonlySet<string>): boolean {
+  if (queryTokens.has(titleToken)) return true;
+  const stem = wordStem(titleToken);
+  if (stem.length < 4) return false;
+  for (const token of queryTokens) if (wordStem(token) === stem) return true;
+  return false;
 }
 
 /**
@@ -420,7 +430,7 @@ function isEligibleAnswerSource(
 function isNamedInQuestion(title: string, queryTokens: ReadonlySet<string>): boolean {
   const titleTokens = [...new Set(tokenizeForSimilarity(title))];
   if (!titleTokens.length) return false;
-  const overlap = titleTokens.filter((token) => queryTokens.has(token)).length;
+  const overlap = titleTokens.filter((token) => namesWord(token, queryTokens)).length;
   return overlap >= 2 && overlap / titleTokens.length >= 0.6;
 }
 
@@ -1052,8 +1062,7 @@ function singleLine(value: unknown): string {
 }
 
 function tokenizeForSimilarity(value: unknown): string[] {
-  return normalizeScalar(value)
-    .toLowerCase()
+  return foldText(normalizeScalar(value))
     .replace(/[^a-z0-9\s]+/g, " ")
     .split(/\s+/)
     .filter((token) => token.length >= 3 && !SIMILARITY_STOPWORDS.has(token));

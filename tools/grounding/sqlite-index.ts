@@ -14,6 +14,13 @@ import {
   domainFingerprint,
   resolveModeAlias,
 } from "../workspaces/domain-profile.js";
+import {
+  foldText,
+  foldWithMap,
+  textHasWordOrFamily,
+  umlautAlternates,
+  wordStem,
+} from "./word-match.js";
 import type { DomainProfile, WorkspaceContext } from "../workspaces/types.js";
 import { DEFAULT_SCAN_ROOTS } from "./retriever.js";
 import {
@@ -40,7 +47,7 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const INDEX_VERSION = 4;
+const INDEX_VERSION = 5;
 const DEFAULT_INDEX_CACHE_TTL_MS = 30000;
 const DEFAULT_SQLITE_INDEX_FILE = ".cache/kb-retriever.sqlite";
 const DEFAULT_QUERY_CACHE_TTL_MS = 45000;
@@ -190,6 +197,8 @@ interface RerankAdjustment {
 interface RunFtsArgs {
   allowedPaths: string[] | null;
   ftsQuery?: string;
+  /** Word families, longer words and compounds; their hits rank below exact hits. */
+  broadFtsQuery?: string;
   query: string;
   mode: string;
   track: string;
@@ -620,10 +629,14 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
     }
 
     const tokenWeights = buildWeightedQueryTokens(query, options.domain);
-    const ftsQuery = buildFtsQuery([...tokenWeights.keys()]);
+    const { exact: ftsQuery, broad: broadFtsQuery } = buildFtsQuery(
+      [...tokenWeights.keys()],
+      compoundTerms(db, [...tokenWeights.keys()]),
+    );
     const sqlRows = runFtsQuery(db, {
       allowedPaths,
       ftsQuery,
+      broadFtsQuery,
       query,
       mode,
       track,
@@ -813,14 +826,27 @@ function createSqliteRetriever(db: DatabaseSync, options: ResolvedRetrieverOptio
   };
 }
 
+/** A hit found only through a related word ranks at this share of its FTS score. */
+const BROAD_MATCH_RANK_FACTOR = 0.7;
+
 function runFtsQuery(
   db: DatabaseSync,
-  { ftsQuery, query, mode, track, module, includeArchive, windowSize, allowedPaths }: RunFtsArgs,
+  {
+    ftsQuery,
+    broadFtsQuery,
+    query,
+    mode,
+    track,
+    module,
+    includeArchive,
+    windowSize,
+    allowedPaths,
+  }: RunFtsArgs,
 ): SqliteChunkRow[] {
   const rows: SqliteChunkRow[] = [];
-  if (ftsQuery) {
+  const match = (expression: string): SqliteChunkRow[] => {
     const filters: string[] = [];
-    const params: string[] = [ftsQuery];
+    const params: string[] = [expression];
     if (!includeArchive) filters.push("c.is_archive = 0");
     if (track) {
       filters.push("c.track = ?");
@@ -835,10 +861,9 @@ function runFtsQuery(
       params.push(JSON.stringify(allowedPaths));
     }
     const where = filters.length ? `AND ${filters.join(" AND ")}` : "";
-    rows.push(
-      ...(db
-        .prepare(
-          `
+    return db
+      .prepare(
+        `
       SELECT
         c.id,
         c.path,
@@ -858,9 +883,16 @@ function runFtsQuery(
       ORDER BY rank
       LIMIT ${Math.max(1, Math.min(500, windowSize))}
     `,
-        )
-        .all(...params) as unknown as SqliteChunkRow[]),
-    );
+      )
+      .all(...params) as unknown as SqliteChunkRow[];
+  };
+  if (ftsQuery) rows.push(...match(ftsQuery));
+  if (broadFtsQuery) {
+    const seen = new Set(rows.map((row) => row.id));
+    for (const row of match(broadFtsQuery)) {
+      if (seen.has(row.id)) continue;
+      rows.push({ ...row, rank: Number(row.rank || 0) * BROAD_MATCH_RANK_FACTOR });
+    }
   }
 
   if (rows.length) return rows;
@@ -930,10 +962,10 @@ function rerankRow({
   debug,
   domain,
 }: RerankRowArgs): RankedSqliteRow {
-  const textLower = `${row.text || ""}`.toLowerCase();
-  const pathLower = `${row.path || ""}`.toLowerCase();
-  const titleLower = `${row.title || ""}`.toLowerCase();
-  const queryLower = query.toLowerCase();
+  const textLower = foldText(`${row.text || ""}`);
+  const pathLower = foldText(`${row.path || ""}`);
+  const titleLower = foldText(`${row.title || ""}`);
+  const queryLower = foldText(query);
   const matchedTerms: string[] = [];
   let score = Math.max(0, -Number(row.rank || 0) * 100);
   const baseScore = score;
@@ -946,19 +978,25 @@ function rerankRow({
 
   for (const [token, weight] of tokenWeights.entries()) {
     let matched = false;
-    if (textLower.includes(token)) {
-      score += 0.9 * weight;
+    // A word-family match ("approver" for "approves") counts a little less than the word itself.
+    const inText = textHasWordOrFamily(textLower, token);
+    if (inText) {
+      score += (inText === "exact" ? 0.9 : 0.75) * weight;
       matched = true;
     }
-    if (pathLower.includes(token)) {
-      score += 0.35 * weight;
+    const inPath = textHasWordOrFamily(pathLower, token);
+    if (inPath) {
+      const delta = (inPath === "exact" ? 0.35 : 0.3) * weight;
+      score += delta;
       matched = true;
-      if (debug) adjustments.push({ reason: `path_token:${token}`, delta: round(0.35 * weight) });
+      if (debug) adjustments.push({ reason: `path_token:${token}`, delta: round(delta) });
     }
-    if (titleLower.includes(token)) {
-      score += 0.55 * weight;
+    const inTitle = textHasWordOrFamily(titleLower, token);
+    if (inTitle) {
+      const delta = (inTitle === "exact" ? 0.55 : 0.45) * weight;
+      score += delta;
       matched = true;
-      if (debug) adjustments.push({ reason: `title_token:${token}`, delta: round(0.55 * weight) });
+      if (debug) adjustments.push({ reason: `title_token:${token}`, delta: round(delta) });
     }
     if (matched) matchedTerms.push(token);
   }
@@ -1036,13 +1074,69 @@ function countBy(db: DatabaseSync, column: string): Record<string, number> {
   return out;
 }
 
-function buildFtsQuery(tokens: string[]): string {
+/**
+ * Indexed words that contain a query word inside them ("lieferschein" for
+ * "scheine"), read from SQLite's own vocabulary of the full-text index.
+ * FTS5 prefix queries cannot reach inside compound words.
+ */
+function compoundTerms(db: DatabaseSync, tokens: string[]): string[] {
+  const parts = [
+    ...new Set(
+      tokens
+        .filter((token) => token.length >= 6 && /^[a-z0-9_]+$/.test(token))
+        .map((token) => {
+          const stem = wordStem(token);
+          return stem.length >= 6 ? stem : token;
+        }),
+    ),
+  ].slice(0, 8);
+  if (!parts.length) return [];
+  try {
+    db.exec(
+      "CREATE VIRTUAL TABLE IF NOT EXISTS temp.fts_vocab USING fts5vocab(main, fts_chunks, row);",
+    );
+    const lookup = db.prepare(
+      "SELECT term FROM temp.fts_vocab WHERE instr(term, ?) > 1 AND length(term) > ? ORDER BY length(term), term LIMIT 10",
+    );
+    const out = new Set<string>();
+    for (const part of parts) {
+      for (const row of lookup.all(part, part.length + 2) as Array<{ term: string }>) {
+        if (/^[a-z0-9_]+$/.test(row.term)) out.add(row.term);
+      }
+    }
+    return [...out];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The exact expression matches the query words and their umlaut spelling as
+ * stored by unicode61 ("prufung"). The broad one adds, from four letters,
+ * every word starting with the word's stem ("approv"*) and compounds that
+ * contain it; its hits rank lower.
+ */
+function buildFtsQuery(
+  tokens: string[],
+  compounds: string[] = [],
+): { exact: string; broad: string } {
   const cleaned = tokens
     .map((token) => token.replace(/"/g, ""))
     .filter((token) => /^[a-z0-9_/-]{2,}$/i.test(token))
     .slice(0, 16);
-  if (!cleaned.length) return "";
-  return cleaned.map((token) => `"${token}"`).join(" OR ");
+  if (!cleaned.length) return { exact: "", broad: "" };
+  const exact = new Set<string>();
+  const broad = new Set<string>();
+  for (const token of cleaned) {
+    for (const spelling of [token, ...umlautAlternates(token)]) {
+      exact.add(`"${spelling}"`);
+      const stem = wordStem(spelling);
+      if (stem.length >= 4 && /^[a-z0-9_]+$/.test(stem)) broad.add(`"${stem}"*`);
+      else if (spelling.length >= 5 && /^[a-z0-9_]+$/.test(spelling)) broad.add(`"${spelling}"*`);
+    }
+  }
+  for (const term of compounds) broad.add(`"${term}"`);
+  return { exact: [...exact].join(" OR "), broad: [...broad].join(" OR ") };
 }
 
 function buildEvidenceSignals(hits: SearchHit[], queryTokens: string[]) {
@@ -1079,17 +1173,18 @@ function chooseAnchorLine(
   tokenWeights: QueryWeights,
 ): AnchorLine {
   const lines = `${chunk.text || ""}`.split(/\r?\n/);
-  const queryLower = query.toLowerCase();
+  const queryLower = foldText(query);
   const tokens = [...tokenWeights.keys()];
   let bestOffset = 0;
   let bestScore = -1;
   for (let i = 0; i < lines.length; i += 1) {
-    const lower = lines[i].toLowerCase();
+    const lower = foldText(lines[i]);
     if (!lower.trim()) continue;
     let lineScore = 0;
     if (queryLower.length >= 4 && lower.includes(queryLower)) lineScore += 10;
     for (const token of tokens) {
-      if (lower.includes(token)) lineScore += 2;
+      const found = textHasWordOrFamily(lower, token);
+      if (found) lineScore += found === "exact" ? 2 : 1.5;
     }
     if (lineScore > bestScore) {
       bestScore = lineScore;
@@ -1124,15 +1219,20 @@ function buildChunkContext(
 function buildSnippet(text: string, query: string, tokenWeights: QueryWeights): string {
   const compact = `${text || ""}`.replace(/\s+/g, " ").trim();
   if (!compact) return "";
-  const lower = compact.toLowerCase();
-  const queryLower = query.toLowerCase();
+  const { folded: lower, map } = foldWithMap(compact);
+  const queryLower = foldText(query);
   if (queryLower.length >= 4) {
     const idx = lower.indexOf(queryLower);
-    if (idx >= 0) return trimWindow(compact, idx, queryLower.length, 240);
+    if (idx >= 0) return trimWindow(compact, map[idx] ?? 0, queryLower.length, 240);
   }
   for (const token of tokenWeights.keys()) {
     const idx = lower.indexOf(token);
-    if (idx >= 0) return trimWindow(compact, idx, token.length, 240);
+    if (idx >= 0) return trimWindow(compact, map[idx] ?? 0, token.length, 240);
+  }
+  for (const token of tokenWeights.keys()) {
+    const stem = wordStem(token);
+    const idx = stem.length >= 4 ? lower.indexOf(stem) : -1;
+    if (idx >= 0) return trimWindow(compact, map[idx] ?? 0, stem.length, 240);
   }
   return compact.length > 240 ? `${compact.slice(0, 237)}...` : compact;
 }
@@ -1251,7 +1351,8 @@ function normalizeForTokenization(text: string, domain: DomainProfile): string {
   for (const rule of domain.textNormalizations) {
     normalized = normalized.replace(rule.pattern, rule.replacement);
   }
-  return normalized;
+  // Umlauts written out and accents removed, as in the BM25 backend.
+  return foldText(normalized);
 }
 
 function extractFastTermSummary(body: string): string {
