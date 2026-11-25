@@ -2,6 +2,23 @@
 
 All notable changes to Grounded Knowledge Engine are documented here.
 
+## 0.2.4 — 2026-11-25
+
+### Search
+
+- BM25 scores each query word once per chunk: the best of the word and its
+  related words, never their sum. In 0.2.3 every related word added its own
+  score, so a long text that uses many forms of one word ("handlers",
+  "handling", "handled") outranked the short note that answers the question.
+  A related word also never counts as rarer than the word it stands in for.
+  On a 12-question downstream set, BM25 top-1 is back from 0.42 to 0.67 and
+  MRR@5 from 0.60 to 0.77 (0.2.2: 0.67 and 0.77); the 0.2.3 partial-word
+  cases still pass. A new workspace eval case guards it.
+- Correction: the 0.2.3 demo QA numbers were measured with local notes in
+  `kb/` next to `demo-kb`, so nobody else could reproduce them. On `demo-kb`
+  alone, BM25 top-1 accuracy is 0.875 in 0.2.2 and 1.0 in 0.2.3 and 0.2.4
+  (MRR@5 0.94 to 1.0); SQLite stays at 0.75.
+
 ## 0.2.3 — 2026-11-24
 
 ### Obsidian vaults
@@ -40,8 +57,10 @@ All notable changes to Grounded Knowledge Engine are documented here.
 - SQLite runs the exact query first and adds hits found only through related
   words at a lower rank. Both index formats are versioned, so existing caches
   rebuild on first use.
-- New "partial" cases in the workspace retrieval eval; on the demo QA set BM25
-  top-1 accuracy rose from 0.625 to 0.875 (MRR 0.81 to 0.94), SQLite unchanged.
+- New "partial" cases in the workspace retrieval eval; on the demo QA set
+  (`demo-kb` alone) BM25 top-1 accuracy rose from 0.875 to 1.0 (MRR 0.94 to
+  1.0), SQLite unchanged. Corrected in 0.2.4: the first notes quoted numbers
+  measured with local notes included.
 
 ### Fixes
 

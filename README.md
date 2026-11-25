@@ -36,7 +36,7 @@ GKE requires **Node 22.5 or newer**; Node 24 is recommended.
 Install the current release:
 
 ```bash
-npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.3/grounded-knowledge-engine-0.2.3.tgz
+npm install --global https://github.com/dimosgit/grounded-knowledge-engine/releases/download/v0.2.4/grounded-knowledge-engine-0.2.4.tgz
 ```
 
 Create the verified demo workspace and configure supported clients:

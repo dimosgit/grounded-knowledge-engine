@@ -507,11 +507,23 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
     };
 
     const nChunks = Math.max(chunks.length, 1);
+    const idfOf = (token: string): number => {
+      const df = docFreq.get(token) || 0;
+      return Math.log(1 + (nChunks - df + 0.5) / (df + 0.5));
+    };
+    // Each asked word scores once per chunk: the best of the word and its
+    // related words, never their sum. Otherwise a long text that uses many
+    // forms of one word ("handler", "handlers", "handling") outranks the
+    // short note that answers the question.
+    const bestByWord = new Map<number, Map<string, number>>();
     for (const [token, weight] of matchWeights.entries()) {
       const posting = postings.get(token);
       if (!posting || !posting.length) continue;
-      const df = docFreq.get(token) || 0;
-      const idf = Math.log(1 + (nChunks - df + 0.5) / (df + 0.5));
+      const word = variantOf.get(token) ?? token;
+      // A related word never counts as rarer than the word it stands in for,
+      // so a rare compound cannot outscore the exact word.
+      const idf =
+        word !== token && postings.has(word) ? Math.min(idfOf(token), idfOf(word)) : idfOf(token);
 
       for (const [chunkId, tf] of posting) {
         const chunk = chunks[chunkId];
@@ -519,11 +531,23 @@ function createRetriever(indexed: RetrieverIndex, options: ResolvedRetrieverOpti
 
         const bm25 = bm25Score(tf, chunk.length, avgChunkLength, idf);
         const weightedContribution = bm25 * weight;
-        candidateScores.set(chunkId, (candidateScores.get(chunkId) || 0) + weightedContribution);
+        let chunkBest = bestByWord.get(chunkId);
+        if (!chunkBest) {
+          chunkBest = new Map();
+          bestByWord.set(chunkId, chunkBest);
+        }
+        const previous = chunkBest.get(word) ?? 0;
+        if (weightedContribution > previous) {
+          chunkBest.set(word, weightedContribution);
+          candidateScores.set(
+            chunkId,
+            (candidateScores.get(chunkId) || 0) + weightedContribution - previous,
+          );
+        }
 
         const chunkMatchedTerms = matchedTerms.get(chunkId) || new Set<string>();
         if (!matchedTerms.has(chunkId)) matchedTerms.set(chunkId, chunkMatchedTerms);
-        chunkMatchedTerms.add(variantOf.get(token) ?? token);
+        chunkMatchedTerms.add(word);
         if (tokenContributions) {
           if (!tokenContributions.has(chunkId)) tokenContributions.set(chunkId, new Map());
           const chunkTokenContrib = tokenContributions.get(chunkId);

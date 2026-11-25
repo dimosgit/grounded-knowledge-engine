@@ -203,6 +203,14 @@
       "mode": "generic",
       "expectedPathPatterns": ["kb/notes/Prüfung der Frachtbriefe.md"],
       "forbiddenPathPatterns": []
+    },
+    {
+      "id": "partial-family-no-stacking",
+      "category": "partial",
+      "query": "where do marlow handler methods come from",
+      "mode": "generic",
+      "expectedPathPatterns": ["kb/topics/marlow-handler-methods.md"],
+      "forbiddenPathPatterns": []
     }
   ]
 }
