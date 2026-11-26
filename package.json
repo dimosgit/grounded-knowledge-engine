@@ -102,7 +102,7 @@
     "docx": "^9.15.4",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^9.1.2",
-    "globals": "^15.15.0",
+    "globals": "^17.14.0",
     "pdfkit": "^0.20.2",
     "prettier": "^3.10.1",
     "tsx": "^4.23.15",
